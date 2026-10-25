@@ -1,0 +1,1151 @@
+快照：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M3-r1-32532c2（32532c2）
+Reading additional input from stdin...
+OpenAI Codex v0.164.0-alpha.11.1
+--------
+workdir: /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: high
+reasoning summaries: none
+session id: 01a174d0-6146-7072-a5f1-8cd7491f28aa
+--------
+user
+你是「合流（heliu）」的普通用户：个人开发者，在 Claude 桌面应用里同时开十几个会话开发同一个项目。请以用户体验视角验收里程碑 M3「中文看板」，不做压力测试、不做异常注入、不修改被管理的任何仓库。
+
+M3 承诺：一张 10 秒看懂的页面——vX 还欠什么、哪些能合、哪些在等我、仓库健康如何；可拖卡片改预约；合并只预演不执行。
+
+步骤：
+1. 读 README.md、docs/03-架构/M3-任务卡.md、docs/03-架构/M3-实现说明.md。
+2. 启动：`bun run bin/heliu board --project 磁吸背夹 --port 7799`（后台），用 `curl` 读 `/api/status`、`/api/milestones`、`/api/features`、`/api/release/preview?milestone=<实现说明里给的里程碑 id>`，确认 JSON 自洽；再 `curl` 首页 HTML，确认标题、图例、版本列文案是中文。如果你的环境能打开浏览器就看一眼截图；不能就如实说明只检查了 API 与 HTML。
+3. 用 `curl -X PATCH /api/features/<id>` 把一张卡改到另一个里程碑，再 GET 确认台账已写（台账在 `~/Library/Application Support/heliu/projects/磁吸背夹/ledger/`，被管理仓库不应有任何变化）。
+4. 判断：不懂 git 的用户能否从页面文案（五色灯、"还欠 N 项"、"等你"）直接知道下一步做什么？合并预演页是否清楚标注"仅预演、未执行"？
+5. 按 schema 输出：verdict、summary（3 句内）、solved（大版本待办：M3 核心；版本遗漏：看板是否让在途功能可见；分支落后：是否可见）、blocking_issues、suggestions（≤5，面向 M4 合并执行）。
+warning: Under-development features enabled: chronicle. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Users/linxiansheng/.codex/config.toml.
+codex
+我会先读 M3 的承诺和实现说明，再启动看板核对 API、中文页面与改预约流程，并检查被管理仓库是否保持原样。
+
+exec
+/bin/zsh -lc "pwd; git status --short; rg --files -g 'AGENTS.md' -g 'README.md' -g '*M3*' -g 'package.json'" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 0ms:
+/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+package.json
+README.md
+docs/03-架构/M3-实现说明.md
+docs/03-架构/M3-任务卡.md
+docs/04-验收记录/prompts/M3.md
+
+exec
+/bin/zsh -lc "rg -n 'heliu|合流' /Users/linxiansheng/.codex/memories/MEMORY.md" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc 'cat README.md docs/03-架构/M3-任务卡.md docs/03-架构/M3-实现说明.md package.json' in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 0ms:
+# 项目管理工具（AI 并行开发 · 里程碑合并）
+
+> 一个本地、可视化、中文、可被 CLI / MCP / Skill 调用的个人项目管理工具：
+> 让随手想到的新点子能并行开发、预约进下一版，合并时不漏、不乱、不冲突。
+
+- 第一性原理：**git 是事实，台账是承诺，看板是对账单。**
+- 第一个被管理的项目：磁吸背夹。
+
+目录：
+- `docs/00-现场证据/` 现状快照（会话、分支、未合并资料）
+- `docs/01-调研/` 市场调研、竞品分析、社区声音、本机环境
+- `docs/02-产品定义/` 需求、实体模型、用户故事
+- `docs/03-架构/` 技术框架与决策记录
+- `docs/04-验收记录/` 每个里程碑的 Fable 验收 + ChatGPT 二次验收记录
+# M3 任务卡：中文看板（本机 Web）
+
+## 目标
+把 M1 对账 + M2 台账合成一张"10 秒看懂"的页面：v1.2 还欠什么、哪些能合、哪些在等我、仓库健康如何。只读为主，少量动作（预约改期、改名、同步基线预演）通过 API 回写台账；**不在看板里执行合并**（M4）。
+
+## 形态
+- `heliu board [--port 7788] [--open]`：Bun + Hono 本机服务，`/api/*` 返回 M1/M2 的 JSON（复用 `ReconcileReport`、台账结构），前端单页（Preact + htm 或 Bun 打包的 TSX，产物进 `dist/`，不依赖 CDN，离线可用）。
+- 中文、浅/深色随系统、手机宽度可看（远程控制时在手机上看）。
+- 自动刷新：每 30s 拉 `/api/status`（M1 扫描 <1s）；手动刷新按钮。
+
+## 页面
+1. **顶部健康条**（每仓库一行）：主线 vs 远端 ↑↓；集成分支领先主线 N、M 天未并回（≥3 天标红）；从未推送 N；worktree 脏/未知；卫生警告数（点击跳卫生页）。
+2. **版本列**（主视图）：列 = 里程碑（`待办 v1.2` | `规划 v1.3` | `未预约` | `已发布`），列头"还欠 N 项 · 可合 a · 冲突 b · 等你 c"。卡片 = 功能：
+   - 标题（会话标题/标签）、仓库徽标、分支（随机名显示标签，hover 看原名）
+   - 五色灯：绿=可合（已进集成或 merge-tree 无冲突且不落后）、黄=落后需同步、红=试合冲突（列出冲突文件数）、紫=等你回答（显示 needs_action 原文）、灰=停滞 ≥7 天 / 无绑定
+   - 行内数字：主线↑/↓、集成↑/↓、最后活动
+   - 动作菜单：改预约版本、改名、标记放弃、复制"打开会话"链接（`claude://` link 来自会话 JSON）、「同步基线（预演）」= 显示 `merge-tree` 把主线/集成合入本分支的冲突文件列表（只预演，不执行）
+   - 拖拽卡片到另一列 = 改预约（PATCH `/api/features/:id`）
+3. **卫生页**：M1 hygiene 的四类警告与提示，每条附"建议命令"（只显示，不执行）。
+4. **会话页**：M1 sessions 表，按"等你 / 运行中 / 已完成 / 已归档"分组。
+5. **合并预演页（只读）**：选里程碑 → 列出预约功能按建议顺序（先已进集成、再无冲突、再有冲突）、每条试合结果、预计顺延项；"生成合并单"按钮写 `releases/vX.md` 草稿（M4 执行它）。
+
+## API
+`GET /api/status`、`GET /api/sessions`、`GET /api/hygiene`、`GET /api/milestones`、`GET /api/features?milestone=`、`POST /api/features`、`PATCH /api/features/:id`（milestone/title/status）、`POST /api/sync`、`GET /api/release/preview?milestone=`、`POST /api/release/plan`（写草稿）。所有写操作只动台账，绝不动被管理仓库。
+
+## 验收（Fable）
+1. `heliu board --project 磁吸背夹` 打开后 2 秒内渲染；用桌面应用内置浏览器截图确认中文、对齐、深色模式。
+2. 看板顶部能一眼读出：集成分支 N 天未并回、从未推送数、等你处理数。
+3. 拖一张卡到另一版本列，刷新后仍在（台账已写）。
+4. 合并预演页对 v1.2 给出顺序与冲突文件（与 `--precheck` 一致）。
+5. 手机宽度（375px）可读。
+6. 全程三仓库零写入。
+# M3 实现说明：中文看板（本机 Web）（2026-10-26）
+
+> 对应 `M3-任务卡.md`。实现：Opus 5.5；验收：Fable。M1/M2 内核语义未改，只在其上叠加（唯一的内核文件改动：`FeatureSource` 追加 `"board"`）。
+> 全程对磁吸背夹三仓库零写入；看板写操作只落在台账目录（`~/Library/Application Support/heliu/projects/磁吸背夹/ledger/`）。
+
+## 1. 目录（新增）
+```
+src/board/api-types.ts  API 响应类型（服务端与前端共用，只含类型；复用 src/types.ts）
+src/board/data.ts       数据层：对账缓存（20 s，并发共用一次扫描）+ 版本列/卡片/总览/合并预演/合并单草稿
+src/board/hygiene.ts    卫生四类 + 建议命令（只显示）        src/board/baseline.ts  同步基线（预演）：merge-tree 试合
+src/board/build.ts      web/ → dist/web/ 打包（Bun.build，缺失或源码更新才重打）
+src/board/server.ts     Hono 路由（createBoardApp，测试用 app.request）+ runBoard（Bun.serve，只监听 127.0.0.1）
+web/                    Preact 11 + TSX：main（顶栏/页签/一眼条）· overview · board · pages（卫生/会话）· release · lib · styles.css
+tests/board.test.ts     16 个用例（fixture 项目，台账放仓库外）
+src/cli/index.ts        + `board` 命令；`milestone todo --help` 组名改为取自 TODO_GROUP_DEFS（「尚未关联开发分支」等）
+```
+依赖：`hono 4.13.14`、`preact 11.0.2`（精确版本）。`bun run typecheck` 现在同时检查 `web/`（`tsc -p web`，DOM 类型）。
+
+## 2. 启动
+```bash
+bun run bin/heliu board --project 磁吸背夹              # 默认端口 7788，启动后用 open 打开浏览器
+bun run bin/heliu board --project 磁吸背夹 --port 7799 --no-open
+```
+启动输出：地址（`http://127.0.0.1:<端口>/`）、是否重新打包与产物大小；Ctrl+C 退出（命令在服务停止前不返回，避免 main.ts 的 `process.exit`）。端口被占用给中文提示（退出码 2）。启动后后台预热两次扫描（不预检 / 预检），打开页面时直接命中缓存。
+
+## 3. API（全部 JSON；外壳 = `JsonEnvelope` + `meta{scannedAt, scanMs, cached, precheck}`；错误 `{error}`：台账/项目错误 400，其他 500）
+| 方法 · 路径 | 说明 | 写 |
+|---|---|---|
+| GET `/api/status[?precheck=1][&fresh=1]` | `ReconcileReport`（M1 原样）；按「项目 × 是否预检」缓存 20 s；`fresh=1` 跳过缓存 | 否 |
+| GET `/api/sessions` | `{total, sessions: SessionView[]}`（同 `heliu sessions --json`） | 否 |
+| GET `/api/hygiene` | 每仓库四类（待清理 worktree / 目录名≠分支名 / 孤儿条目与锁文件 / iCloud 冲突副本与主目录）+ `suggestion` 命令文本 | 否 |
+| GET `/api/milestones` | `{milestones, next}` | 否 |
+| GET `/api/features[?milestone=][&precheck=0]` | 版本列：列（里程碑按 yaml 顺序 + 未预约 + 已发布）、列头计数、卡片（灯色/下一步/多标签/绑定事实）；默认预检 | 否 |
+| GET `/api/features/:id/baseline` | 同步基线（预演）：主线/集成分支 → 本分支的落后数与冲突文件 | 否 |
+| GET `/api/todo?milestone=[&precheck=1]` | M2 `groupTodo` 原样结果（含「尚无独有提交」判定，与 `heliu 待办` 同一套函数） | 否 |
+| GET `/api/overview[?precheck=1]` | 现在最该做的（复用 M1 `topActions`，CLI 指引换成页面名）、一眼条数字、各版本计数、下一版 | 否 |
+| GET `/api/release/preview?milestone=` | 合并预演（只读，总是预检）：顺序、三档状态、冲突文件、建议动作、预计顺延、台账状态建议、预演时主线/集成分支 sha | 否 |
+| POST `/api/features` `{title, milestone?}` | 新点子（默认下一版；`null` = 不预约；source=board） | 台账 |
+| PATCH `/api/features/:id` `{milestone?, title?, status?}` | 改预约（不存在的版本按 M2 规则自动建「规划中」）/ 改名 / 改状态 | 台账 |
+| POST `/api/sync` `{dry_run?}` | M2 `syncLedger`（复用缓存的对账结果） | 台账 |
+| POST `/api/release/plan` `{milestone}` | 预演写成 `<台账>/releases/<里程碑>.md` 草稿；已有草稿先备份到 `releases/.history/`；非「草稿」状态拒绝覆盖；**不执行合并** | 台账 |
+
+安全：只监听 127.0.0.1；Host 头必须是 127.0.0.1 / localhost / [::1]（防 DNS rebinding，否则 403）；写接口只收 `application/json`（跨站表单发不出，否则 415）。
+
+## 4. 页面（单页，顶部页签；每 30 s 自动刷新 + 刷新按钮；右上角「数据时间 HH:MM:SS · 用时 x.xs」）
+- **顶部固定一行**：「下一版 = vNext（规划中）· 冲突：已检查 HH:MM:SS（重新检查）/ 未检查（点击检查）· 自动顺延：当前版本尚未实现，M4 提供」。页面打开后自动试合一次，之后自动刷新都带预检；「重新检查」= `/api/status?precheck=1&fresh=1`。用户不必记 `--precheck`。
+- **一眼条**（每页可见）：各仓库「集成分支 N 天未并回（领先 M）」（≥3 天红）· 本地无远端引用 N · 等你处理 N 个会话。
+- **总览**：现在最该做的（≤3 句，箭头前事实、箭头后建议）· 各版本「还欠 N · 可合 a · 冲突 b · 等你 c」· 每仓库健康卡（主线 vs 远端、集成分支、无远端引用、worktree 脏/未知/未检查、已进主线、卫生），每个数字旁一行中文解释。
+- **版本列**：列头同上；列内按 M2 分组小标题（组名取自 `TODO_GROUP_DEFS`，可合并再按「已进主线 / 已进集成分支 / 试合无冲突」细分）。卡片默认只突出：灯色 + 组名、标题、**下一步一句话**（「等你回答：<needs_action 原文>」「需解冲突：试合到 X 有 N 个文件冲突」「可合并：试合到 X 无冲突…」「需同步基线 ↓102」）、**次要标签**（等你 / 冲突 N 文件 / 落后 ↓N / 停滞 N 天 / 尚无提交，与主分组重复的不再列）。「已合入 · 待确认台账」（M2 给了改状态建议）是单独样式（绿底虚线框）并直接带「标为已合入 / 标为已进主线」按钮。展开态：分支（随机名显示标签、悬停看原名）、主线↑↓/集成↑↓ 与解释、目录、会话、复制分支名、打开会话（`claude://` 链接）/ 复制会话 ID、改预约（下拉，含新版本）、改名、标记放弃、同步基线（预演）。**拖卡片到另一列 = 改预约**（HTML5 DnD；冻结/合并中/已发布列不可放）。另有「新点子」输入框与「把现有分支登记成卡（先预览）」。
+- **卫生**：每仓库四类，每条附建议命令（只读命令优先；会改东西的写明「确认后」、不带 --force）与复制按钮。
+- **会话**：等你（needs_action 全文 + 最后活动）/ 运行中 / 已完成（含待验收）/ 已归档 / 无状态记录（如实单列，不算「已完成」）。
+- **合并预演**：醒目横幅「仅预演，不会执行合并（M4）」；选里程碑 → 计数 → 表格（顺序、功能、分支、三档状态、试合冲突文件数（点开看文件名）、建议动作）→ 预计顺延 → 台账状态建议 → 「生成合并单草稿」显示写入路径。顺序：已进集成（跳过）→ 试合无冲突（合入）→ 有冲突（冲突少的在前，需解冲突）→ 未完成（等你回答/开发中/尚未关联开发分支，顺延）；分档直接取 M2 分组（与 `heliu 待办 --precheck` 一致）。
+- 375 px：列纵向堆叠、表格变卡片、顶栏不再吸顶；浅/深色随 `prefers-color-scheme`；系统字体栈。
+
+合并单草稿格式：frontmatter（`heliu: release-plan`、`status: 草稿`、各仓库 `main_sha/integration_sha`、逐条 `order/feature/tier/action/decision/bindings{repo,branch,sha,merged_state,target,conflict_files,conflicts}`、`deferred`）+ 人读表（同一份内容，不写 `- [ ]` 复选框）。默认决定：已进集成 = 并入；无冲突且台账「待合并」= 并入，台账还是「开发中」= 待定；有冲突 = 待定；未完成 = 顺延（M4 可扩展「等它」）。
+
+## 5. 打包机制
+`runBoard` 启动时调 `ensureWebBuild()`：`dist/web/.build-stamp` 不存在、产物缺失、或 `web/` 下任一文件 mtime 更新 → `Bun.build`（entry `web/main.tsx`，minify，target browser）+ 复制 `index.html`、`styles.css→app.css`。无 CDN、无外链字体，离线可用；`dist/` 已 gitignore。产物：**app.js 48.0 KB（gzip 17.0 KB）· app.css 13.1 KB（gzip 3.7 KB）· index.html 0.5 KB**，打包 3–7 ms。
+
+## 6. 真实数据自检（磁吸背夹，2026-10-26 04:29–04:35，`--port 7799 --no-open`）
+| 接口 | 冷（缓存过期） | 热（命中缓存） |
+|---|---|---|
+| `/api/status` | 0.71 s | 5 ms |
+| `/api/status?precheck=1` | 0.76 s（`fresh=1` 0.74 s） | 1 ms |
+| `/api/features`（预检） | 0.13 s（扫描已在缓存时；含 reflog 判定） | 7 ms（首次 0.18 s） |
+| `/api/sessions` · `/api/hygiene` · `/api/milestones` | — | 1 · 1 · 2 ms |
+| `/api/todo?milestone=vNext[&precheck=1]` | — | 8 · 6 ms |
+| `/api/overview?precheck=1` · `/api/release/preview?milestone=vNext` | — | 8 · 8 ms |
+| `/api/features/F-0059/baseline` · `F-0033` | 76 ms · 105 ms | — |
+| PATCH 改预约（两次） | 19 ms · 12 ms | — |
+| `/` · `/app.js` · `/app.css` | <1 ms | — |
+页面右上角显示的用时 1.2–1.4 s 是「不预检 / 预检」两次扫描同时进行时的单次耗时；单独扫描约 0.7 s。
+
+结果自洽：vNext 还欠 **61**（与 61 张卡一致）· 可合 **39**（已进集成 22 / 试合无冲突 17）· 冲突 **11** · 等你 **11**，与 `heliu 待办 vNext --precheck` 相同；冲突卡按文件数 1→9 排序，App 仓 F-0059 9 个文件（与 M1 一致）；22 张「已合入 · 待确认台账」带一键按钮。合并预演顺序：1–22 已进集成 → 23–39 无冲突 → 40–50 有冲突 → 51–61 未完成（均为等你回答，预计顺延）。一眼条：文档仓集成分支 3 天未并回（领先 102，标红）、固件仓 2 天（领先 100）、本地无远端引用 96、等你处理 17 个会话（会话口径，含未绑卡片的会话）。
+PATCH：F-0039 `vNext → v1.2-试`（自动建 v1.2-试，卡片文件 `milestone:` 与「变更记录」都写入，看板列随之变化）→ 改回 vNext。因为新版本会插在 vNext 前面、成为「下一版」，自检结束后把 `milestones.yaml` 与该卡片文件按备份恢复为逐字节一致（M2 没有删除里程碑的命令）。`POST /api/release/plan` 只在 fixture 上测，没有往真实台账写草稿。
+零写入：自检前后对三仓库 `.git` 下 HEAD/index/logs/packed-refs/config、pack、objects/xx、refs、logs、各 worktree HEAD/index 共 1174 项 stat 快照比对，**完全一致**。
+
+## 7. 测试
+`bun test` 共 **187** 个全绿（新增 `tests/board.test.ts` 16 个：status 缓存与预检、todo 分组、features 列/灯色/下一步/多标签/已合入待确认、overview、hygiene 建议命令、同步基线预演、sessions/milestones、新点子、PATCH 改预约（断言卡片文件与 milestones.yaml 变化、列跟着变）、改名/非法状态、sync dry-run 不写、预演顺序、合并单草稿（frontmatter/默认决定/备份旧稿/无复选框）、Host 403 / Content-Type 415 / 404、前端打包与首页无外链、**被管理仓库整棵目录（含 .git 与各 worktree）stat 零变化**）；`bun run typecheck` 通过。
+
+## 8. 已知限制与取舍
+- **浏览器截图由验收方完成**。我只在桌面应用内置浏览器里做了目视自查（深色桌面宽度、浅色 375 px），未留截图。
+- **会话链接**：真实会话 JSON 里没有 `claude://` 字段（全量 grep 为空），也没有自造链接；此时「打开会话」置灰并提供「复制会话 ID」。字段一旦出现（正则取 JSON 中第一个 `claude://…`）按钮自动可用。
+- 拖拽是 HTML5 DnD，触屏上不可用；手机上用卡片展开态的「改预约」下拉。
+- 版本列默认预检（灯色要分出红灯）；首次打开若缓存未热，会先显示不带冲突的结果并标「冲突：检查中…」，完成后自动换成预检结果。
+- 「已发布」列只收台账状态为已发布、或所属里程碑为已发布的卡（磁吸背夹目前为空）；已放弃的卡不显示，只计数。
+- 卡片只显示每个绑定分支的主会话；同一分支的其他会话在「会话」页。
+- 「等你处理」一眼条数字按会话计（17），列头「等你」按功能卡计（11），两处口径在页面上分别写明。
+- 看板一次只服务一个项目；`dist/` 在本仓库（iCloud）里，体积 <70 KB、可随时重建。
+- 合并单草稿只覆盖「草稿」状态的同名文件（旧稿进 `.history/`）；执行、顺延、tag 均留给 M4。
+{
+  "name": "heliu",
+  "version": "0.2.0",
+  "description": "合流（heliu）：分支 × worktree × 桌面会话对账单 + 功能卡/里程碑台账（CLI · MCP · hooks · Skill）",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "heliu": "./bin/heliu"
+  },
+  "scripts": {
+    "heliu": "bun run bin/heliu",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "commander": "15.0.0",
+    "hono": "4.13.14",
+    "preact": "11.0.2",
+    "string-width": "8.3.0",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  }
+}
+
+exec
+/bin/zsh -lc 'ls -la "$HOME/Library/Application Support/heliu/projects/磁吸背夹"; rg -n '"'read.only|merge-tree|write-tree|GIT_OPTIONAL|project.yaml' src/board src/git* src/config*; lsof -nP -iTCP:7799 -sTCP:LISTEN" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ exited 1 in 0ms:
+total 8
+drwxr-xr-x  4 linxiansheng  staff   128 Oct 26 03:32 .
+drwxr-xr-x  3 linxiansheng  staff    96 Oct 26 03:43 ..
+drwxr-xr-x  4 linxiansheng  staff   128 Oct 26 04:31 ledger
+-rw-r--r--  1 linxiansheng  staff  1948 Oct 26 04:46 project.yaml
+zsh:1: no matches found: src/git*
+
+exec
+/bin/zsh -lc "mkdir -p /tmp/heliu-m3-accept-32532c2; python3 - <<'PY'
+import os,json,subprocess
+roots=['/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹','/Users/linxiansheng/.cache/backclip-web/esp_claw','/Users/linxiansheng/.cache/backclip-app-gitlab-20261015']
+out={}
+for root in roots:
+ def git(*args):
+  return subprocess.run(['git','--no-optional-locks','-C',root,*args],capture_output=True,text=True).stdout
+ common=git('rev-parse','--path-format=absolute','--git-common-dir').strip()
+ stats={}
+ for d,ds,fs in os.walk(common):
+  for n in ds+fs:
+   p=os.path.join(d,n); s=os.lstat(p);stats[p]=[s.st_size,s.st_mtime_ns,s.st_ctime_ns]
+ wts=[x[9:] for x in git('worktree','list','--porcelain').splitlines() if x.startswith('worktree ')]
+ statuses={p:subprocess.run(['git','--no-optional-locks','-C',p,'status','--porcelain=v1','-uno'],capture_output=True,text=True).stdout for p in wts if os.path.isdir(p)}
+ out[root]={'common':common,'stats':stats,'statuses':statuses,'refs':git('show-ref'),'worktrees':wts}
+ print(root,len(stats),len(statuses))
+json.dump(out,open('/tmp/heliu-m3-accept-32532c2/before.json','w'))
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+exec
+/bin/zsh -lc 'bun run bin/heliu board --project 磁吸背夹 --port 7799' in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ exited 2 in 0ms:
+heliu：端口 7799 已被占用：换一个端口（heliu board --port 7800），或先关掉占用它的程序
+
+exec
+/bin/zsh -lc "curl -sS --max-time 10 -D /tmp/heliu-m3-accept-32532c2/status.headers http://127.0.0.1:7799/api/status -o /tmp/heliu-m3-accept-32532c2/status.json; cat /tmp/heliu-m3-accept-32532c2/status.headers; lsof -nP -iTCP:7799 -sTCP:LISTEN; sed -n '1,240p' src/board/server.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 0ms:
+curl: (7) Failed to connect to 127.0.0.1 port 7799 after 0 ms: Couldn't connect to server
+/**
+ * heliu board：本机看板服务（Hono on Bun，只监听 127.0.0.1）。
+ *
+ * - /api/*：JSON，外壳 = JsonEnvelope + meta（数据时间/用时/是否命中缓存）。
+ * - 写接口只动台账（features/*.md、milestones.yaml、releases/*.md 草稿），绝不动被管理仓库；
+ *   合并只预演（merge-tree 在对象隔离区 + 沙箱里试合），执行留给 M4。
+ * - 防 DNS rebinding：Host 必须是 127.0.0.1 / localhost / [::1]；写接口必须是 application/json（浏览器跨站表单发不出来）。
+ * - createBoardApp 不监听端口，测试直接用 app.request()；runBoard 才起服务。
+ */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { Hono, type Context } from "hono";
+import { SCHEMA_VERSION } from "../types.ts";
+import type { HeliuPaths } from "../core/paths.ts";
+import { ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
+import type { BoardEnvelope, BoardMeta } from "./api-types.ts";
+import { DIST_DIR, ensureWebBuild } from "./build.ts";
+import { BoardService } from "./data.ts";
+
+export const DEFAULT_PORT = 7788;
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+export interface BoardAppOptions {
+  paths: HeliuPaths;
+  project: ProjectConfig;
+  ttlMs?: number;
+  now?: () => Date;
+  distDir?: string;
+}
+
+function hostAllowed(host: string | undefined): boolean {
+  if (!host) return true; // 非浏览器客户端（curl 总会带 Host；app.request 测试可能不带）
+  const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : (host.split(":")[0] ?? "");
+  return LOCAL_HOSTS.has(name.toLowerCase());
+}
+
+const truthy = (v: string | undefined) => v === "1" || v === "true" || v === "yes";
+
+export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: BoardService } {
+  const service = new BoardService({ paths: opts.paths, project: opts.project, ttlMs: opts.ttlMs, now: opts.now });
+  const dist = opts.distDir ?? DIST_DIR;
+  const app = new Hono();
+
+  const send = <T>(c: Context, command: string, data: T, meta: BoardMeta | null = null, status: 200 | 201 = 200) => {
+    const p = service.project;
+    const body: BoardEnvelope<T> = {
+      schemaVersion: SCHEMA_VERSION,
+      command,
+      generatedAt: new Date().toISOString(),
+      project: { name: p.name, source: p.source },
+      data,
+      meta,
+    };
+    c.header("Cache-Control", "no-store");
+    return c.json(body, status);
+  };
+
+  const body = async (c: Context): Promise<Record<string, unknown>> => {
+    const text = await c.req.text();
+    if (!text.trim()) return {};
+    try {
+      const v = JSON.parse(text) as unknown;
+      if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+    } catch {
+      /* 落到下面的报错 */
+    }
+    throw new ProjectError("请求体必须是 JSON 对象");
+  };
+
+  app.use("*", async (c, next) => {
+    if (!hostAllowed(c.req.header("host"))) return c.json({ error: "只接受本机访问（Host 必须是 127.0.0.1 / localhost）" }, 403);
+    if (c.req.method !== "GET" && c.req.method !== "HEAD") {
+      const ct = c.req.header("content-type") ?? "";
+      if (!ct.toLowerCase().startsWith("application/json")) return c.json({ error: "写接口只接受 Content-Type: application/json" }, 415);
+    }
+    await next();
+  });
+
+  app.onError((err, c) => {
+    const status = err instanceof ProjectError ? 400 : 500;
+    if (status === 500) console.error(`heliu board：${err.stack ?? err}`);
+    return c.json({ error: err.message }, status);
+  });
+
+  /* ───────────── 只读 ───────────── */
+
+  app.get("/api/status", async (c) => {
+    const r = await service.status(truthy(c.req.query("precheck")), truthy(c.req.query("fresh")));
+    return send(c, "status", r.data, r.meta);
+  });
+  app.get("/api/sessions", async (c) => {
+    const r = await service.sessions();
+    return send(c, "sessions", r.data, r.meta);
+  });
+  app.get("/api/hygiene", async (c) => {
+    const r = await service.hygiene();
+    return send(c, "hygiene", r.data, r.meta);
+  });
+  app.get("/api/milestones", (c) => send(c, "milestone.list", service.milestones()));
+  app.get("/api/features", async (c) => {
+    // 版本列默认试合（灯色要分出「有冲突」）；precheck=0 时冲突「未检查」
+    const pc = c.req.query("precheck");
+    const r = await service.features(c.req.query("milestone") ?? null, pc === undefined ? true : truthy(pc));
+    return send(c, "feature.list", r.data, r.meta);
+  });
+  app.get("/api/features/:id/baseline", async (c) => send(c, "feature.baseline", await service.baseline(c.req.param("id"))));
+  app.get("/api/todo", async (c) => {
+    const r = await service.todo(c.req.query("milestone") ?? "下一版", truthy(c.req.query("precheck")));
+    return send(c, "milestone.todo", r.data, r.meta);
+  });
+  app.get("/api/overview", async (c) => {
+    const r = await service.overview(truthy(c.req.query("precheck")));
+    return send(c, "overview", r.data, r.meta);
+  });
+  app.get("/api/release/preview", async (c) => {
+    const r = await service.releasePreview(c.req.query("milestone") ?? "下一版");
+    return send(c, "release.preview", r.data, r.meta);
+  });
+
+  /* ───────────── 写台账 ───────────── */
+
+  app.post("/api/features", async (c) => send(c, "feature.add", service.addFeature(await body(c)), null, 201));
+  app.patch("/api/features/:id", async (c) => send(c, "feature.update", service.patchFeature(c.req.param("id"), await body(c))));
+  app.post("/api/sync", async (c) => {
+    const b = await body(c);
+    const dry = b.dry_run ?? b.dryRun;
+    return send(c, "sync", await service.sync(dry === true || dry === "true" || dry === 1));
+  });
+  app.post("/api/release/plan", async (c) => {
+    const b = await body(c);
+    const ms = typeof b.milestone === "string" && b.milestone.trim() ? b.milestone : "下一版";
+    return send(c, "release.plan", await service.releasePlan(ms), null, 201);
+  });
+
+  app.all("/api/*", (c) => c.json({ error: `没有这个接口：${c.req.method} ${c.req.path}` }, 404));
+
+  /* ───────────── 前端静态文件 ───────────── */
+
+  const file = (name: string, type: string) => (c: Context) => {
+    const p = join(dist, name);
+    if (!existsSync(p)) return c.text("看板前端还没有打包：请用 heliu board 启动（会自动打包）", 503);
+    return new Response(Bun.file(p), { headers: { "Content-Type": type, "Cache-Control": "no-cache" } });
+  };
+  app.get("/", file("index.html", "text/html; charset=utf-8"));
+  app.get("/index.html", file("index.html", "text/html; charset=utf-8"));
+  app.get("/app.js", file("app.js", "text/javascript; charset=utf-8"));
+  app.get("/app.css", file("app.css", "text/css; charset=utf-8"));
+
+  return { app, service };
+}
+
+export interface RunBoardOptions {
+  paths: HeliuPaths;
+  projectName?: string;
+  cwd: string;
+  port?: number;
+  open?: boolean;
+  log?: (line: string) => void;
+}
+
+/** 起服务并一直运行到 Ctrl+C（main.ts 在 main() 返回后会 process.exit，所以这里不能提前返回） */
+export async function runBoard(opts: RunBoardOptions): Promise<void> {
+  const log = opts.log ?? ((l: string) => console.log(l));
+  const project = await resolveProject(opts.paths, opts.projectName, opts.cwd);
+  const build = await ensureWebBuild();
+  const { app, service } = createBoardApp({ paths: opts.paths, project });
+  const port = opts.port ?? DEFAULT_PORT;
+  let server: ReturnType<typeof Bun.serve>;
+  try {
+    server = Bun.serve({ hostname: "127.0.0.1", port, fetch: app.fetch, idleTimeout: 120 });
+  } catch (e) {
+    const msg = String((e as Error).message ?? e);
+    if (/EADDRINUSE|in use/i.test(msg)) throw new ProjectError(`端口 ${port} 已被占用：换一个端口（heliu board --port ${port + 1}），或先关掉占用它的程序`);
+    throw e;
+  }
+  service.warm();
+  const url = `http://127.0.0.1:${server.port}/`;
+  const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
+  log(`合流看板 · ${project.name}`);
+  log(`  地址：${url}（只监听本机）`);
+  log(`  前端：${build.built ? `已重新打包（${build.ms} ms）` : "沿用已有打包"} · app.js ${kb(build.sizes["app.js"] ?? 0)} · app.css ${kb(build.sizes["app.css"] ?? 0)}`);
+  log("  只读为主：改预约/改名/放弃只写台账；合并只预演，不执行（M4）。按 Ctrl+C 退出。");
+  if (opts.open !== false) {
+    try {
+      Bun.spawn({ cmd: ["open", url], stdout: "ignore", stderr: "ignore" });
+    } catch {
+      log(`  （没能自动打开浏览器，请手动打开 ${url}）`);
+    }
+  }
+  await new Promise<void>((resolve) => {
+    const stop = () => {
+      server.stop(true);
+      resolve();
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+  });
+}
+
+codex
+启动命令提示“7799 端口被占用”，但 curl 无法连接，也没查到监听进程。我会确认是否是运行环境限制，并补查同一应用的接口返回；这些结果会与真实浏览器、HTTP 和台账落盘验收明确区分。
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import socket
+s=socket.socket()
+try:s.bind(('127.0.0.1',7799));print('bind OK')
+except OSError as e:print(type(e).__name__,str(e))
+finally:s.close()
+PY
+cat src/core/paths.ts; sed -n '1,100p' tests/board.test.ts; cat web/index.html; rg -n '图例|legend|仅预演|还欠|五色|未预约|已发布|需同步' web" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 0ms:
+PermissionError [Errno 1] Operation not permitted
+/**
+ * 本机数据位置（ADR-3）。全部可用环境变量覆盖，测试用它指向 fixture。
+ * - HELIU_HOME：heliu 注册表与缓存根目录
+ * - HELIU_CLAUDE_APP_DIR：Claude 桌面应用数据目录（会话 JSON、git-worktrees.json）
+ * - HELIU_CLAUDE_HOME：~/.claude（运行中会话 sessions/<pid>.json）
+ */
+import { existsSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
+export interface HeliuPaths {
+  heliuHome: string;
+  projectsDir: string;
+  claudeAppDir: string;
+  desktopSessionsDir: string;
+  gitWorktreesJson: string;
+  claudeHome: string;
+  runningSessionsDir: string;
+}
+
+export function heliuPaths(env: NodeJS.ProcessEnv = process.env): HeliuPaths {
+  const home = homedir();
+  const heliuHome = env.HELIU_HOME || join(home, "Library", "Application Support", "heliu");
+  const claudeAppDir = env.HELIU_CLAUDE_APP_DIR || join(home, "Library", "Application Support", "Claude");
+  const claudeHome = env.HELIU_CLAUDE_HOME || join(home, ".claude");
+  return {
+    heliuHome,
+    projectsDir: join(heliuHome, "projects"),
+    claudeAppDir,
+    desktopSessionsDir: join(claudeAppDir, "claude-code-sessions"),
+    gitWorktreesJson: join(claudeAppDir, "git-worktrees.json"),
+    claudeHome,
+    runningSessionsDir: join(claudeHome, "sessions"),
+  };
+}
+
+/** 是否位于 iCloud Drive（按路径判断） */
+export function looksLikeICloud(p: string): boolean {
+  return p.includes("/Library/Mobile Documents/");
+}
+
+const realCache = new Map<string, string>();
+/**
+ * 规范化路径用于比较：realpath（不存在则 resolve）+ Unicode NFC。
+ * realpath 只 stat 不读内容，不会触发 iCloud 下载。
+ */
+export function canonicalPath(p: string): string {
+  const cached = realCache.get(p);
+  if (cached !== undefined) return cached;
+  let out: string;
+  try {
+    out = existsSync(p) ? realpathSync(p) : resolve(p);
+  } catch {
+    out = resolve(p);
+  }
+  out = out.normalize("NFC").replace(/\/+$/, "");
+  realCache.set(p, out);
+  return out;
+}
+
+/** child 是否等于 parent 或位于其下 */
+export function isUnder(child: string, parent: string): boolean {
+  return child === parent || child.startsWith(parent + "/");
+}
+/**
+ * M3 看板 API：用 Hono 的 app.request() 直接打 fixture 项目（不监听端口）。
+ * 覆盖：status 缓存 / todo 分组 / features 列与卡片（灯色、下一步、多标签、已合入待确认）/ 新点子 /
+ * PATCH 改预约（断言台账文件变化）/ 合并预演顺序 / 合并单草稿写入 / 同步基线预演 / 卫生建议命令 /
+ * 安全（Host、Content-Type）/ 前端打包与首页 / 被管理仓库零写入（整棵目录 stat 快照）。
+ */
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import YAML from "yaml";
+import type { BaselineData, BoardCard, FeaturesData, HygieneData, OverviewData, ReleasePlanResult, ReleasePreview } from "../src/board/api-types.ts";
+import { ensureWebBuild } from "../src/board/build.ts";
+import { createBoardApp } from "../src/board/server.ts";
+import { Ledger } from "../src/core/ledger.ts";
+import { heliuPaths } from "../src/core/paths.ts";
+import { addRepoToProject, loadProject, projectFile, stringifyProject } from "../src/core/project.ts";
+import type { ReconcileReport, TodoReport } from "../src/types.ts";
+import { B, buildFixture, type Fixture } from "./helpers/fixture.ts";
+
+let fx: Fixture;
+let ledgerDir: string;
+let dist: string;
+let app: ReturnType<typeof createBoardApp>["app"];
+let before: string;
+
+/** 被管理仓库整棵目录（含 .git、.claude/worktrees 下的各 worktree）的 stat 快照 */
+function treeSnapshot(root: string): string {
+  const out: string[] = [];
+  const walk = (d: string, rel: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, e.name);
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      const s = statSync(p);
+      if (e.isDirectory()) {
+        out.push(`${r}/|${s.mtimeMs}`);
+        walk(p, r);
+      } else out.push(`${r}|${s.mtimeMs}|${s.size}`);
+    }
+  };
+  walk(root, "");
+  return out.sort().join("\n");
+}
+
+async function get<T>(path: string, headers: Record<string, string> = {}): Promise<{ status: number; body: { data: T; meta: { cached: boolean; scanMs: number; precheck: boolean } | null; error?: string } }> {
+  const r = await app.request(path, { headers });
+  return { status: r.status, body: (await r.json()) as never };
+}
+async function send<T>(method: string, path: string, body: unknown, ct = "application/json"): Promise<{ status: number; body: { data: T; error?: string } }> {
+  const r = await app.request(path, { method, headers: { "Content-Type": ct }, body: JSON.stringify(body) });
+  return { status: r.status, body: (await r.json()) as never };
+}
+const cards = (d: FeaturesData): BoardCard[] => d.columns.flatMap((c) => c.cards);
+const card = (d: FeaturesData, id: string) => cards(d).find((c) => c.id === id)!;
+const cardFile = (id: string) => {
+  const f = readdirSync(join(ledgerDir, "features")).find((n) => n.startsWith(id));
+  return readFileSync(join(ledgerDir, "features", f!), "utf8");
+};
+
+beforeAll(async () => {
+  fx = buildFixture();
+  const paths = heliuPaths({ ...process.env, ...fx.env });
+  const reg = await addRepoToProject(paths, { path: fx.repo, name: "演示", integration: "integ" });
+  // 台账放在仓库外（真实项目也是这样配置），这样「被管理仓库零写入」可以对整棵目录做快照
+  ledgerDir = join(fx.root, "台账 目录");
+  writeFileSync(projectFile(paths, "演示"), stringifyProject("演示", reg.project.repos, { ledger: ledgerDir }));
+  const project = loadProject(paths, "演示");
+  const L = Ledger.of(project);
+  const bind = (branch: string) => [{ repo: reg.repo.id, branch, worktree: null, session: null, pr: null }];
+  L.addFeature({ title: "已进集成的功能", bindings: bind(B.inInteg), status: "开发中" }); // F-0001
+  L.addFeature({ title: "EPP 网关", bindings: bind(B.standalone), status: "待合并" }); // F-0002
+  L.addFeature({ title: "冲突地改 README", bindings: bind(B.conflict) }); // F-0003
+  L.addFeature({ title: "只是个想法" }); // F-0004
+  L.addFeature({ title: "老分支调研", bindings: bind(B.behind) }); // F-0005
+  dist = mkdtempSync(join(tmpdir(), "heliu-dist-"));
+  ({ app } = createBoardApp({ paths, project, distDir: dist }));
+  before = treeSnapshot(fx.repo);
+});
+afterAll(() => {
+  fx.cleanup();
+  rmSync(dist, { recursive: true, force: true });
+});
+
+describe("只读接口", () => {
+  test("status：ReconcileReport + 20 秒缓存；precheck=1 是另一份结果", async () => {
+    const a = await get<ReconcileReport>("/api/status");
+    expect(a.status).toBe(200);
+    expect(a.body.data.repos[0]!.reachable).toBe(true);
+    expect(a.body.data.options.precheck).toBe(false);
+    expect(typeof a.body.meta!.scanMs).toBe("number");
+    const b = await get<ReconcileReport>("/api/status");
+    expect(b.body.meta!.cached).toBe(true);
+    const p = await get<ReconcileReport>("/api/status?precheck=1");
+    expect(p.body.data.options.precheck).toBe(true);
+    expect(p.body.meta!.precheck).toBe(true);
+  }, 30_000);
+
+  test("todo：M2 分组（--precheck）", async () => {
+    const r = await get<TodoReport>("/api/todo?milestone=下一版&precheck=1");
+    expect(r.status).toBe(200);
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>合流看板</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="app"><p class="boot">合流看板加载中…（如果一直停在这里，请确认是用 heliu board 启动的）</p></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
+web/release.tsx:44:        <b>仅预演，不会执行合并（M4）。</b>试合用 merge-tree 在临时对象区进行，不改任何分支、不碰工作目录。
+web/board.tsx:3: * 版本列（主视图）：列 = 里程碑（milestones.yaml 顺序）+ 未预约 + 已发布；卡片 = 功能卡。
+web/board.tsx:42:    const name = target ?? "未预约";
+web/board.tsx:76:      <div class="legend">
+web/board.tsx:139:      onDone(`已登记 ${r.data.feature.id}「${r.data.feature.title}」→ ${r.data.feature.milestone ?? "未预约"}`);
+web/board.tsx:192:      const name = g === "__done" ? "已完成（不计入还欠）" : `${titles.get(card.group!) ?? g}${card.group === "mergeable" && card.note ? ` · ${card.note}` : ""}`;
+web/board.tsx:223:          <div class="owed muted">已发布 {col.cards.length} 项</div>
+web/board.tsx:226:            还欠 <b>{col.owed}</b> 项 · 可合 <b>{col.mergeable}</b> · 冲突 <b>{col.conflict ?? "未检查"}</b> · 等你 <b>{col.waiting}</b>
+web/board.tsx:230:      {rows.length ? rows : <div class="empty">{col.kind === "unreserved" ? "没有未预约的卡（拖卡片到这里 = 取消预约）" : "还没有卡片"}</div>}
+web/board.tsx:290:  const others = p.milestones.filter((m) => m.status !== "规划中" && m.status !== "已发布");
+web/board.tsx:328:            未预约
+web/board.tsx:468:                <div class="muted small">本分支落后它 {c.behind ?? "?"} 个提交{c.behind === 0 ? "（已是最新，无需同步）" : ""}</div>
+web/overview.tsx:2:/** 总览：现在最该做的（M1 摘要逻辑）+ 各版本还欠什么 + 每仓库健康条（每个数字旁有中文解释）。 */
+web/overview.tsx:25:      <h2>各版本还欠什么</h2>
+web/overview.tsx:39:              还欠 <b>{c.owed}</b> 项 · 可合 <b>{c.mergeable}</b> · 冲突 <b>{c.conflict ?? "未检查"}</b> · 等你 <b>{c.waiting}</b>{" "}
+web/overview.tsx:46:        <p class="muted small">还欠 = 预约到这一版、台账状态还是 想法/开发中/待合并 的功能；可合 / 冲突来自试合（merge-tree，在临时区进行，不碰仓库）；等你 = 绑定的会话停下来等你回答。</p>
+web/styles.css:131:.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; color: var(--muted); margin-bottom: 10px; }
+web/styles.css:132:.legend span { white-space: nowrap; }
+
+exec
+/bin/zsh -lc "cat > /tmp/heliu-m3-accept-32532c2/read-api.ts <<'TS'
+const root=process.cwd();
+const {createBoardApp}=await import(root+'/src/board/server.ts');
+const {heliuPaths}=await import(root+'/src/core/paths.ts');
+const {loadProject}=await import(root+'/src/core/project.ts');
+const paths=heliuPaths();
+const {app}=createBoardApp({paths,project:loadProject(paths,'磁吸背夹')});
+for(const [name,path] of Object.entries({status:'/api/status',milestones:'/api/milestones',features:'/api/features',preview:'/api/release/preview?milestone=vNext',overview:'/api/overview?precheck=1',index:'/'})){
+ const start=Date.now(); const res=await app.request(path);const body=await res.text();
+ await Bun.write('/tmp/heliu-m3-accept-32532c2/'+name+(name==='index'?'.html':'.json'),body);
+ console.log(name,res.status,Date.now()-start,body.length);
+}
+TS
+bun /tmp/heliu-m3-accept-32532c2/read-api.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 1134ms:
+status 200 530 152823
+milestones 200 1 353
+features 200 632 86094
+preview 200 10 40301
+overview 200 9 1064
+index 200 1 445
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import subprocess
+for p in ['/api/status','/api/milestones','/api/features','/api/release/preview?milestone=vNext','/']:
+ r=subprocess.run(['curl','-sS','--max-time','3','http://127.0.0.1:7799'+p],capture_output=True,text=True);print(p,'exit',r.returncode,r.stderr.strip())
+r=subprocess.run(['curl','-sS','--max-time','3','-X','PATCH','-H','Content-Type: application/json','-d','{\"milestone\":\"v1.2-验收\"}','http://127.0.0.1:7799/api/features/F-0039'],capture_output=True,text=True);print('PATCH F-0039','exit',r.returncode,r.stderr.strip())
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 0ms:
+/api/status exit 7 curl: (7) Failed to connect to 127.0.0.1 port 7799 after 0 ms: Couldn't connect to server
+/api/milestones exit 7 curl: (7) Failed to connect to 127.0.0.1 port 7799 after 0 ms: Couldn't connect to server
+/api/features exit 7 curl: (7) Failed to connect to 127.0.0.1 port 7799 after 0 ms: Couldn't connect to server
+/api/release/preview?milestone=vNext exit 7 curl: (7) Failed to connect to 127.0.0.1 port 7799 after 0 ms: Couldn't connect to server
+/ exit 7 curl: (7) Failed to connect to 127.0.0.1 port 7799 after 0 ms: Couldn't connect to server
+PATCH F-0039 exit 7 curl: (7) Failed to connect to 127.0.0.1 port 7799 after 0 ms: Couldn't connect to server
+
+exec
+/bin/zsh -lc "sed -n '65,98p' web/board.tsx; sed -n '1,145p' web/release.tsx; python3 - <<'PY'
+import json,os
+base='/tmp/heliu-m3-accept-32532c2/'
+for n in ['milestones','features','preview','overview']:
+ if not os.path.exists(base+n+'.json'):continue
+ d=json.load(open(base+n+'.json'));print('\\n',n, 'meta',d.get('meta'))
+ v=d.get('data',d)
+ if n=='features':
+  print('keys',v.keys())
+  for c in v['columns']:
+   print({k:val for k,val in c.items() if k"'!='"'cards'});print('cards count',len(c['cards']));print('example',c['cards'][:1])
+ elif n=='preview':
+  print('keys',v.keys());print(str(v)[:7000])
+ else: print(str(v)[:5000])
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 0ms:
+    }
+  };
+
+  const data = feats.env?.data;
+  const milestones = ms.env?.data.milestones ?? [];
+  if (feats.error && !data) return <p class="err">读取功能卡失败：{feats.error}</p>;
+  if (!data) return <p class="muted">正在对账并试合（merge-tree 在临时区进行，不碰仓库）…</p>;
+
+  return (
+    <div>
+      <NewIdea milestones={milestones} next={data.next} onDone={(t) => (flash(t), changed())} onError={(t) => flash(t)} />
+      <div class="legend">
+        {data.groups.map((g) => (
+          <span title={g.hint}>
+            <span class={`dot ${g.light}`} /> {g.title}
+          </span>
+        ))}
+        <span>↑ 自己的提交 · ↓ 落后基线的提交</span>
+        <span>拖卡片到另一列 = 改预约</span>
+        {data.abandoned ? <span>另有 {data.abandoned} 张已放弃（不显示）</span> : null}
+      </div>
+      {data.broken.length ? <p class="err small">有 {data.broken.length} 个卡片文件读不出来：{data.broken.join("、")}</p> : null}
+      <div class="cols">
+        {data.columns.map((col) => (
+          <Column
+            col={col}
+            data={data}
+            milestones={milestones}
+            dragId={dragId}
+            over={over === col.key}
+            onDragState={setDragId}
+            onOver={(on) => setOver(on ? col.key : null)}
+            onDrop={(id) => {
+              setOver(null);
+/** @jsxImportSource preact */
+/**
+ * 合并预演（只读）：选里程碑 → 按建议顺序（已进集成 → 无冲突 → 有冲突 → 未完成）列出每条的试合结果。
+ * 「生成合并单草稿」只把预演写成 <台账>/releases/<里程碑>.md，不执行任何合并（M4）。
+ */
+import { useEffect, useState } from "preact/hooks";
+import type { ReleasePlanResult, ReleasePreview } from "../src/board/api-types.ts";
+import type { LedgerMilestone } from "../src/types.ts";
+import { api, hms, MERGED_TEXT, useApi } from "./lib.ts";
+
+export function ReleasePage({ tick }: { tick: number }) {
+  const ms = useApi<{ milestones: LedgerMilestone[]; next: string | null }>("/api/milestones", [tick]);
+  const [sel, setSel] = useState<string | null>(null);
+  const list = ms.env?.data.milestones ?? [];
+  useEffect(() => {
+    if (!sel && ms.env) setSel(ms.env.data.next ?? list[0]?.id ?? null);
+  }, [ms.env]);
+  const pv = useApi<ReleasePreview>(sel ? `/api/release/preview?milestone=${encodeURIComponent(sel)}` : null, [tick]);
+  const [plan, setPlan] = useState<{ busy: boolean; result: ReleasePlanResult | null; error: string | null }>({ busy: false, result: null, error: null });
+  const [openFiles, setOpenFiles] = useState<Set<string>>(new Set());
+  const d = pv.env?.data;
+
+  const makePlan = async () => {
+    if (!sel) return;
+    setPlan({ busy: true, result: null, error: null });
+    try {
+      const r = await api<ReleasePlanResult>("/api/release/plan", { method: "POST", body: { milestone: sel } });
+      setPlan({ busy: false, result: r.data, error: null });
+    } catch (e) {
+      setPlan({ busy: false, result: null, error: (e as Error).message });
+    }
+  };
+  const toggle = (k: string) =>
+    setOpenFiles((s) => {
+      const n = new Set(s);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
+
+  return (
+    <div>
+      <div class="banner">
+        <b>仅预演，不会执行合并（M4）。</b>试合用 merge-tree 在临时对象区进行，不改任何分支、不碰工作目录。
+      </div>
+      <div class="toolbar">
+        <span>里程碑：</span>
+        <select value={sel ?? ""} onChange={(e) => setSel((e.currentTarget as HTMLSelectElement).value)}>
+          {list.map((m) => (
+            <option value={m.id}>
+              {m.id}
+              {m.id === ms.env?.data.next ? "（下一版）" : ""} · {m.status}
+            </option>
+          ))}
+        </select>
+        {d ? <span class="muted small">试合于 {hms(d.generatedAt)} · 用时 {(d.scanMs / 1000).toFixed(1)}s</span> : null}
+      </div>
+      {!list.length && ms.env ? <p class="muted">还没有里程碑：在「版本列」登记一个新点子会自动建 vNext。</p> : null}
+      {pv.error ? <p class="err">{pv.error}</p> : null}
+      {sel && !d && !pv.error ? <p class="muted">正在试合…</p> : null}
+      {d ? (
+        <div>
+          <div class="counts">
+            <span class="chip">
+              共 <b>{d.items.length}</b> 项
+            </span>
+            <span class="chip">
+              已进集成 <b>{d.counts.in_integration}</b>
+            </span>
+            <span class="chip">
+              无冲突 <b>{d.counts.clean}</b>
+            </span>
+            <span class={`chip${d.counts.conflict ? " red" : ""}`}>
+              有冲突 <b>{d.counts.conflict}</b>
+            </span>
+            <span class="chip">
+              未完成 <b>{d.counts.unfinished}</b>（预计顺延）
+            </span>
+          </div>
+          <p class="muted small">
+            顺序规则：已进集成（已在集成分支，执行时跳过）→ 试合无冲突（合入）→ 有冲突（冲突少的在前，需解冲突）→ 未完成（等你回答 / 开发中 / 尚未关联开发分支，建议顺延）。
+          </p>
+          <table class="rel">
+            <thead>
+              <tr>
+                <th>顺序</th>
+                <th>功能</th>
+                <th>分支</th>
+                <th>三档状态</th>
+                <th>试合冲突</th>
+                <th>建议动作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.items.map((x) => (
+                <tr>
+                  <td data-k="顺序">{x.order}</td>
+                  <td data-k="功能">
+                    <b>{x.title}</b> <span class="muted small">{x.id} · 台账 {x.status}</span>
+                    <div class={`tier ${x.tier} small`}>{x.tierText}</div>
+                    <div class="muted small">{x.reason}</div>
+                  </td>
+                  <td data-k="分支">
+                    {x.bindings.length ? (
+                      x.bindings.map((b) => (
+                        <div class="small">
+                          <span class="badge repo">{b.repoLabel}</span> <span class="mono">{b.branch}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <span class="muted">（无）</span>
+                    )}
+                  </td>
+                  <td data-k="三档状态">
+                    {x.bindings.map((b) => (
+                      <div class="small">{b.exists ? (b.mergedState ? MERGED_TEXT[b.mergedState] : "—") : "分支不存在"}</div>
+                    ))}
+                  </td>
+                  <td data-k="试合冲突">
+                    {x.bindings.map((b) => {
+                      const k = `${x.id}|${b.repo}|${b.branch}`;
+                      if (b.conflictFiles === null) return <div class="small muted">{b.precheckError ? `未完成（${b.precheckError}）` : "—"}</div>;
+                      if (b.conflictFiles === 0) return <div class="small ok">0</div>;
+                      return (
+                        <div class="small">
+                          <button class="btn small" onClick={() => toggle(k)}>
+                            {b.conflictFiles} 个文件 {openFiles.has(k) ? "▴" : "▾"}
+                          </button>
+                          {openFiles.has(k) ? (
+                            <ul class="files">
+                              {b.conflicts.map((f) => (
+                                <li class="mono">{f}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </td>
+                  <td data-k="建议动作" class="act">
+                    {x.actionText}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+
+ milestones meta None
+{'milestones': [{'id': 'vNext', 'title': '', 'status': '规划中', 'target_date': None, 'integration_branch': None, 'notes': ''}], 'next': 'vNext'}
+
+ features meta {'scannedAt': '2026-10-25T20:47:14.465Z', 'scanMs': 518, 'cached': False, 'precheck': True}
+keys dict_keys(['columns', 'groups', 'abandoned', 'next', 'nextStatus', 'precheck', 'broken', 'ledgerDir'])
+{'key': 'vNext', 'kind': 'milestone', 'title': 'vNext', 'milestone': {'id': 'vNext', 'title': '', 'status': '规划中', 'target_date': None, 'integration_branch': None, 'notes': ''}, 'droppable': True, 'dropHint': None, 'isNext': True, 'owed': 61, 'mergeable': 22, 'conflict': 0, 'waiting': 11}
+cards count 61
+example [{'id': 'F-0041', 'title': 'AI电话助手来电路由与语气定制', 'status': '开发中', 'acceptance': '未', 'milestone': 'vNext', 'column': 'vNext', 'rolledFrom': [], 'source': 'sync', 'group': 'blocked', 'light': 'purple', 'lightText': '等你回答', 'needsAction': '对6项拍板（可直接回“默认”采用推荐值）；另定方案文档推不推送到私有仓库', 'note': None, 'suggestion': None, 'suggestStatus': None, 'variant': 'normal', 'nextStep': '等你回答：对6项拍板（可直接回“默认”采用推荐值）；另定方案文档推不推送到私有仓库', 'tags': [{'kind': 'behind', 'text': '落后 ↓102'}], 'lastActivityAt': '2026-10-25T17:51:14.970Z', 'idleDays': 0, 'done': False, 'doneNote': None, 'bindings': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/ai-phone-assistant-routing-a16f5a', 'label': 'AI电话助手来电路由与语气定制', 'randomName': False, 'exists': True, 'role': 'feature', 'mergedState': 'unmerged', 'vsMain': {'ahead': 1, 'behind': 0}, 'vsIntegration': {'ahead': 1, 'behind': 102}, 'integration': 'claude/merge-features-refactor-143693', 'main': 'main', 'precheckTarget': 'claude/merge-features-refactor-143693', 'conflictFiles': None, 'conflicts': [], 'precheckError': '无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检', 'lastCommitAt': '2026-10-25T17:46:57.000Z', 'worktree': '/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/ai-phone-assistant-routing-a16f5a', 'session': {'id': 'local_b7ec8a51-a58e-4ef7-bdfc-e12ee36d9804', 'title': 'AI电话助手来电路由与语气定制', 'status': 'blocked', 'needsAction': '对6项拍板（可直接回“默认”采用推荐值）；另定方案文档推不推送到私有仓库', 'lastActivityAt': '2026-10-25T17:51:14.970Z', 'link': None}}], 'file': '/Users/linxiansheng/Library/Application Support/heliu/projects/磁吸背夹/ledger/features/F-0041-AI电话助手来电路由与语气定制.md'}]
+{'key': '__unreserved', 'kind': 'unreserved', 'title': '未预约', 'milestone': None, 'droppable': True, 'dropHint': None, 'isNext': False, 'owed': 0, 'mergeable': 0, 'conflict': 0, 'waiting': 0}
+cards count 0
+example []
+{'key': '__released', 'kind': 'released', 'title': '已发布', 'milestone': None, 'droppable': False, 'dropHint': '已发布列只读：发布由合并执行（M4）完成', 'isNext': False, 'owed': 0, 'mergeable': 0, 'conflict': 0, 'waiting': 0}
+cards count 0
+example []
+
+ preview meta {'scannedAt': '2026-10-25T20:47:14.465Z', 'scanMs': 518, 'cached': True, 'precheck': True}
+keys dict_keys(['milestone', 'generatedAt', 'scanMs', 'repos', 'items', 'counts', 'deferred', 'suggestions'])
+{'milestone': {'id': 'vNext', 'title': '', 'status': '规划中', 'target_date': None, 'integration_branch': None, 'notes': ''}, 'generatedAt': '2026-10-25T20:47:14.465Z', 'scanMs': 518, 'repos': [{'repo': 'docs', 'repoLabel': '文档仓', 'main': 'main', 'mainSha': '0b6960f5dbd7a2f53abfa557db293ce0f78b5ef4', 'integration': 'claude/merge-features-refactor-143693', 'integrationSha': '4329a384f567f57a44dda7cb2778d06f700510d4'}, {'repo': 'firmware', 'repoLabel': '固件仓', 'main': 'release/backclip-1.1', 'mainSha': '16d0c04db7ab2cb36e4e3ca3c8cfcd0bd0a84cbc', 'integration': 'feat/aios-entry', 'integrationSha': 'a349aa5191e3f857fc614f3701268d4eb56428d2'}, {'repo': 'app', 'repoLabel': 'App 仓', 'main': 'release/backclip-1.0', 'mainSha': '9e14cca003d0474a85bba078cfbdd76da9ac9df2', 'integration': None, 'integrationSha': None}], 'items': [{'order': 1, 'id': 'F-0019', 'title': '语音对话应用思维框架', 'status': '开发中', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/voice-dialogue-framework-499d60', 'exists': True, 'sha': 'c305515e8c66a9ef423236e57af77c51ec0b4e1e', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 110, 'behindMain': 9}]}, {'order': 2, 'id': 'F-0023', 'title': '推送卡片同步到背夹', 'status': '待合并', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/push-card-sync-backclip-4c3877', 'exists': True, 'sha': 'ee390362f0410e8fec8954dc5bcde1979a73b817', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 107, 'behindMain': 7}]}, {'order': 3, 'id': 'F-0026', 'title': '首页设计与交互原型', 'status': '待合并', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/homepage-design-prototype-619d11', 'exists': True, 'sha': '030257459c001621419fb8a772296bac258b89f0', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 102, 'behindMain': 1}]}, {'order': 4, 'id': 'F-0028', 'title': 'AI应用生成质量优化', 'status': '待合并', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/ai-app-generation-quality-3c1c8b', 'exists': True, 'sha': 'ee2924b232edf974912f2d5f0f91e9b201cfb859', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 101, 'behindMain': 0}]}, {'order': 5, 'id': 'F-0029', 'title': 'AI应用优化与功能迭代', 'status': '待合并', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/ai-app-optimization-90536f', 'exists': True, 'sha': '37fca76a06d76b3e29e62d233d23616548cb34e4', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 98, 'behindMain': 0}]}, {'order': 6, 'id': 'F-0030', 'title': '语音链路和背夹扬声器播放', 'status': '待合并', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/voice-link-speaker-playback-a74fdb', 'exists': True, 'sha': '6bedf4a5b50ba597c2c16b6870969d09e70b489b', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 101, 'behindMain': 0}]}, {'order': 7, 'id': 'F-0031', 'title': '固件1.0版本集成与烧录', 'status': '开发中', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/firmware-1-0-integration-b5f991', 'exists': True, 'sha': 'c2c209093f58b9e7eb5b27f07b614ffdd3013d17', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 89, 'behindMain': 0}]}, {'order': 8, 'id': 'F-0034', 'title': '合并语音应用三档模式分支到 release/backclip-1.0', 'status': '开发中', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/funny-goldwasser-b9ae93', 'exists': True, 'sha': 'b3ea79e3ba69592fd4b44bbf2e9ebb0691e02e29', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 100, 'behindMain': 0}]}, {'order': 9, 'id': 'F-0045', 'title': 'aios: 分类器长按带起手坐标；静默窗口内按下的整次不算长按', 'status': '开发中', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'firmware', 'repoLabel': '固件仓', 'branch': 'feat/aios-theme-ops', 'exists': True, 'sha': '0867530954a41329278686101fdd5ce39448fd82', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 83, 'behindMain': 0}]}, {'order': 10, 'id': 'F-0046', 'title': 'companion: 精灵包 HVC1 生成/回读与参数包校验工具', 'status': '开发中', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'firmware', 'repoLabel': '固件仓', 'branch': 'feat/aios-companion-assets', 'exists': True, 'sha': '887069789f70c995d27066510c75d52db29520c8', 'mergedState': 'in_integration', 'precheckTarget': None, 'conflictFiles': None, 'conflicts': [], 'precheckError': None, 'behindIntegration': 80, 'behindMain': 0}]}, {'order': 11, 'id': 'F-0047', 'title': 'stage: 参数包装载接受 palette.outline（line 的别名）与 mouth，内置默认对齐 A4 的 SYSTEM 包', 'status': '开发中', 'tier': 'in_integration', 'tierText': '已进集成', 'action': 'skip', 'actionText': '跳过（已在集成分支）', 'reason': '绑定分支已被集成分支包含', 'needsAction': None, 'todoGroup': 'mergeable', 'bindings': [{'repo': 'firmware', 'repoLabel': '固件仓', 'branch': 'feat/aios-stage', 'exists': True, 'sha': '02f5abfdedfe559b0217f1be5cf7643ae6585610', 'merge
+
+ overview meta {'scannedAt': '2026-10-25T20:47:13.940Z', 'scanMs': 526, 'cached': True, 'precheck': False}
+{'actions': ['集成分支未并回主线：文档仓（领先 102、3 天）、固件仓（领先 100、2 天） → 检查集成分支是否可并回主线（M4 提供预检）', '17 个会话在等你拍板（见「会话」页）', '46 条独立分支未被主线或集成分支包含（文档仓 38 / 固件仓 5 / App 仓 3；可在「版本列」预约到某一版）'], 'waiting': 17, 'neverPushed': 96, 'integrations': [{'repo': 'docs', 'repoLabel': '文档仓', 'branch': 'claude/merge-features-refactor-143693', 'ahead': 102, 'days': 3}, {'repo': 'firmware', 'repoLabel': '固件仓', 'branch': 'feat/aios-entry', 'ahead': 100, 'days': 2}], 'hygieneWarnings': 13, 'columns': [{'key': 'vNext', 'title': 'vNext', 'kind': 'milestone', 'isNext': True, 'owed': 61, 'mergeable': 22, 'conflict': 0, 'waiting': 11}, {'key': '__unreserved', 'title': '未预约', 'kind': 'unreserved', 'isNext': False, 'owed': 0, 'mergeable': 0, 'conflict': 0, 'waiting': 0}], 'next': {'id': 'vNext', 'status': '规划中'}, 'precheck': True, 'precheckAt': '2026-10-25T20:47:14.465Z'}
+
+codex
+已读到 61 张 vNext 卡片，“等你回答”的原文和分支落后数都有呈现，预演页源码也明确写了“仅预演，不会执行合并”。但发现一处会误导判断的问题：本环境有 36 张卡的试合未完成，汇总仍给出“冲突 0”和“已检查”；另外，环境禁止监听端口，curl 改预约和真实页面截图尚未完成。
+
+ exited 130 in 52988ms:
+Traceback (most recent call last):
+  File "<stdin>", line 13, in <module>
+  File "<stdin>", line 13, in <dictcomp>
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 507, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 1134, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 1979, in _communicate
+    ready = selector.select(timeout)
+  File "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/selectors.py", line 416, in select
+    fd_event_list = self._selector.poll(timeout)
+KeyboardInterrupt
+
+exec
+/bin/zsh -lc "sed -n '30,85p' web/main.tsx; sed -n '110,145p' web/main.tsx; git status --short; git rev-parse HEAD; ls -l /tmp/heliu-m3-accept-32532c2" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 0ms:
+
+function App() {
+  const [tab, setTab] = useState<Tab>(tabFromHash());
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const onHash = () => setTab(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    const timer = setInterval(() => setTick((t) => t + 1), REFRESH_MS);
+    return () => {
+      window.removeEventListener("hashchange", onHash);
+      clearInterval(timer);
+    };
+  }, []);
+  const go = (t: Tab) => {
+    location.hash = `/${t}`;
+    setTab(t);
+    window.scrollTo(0, 0);
+  };
+  // 冲突检查（试合）：页面打开后自动检查一次，之后自动刷新都带上；顶栏可「重新检查」。用户不必记 --precheck。
+  const [pc, setPc] = useState<{ state: "off" | "checking" | "on"; at: string | null; error: string | null }>({ state: "off", at: null, error: null });
+  const check = async (fresh: boolean) => {
+    setPc((s) => ({ ...s, state: "checking", error: null }));
+    try {
+      const r = await api<ReconcileReport>(`/api/status?precheck=1${fresh ? "&fresh=1" : ""}`);
+      setPc({ state: "on", at: r.meta?.scannedAt ?? null, error: null });
+      if (fresh) setTick((t) => t + 1);
+    } catch (e) {
+      setPc((s) => ({ ...s, state: s.at ? "on" : "off", error: (e as Error).message }));
+    }
+  };
+  useEffect(() => {
+    void check(false);
+  }, []);
+  const precheck = pc.state === "on" || (pc.state === "checking" && !!pc.at);
+  const status = useApi<ReconcileReport>("/api/status", [tick]);
+  const overview = useApi<OverviewData>(`/api/overview?precheck=${precheck ? 1 : 0}`, [tick]);
+  const refresh = () => setTick((t) => t + 1);
+  const meta = status.env?.meta;
+  const ov = overview.env?.data;
+  const projectName = status.env?.project?.name ?? overview.env?.project?.name ?? "";
+  useEffect(() => {
+    document.title = projectName ? `合流看板 · ${projectName}` : "合流看板";
+  }, [projectName]);
+
+  return (
+    <div>
+      <header class="top">
+        <div class="top-row">
+          <div class="brand">
+            合流看板<small>{projectName}</small>
+          </div>
+          <span class="datatime" title="对账结果在服务端缓存 20 秒；页面每 30 秒自动刷新">
+            {meta ? `数据时间 ${hms(meta.scannedAt)} · 用时 ${secs(meta.scanMs)}` : status.error ? "数据加载失败" : "正在扫描…"}
+            {status.loading || overview.loading ? " · 刷新中" : ""}
+          </span>
+          <button class="btn" onClick={refresh} disabled={status.loading}>
+  );
+}
+
+/** 顶部固定一行：下一版是谁 · 冲突检查到哪了 · 自动顺延的现状（如实写：M4 才有） */
+function NextLine({ ov, pc, onCheck }: { ov: OverviewData | null; pc: { state: "off" | "checking" | "on"; at: string | null; error: string | null }; onCheck: () => void }) {
+  const next = ov?.next;
+  return (
+    <div class="nextline">
+      <span>
+        下一版 = <b>{next ? next.id : "（还没有规划中的版本）"}</b>
+        {next ? `（${next.status}）` : ""}
+      </span>
+      <span>
+        · 冲突：
+        {pc.state === "checking" ? (
+          <span class="muted">检查中…</span>
+        ) : pc.state === "on" ? (
+          <>
+            已检查 {hms(ov?.precheckAt ?? pc.at)}{" "}
+            <button class="link" onClick={onCheck} title="重新用 merge-tree 试合（临时区进行，不碰仓库）">
+              重新检查
+            </button>
+          </>
+        ) : (
+          <>
+            未检查{" "}
+            <button class="link" onClick={onCheck} title="用 merge-tree 试合（临时区进行，不碰仓库）">
+              点击检查
+            </button>
+          </>
+        )}
+        {pc.error ? <span class="err small"> {pc.error}</span> : null}
+      </span>
+      <span class="muted">· 自动顺延：当前版本尚未实现，M4 提供</span>
+    </div>
+  );
+32532c2aeefb191ea1faff5e062e6550e04ae0ba
+total 656
+-rw-r--r--  1 linxiansheng  wheel  100213 Oct 26 04:47 features.json
+-rw-r--r--  1 linxiansheng  wheel     507 Oct 26 04:47 index.html
+-rw-r--r--  1 linxiansheng  wheel     375 Oct 26 04:47 milestones.json
+-rw-r--r--  1 linxiansheng  wheel    1312 Oct 26 04:47 overview.json
+-rw-r--r--  1 linxiansheng  wheel   49305 Oct 26 04:47 preview.json
+-rw-r--r--  1 linxiansheng  wheel     777 Oct 26 04:47 read-api.ts
+-rw-r--r--  1 linxiansheng  wheel       0 Oct 26 04:46 status.headers
+-rw-r--r--  1 linxiansheng  wheel  163517 Oct 26 04:47 status.json
+
+exec
+/bin/zsh -lc "cat > /tmp/heliu-m3-accept-32532c2/snapshot.py <<'PY'
+import os,json,sys,hashlib
+roots=['/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.git','/Users/linxiansheng/.cache/backclip-web/esp_claw/.git','/Users/linxiansheng/.cache/backclip-app-gitlab-20261015/.git']
+out={}
+for root in roots:
+ rows={}
+ for d,ds,fs in os.walk(root):
+  for n in ds+fs:
+   p=os.path.join(d,n);s=os.lstat(p);rows[p]=[s.st_size,s.st_mtime_ns,s.st_ctime_ns]
+ out[root]=rows
+ledger=os.path.expanduser('~/Library/Application Support/heliu/projects/磁吸背夹/ledger')
+out['ledger']={os.path.join(d,n):hashlib.sha256(open(os.path.join(d,n),'rb').read()).hexdigest() for d,ds,fs in os.walk(ledger) for n in fs}
+json.dump(out,open('/tmp/heliu-m3-accept-32532c2/'+sys.argv[1]+'.json','w'))
+print({k:len(v) for k,v in out.items()})
+PY
+python3 /tmp/heliu-m3-accept-32532c2/snapshot.py before-read" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 35ms:
+{'/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.git': 940, '/Users/linxiansheng/.cache/backclip-web/esp_claw/.git': 4079, '/Users/linxiansheng/.cache/backclip-app-gitlab-20261015/.git': 1672, 'ledger': 62}
+
+exec
+/bin/zsh -lc 'bun /tmp/heliu-m3-accept-32532c2/read-api.ts' in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 1620ms:
+status 200 618 152823
+milestones 200 1 353
+features 200 1010 86094
+preview 200 18 40301
+overview 200 11 1064
+index 200 4 445
+
+exec
+/bin/zsh -lc "python3 /tmp/heliu-m3-accept-32532c2/snapshot.py after-read; python3 - <<'PY'
+import json
+p='/tmp/heliu-m3-accept-32532c2/'
+a=json.load(open(p+'before-read.json'));b=json.load(open(p+'after-read.json'))
+for k in a:
+ changed=[x for x in set(a[k])|set(b[k]) if a[k].get(x)"'!=b[k].get(x)]
+ print(k,'"'changed',len(changed),changed[:5])
+f=json.load(open(p+'features.json'))['data'];r=json.load(open(p+'preview.json'))['data']
+cs=[c for col in f['columns'] for c in col['cards']]
+assert len(cs)==len(r['items'])==61
+assert set(c['id'] for c in cs)==set(c['id'] for c in r['items'])
+assert sum(r['counts'].values())==61
+assert [i['order'] for i in r['items']]==list(range(1,62))
+print('61 cards: count, identity, preview order agree')
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M3-r1-32532c2
+ succeeded in 0ms:
+{'/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.git': 940, '/Users/linxiansheng/.cache/backclip-web/esp_claw/.git': 4079, '/Users/linxiansheng/.cache/backclip-app-gitlab-20261015/.git': 1672, 'ledger': 62}
+/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.git changed 0 []
+/Users/linxiansheng/.cache/backclip-web/esp_claw/.git changed 0 []
+/Users/linxiansheng/.cache/backclip-app-gitlab-20261015/.git changed 0 []
+ledger changed 0 []
+61 cards: count, identity, preview order agree
+
+codex
+{
+  "verdict": "不通过",
+  "summary": "进程内接口返回的 vNext 61 张卡与预演清单一致，中文文案能说明待办、等你回答和分支落后，预演也明确标注“仅预演，不会执行合并”。但 36 张卡试合未完成，汇总仍显示“冲突 0”，页面逻辑会标为“已检查”，容易误导用户。环境禁止监听端口，未完成真实 HTTP、截图及改预约落盘验收；补充只读检查前后，三仓 Git 元数据与台账均无变化。",
+  "solved": {
+    "版本遗漏": "部分解决",
+    "分支落后": "部分解决",
+    "大版本待办": "部分解决"
+  },
+  "blocking_issues": [
+    {
+      "title": "试合未完成被汇总成“冲突 0、已检查”",
+      "repro": "正常读取真实项目的 /api/features 与 /api/release/preview?milestone=vNext（通过进程内 app.request）：36 张卡的绑定带 precheckError，提示无法建立写保护沙箱；版本汇总却返回 conflict=0、precheck=true，前端收到成功响应后显示“已检查”。未做异常注入。",
+      "impact": "不懂 git 的用户会把“没有检查出结果”理解成“已经确认没有冲突”，无法可靠判断哪些能合；预演还将这些项目归入未完成、建议顺延。"
+    },
+    {
+      "title": "运行环境阻断端到端验收",
+      "repro": "指定启动命令报端口占用，所有指定 curl GET 与 PATCH 均连接失败；直接检查监听能力返回 Operation not permitted。仅补查了进程内接口、首页 HTML 和前端源码，没有浏览器截图，也没有改预约成功后的 GET 与台账落盘证据。",
+      "impact": "不能确认页面实际可读性、拖卡改预约及刷新持久化；这是验收环境阻塞，不能据此认定功能本身失败或通过。"
+    }
+  ],
+  "suggestions": [
+    "M4 将冲突检查明确分为未检查、部分完成、完成；未知项不得显示为零或自动建议顺延。",
+    "执行前展示将合入、跳过、顺延的功能清单，并重新核对分支与提交是否变化。",
+    "区分“技术上无冲突”和“功能已验收可发布”，避免绿灯直接代表可以发布。",
+    "把“同步基线”等术语补成具体下一步，并提供执行记录、失败停止点和恢复入口。"
+  ]
+}
+tokens used
+47,362
+{
+  "verdict": "不通过",
+  "summary": "进程内接口返回的 vNext 61 张卡与预演清单一致，中文文案能说明待办、等你回答和分支落后，预演也明确标注“仅预演，不会执行合并”。但 36 张卡试合未完成，汇总仍显示“冲突 0”，页面逻辑会标为“已检查”，容易误导用户。环境禁止监听端口，未完成真实 HTTP、截图及改预约落盘验收；补充只读检查前后，三仓 Git 元数据与台账均无变化。",
+  "solved": {
+    "版本遗漏": "部分解决",
+    "分支落后": "部分解决",
+    "大版本待办": "部分解决"
+  },
+  "blocking_issues": [
+    {
+      "title": "试合未完成被汇总成“冲突 0、已检查”",
+      "repro": "正常读取真实项目的 /api/features 与 /api/release/preview?milestone=vNext（通过进程内 app.request）：36 张卡的绑定带 precheckError，提示无法建立写保护沙箱；版本汇总却返回 conflict=0、precheck=true，前端收到成功响应后显示“已检查”。未做异常注入。",
+      "impact": "不懂 git 的用户会把“没有检查出结果”理解成“已经确认没有冲突”，无法可靠判断哪些能合；预演还将这些项目归入未完成、建议顺延。"
+    },
+    {
+      "title": "运行环境阻断端到端验收",
+      "repro": "指定启动命令报端口占用，所有指定 curl GET 与 PATCH 均连接失败；直接检查监听能力返回 Operation not permitted。仅补查了进程内接口、首页 HTML 和前端源码，没有浏览器截图，也没有改预约成功后的 GET 与台账落盘证据。",
+      "impact": "不能确认页面实际可读性、拖卡改预约及刷新持久化；这是验收环境阻塞，不能据此认定功能本身失败或通过。"
+    }
+  ],
+  "suggestions": [
+    "M4 将冲突检查明确分为未检查、部分完成、完成；未知项不得显示为零或自动建议顺延。",
+    "执行前展示将合入、跳过、顺延的功能清单，并重新核对分支与提交是否变化。",
+    "区分“技术上无冲突”和“功能已验收可发布”，避免绿灯直接代表可以发布。",
+    "把“同步基线”等术语补成具体下一步，并提供执行记录、失败停止点和恢复入口。"
+  ]
+}
