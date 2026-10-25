@@ -28,11 +28,13 @@ find "${HOMECOPY}/projects" -name project.yaml -print0 2>/dev/null | xargs -0 -I
 export HELIU_HOME="${HOMECOPY}"
 export PATH="${HOME}/.bun/bin:${PATH}"
 SERVER_PID=""
-cleanup(){ [ -n "${SERVER_PID}" ] && kill "${SERVER_PID}" >/dev/null 2>&1 || true; git -C "${ROOT}" worktree remove --force "${SNAP}" >/dev/null 2>&1 || true; }
+kill_port(){ local pids; pids="$(lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $2}' | sort -u)"; [ -n "${pids}" ] && echo "${pids}" | xargs kill >/dev/null 2>&1 || true; }
+cleanup(){ [ -n "${SERVE_PORT}" ] && kill_port "${SERVE_PORT}"; [ -n "${SERVER_PID}" ] && kill "${SERVER_PID}" >/dev/null 2>&1 || true; git -C "${ROOT}" worktree remove --force "${SNAP}" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 { echo "快照：${SNAP}（${SHORT}）"; echo "HELIU_HOME 副本：${HOMECOPY}"; } | tee "${LOG}"
 CODEX_EXTRA=()
 if [ -n "${SERVE_PORT}" ]; then
+  if lsof -nP -iTCP:"${SERVE_PORT}" -sTCP:LISTEN >/dev/null 2>&1; then echo "端口 ${SERVE_PORT} 已被占用（可能是上一轮残留），请先释放再验收" | tee -a "${LOG}"; exit 3; fi
   ( cd "${SNAP}" && HELIU_HOME="${HOMECOPY}" nohup bun run bin/heliu board --project 磁吸背夹 --port "${SERVE_PORT}" --no-open >"${SCRATCH}/${MS}-r${ROUND}-board.log" 2>&1 & echo $! > "${SCRATCH}/${MS}-r${ROUND}-board.pid" )
   SERVER_PID="$(cat "${SCRATCH}/${MS}-r${ROUND}-board.pid")"
   for i in $(seq 1 20); do lsof -nP -iTCP:"${SERVE_PORT}" -sTCP:LISTEN >/dev/null 2>&1 && break; sleep 1; done
