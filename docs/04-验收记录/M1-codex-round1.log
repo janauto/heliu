@@ -1,0 +1,938 @@
+Reading additional input from stdin...
+OpenAI Codex v0.164.0-alpha.11.1
+--------
+workdir: /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: high
+reasoning summaries: none
+session id: 01a1743d-7eb4-7683-bb36-dd3b4c4719cb
+--------
+user
+你是这个工具「合流（heliu）」的第一位普通用户：一个个人开发者，在 Claude 桌面应用里同时开十几个会话（每个会话一个 git worktree）开发同一个项目，痛点是合并一版时漏功能、分支基线落后、没有大版本待办。请以用户体验视角做本里程碑 M1 的验收，不做压力测试、不做异常注入、不修改任何文件。
+
+步骤：
+1. 读 README.md、docs/02-产品定义/产品定义_v0.1.md 的第 9 节「怎么算做成」、docs/03-架构/M1-任务卡.md 的「目标」与「验收」、docs/03-架构/M1-实现说明.md。
+2. 实际运行（bun 在 PATH 里，命令前缀 `bun run bin/heliu`）：`doctor`、`status --project 磁吸背夹`、`hygiene --project 磁吸背夹`、`sessions --project 磁吸背夹`、`status --project 磁吸背夹 --json | head -c 2000`。这些命令只读。如果某条命令无法在你的沙箱里运行，如实写进 summary，不要猜测结果。
+3. 判断：M1 承诺的是「一张随时可信的对账单」——我能否在 10 秒内看懂：哪些分支已合、哪些没合、哪些落后、哪些会话在等我？输出是否中文、小白能懂？数字是否自洽？
+4. 按 schema 输出：verdict（通过/有保留/不通过）、summary（3 句内）、solved（三个痛点各一档：M1 只承诺看见，不承诺合并，请据此判断）、blocking_issues（真正影响使用的问题，带复现步骤与影响）、suggestions（≤5 条，面向下一个里程碑）。
+warning: Under-development features enabled: chronicle. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Users/linxiansheng/.codex/config.toml.
+codex
+我会先核对 M1 的承诺，再实际运行这五条只读命令，从普通用户能否快速看懂、数字是否自洽来验收；全程不修改文件。
+
+exec
+/bin/zsh -lc "rg -n '合流|heliu|项目管理工具' /Users/linxiansheng/.codex/memories/MEMORY.md" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ exited 1 in 0ms:
+exec
+/bin/zsh -lc "pwd; rg --files -g 'AGENTS.md' -g 'README.md' -g '*M1*' -g '*产品定义_v0.1.md'" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 0ms:
+/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+README.md
+docs/03-架构/M1-实现说明.md
+docs/03-架构/M1-任务卡.md
+docs/02-产品定义/产品定义_v0.1.md
+docs/04-验收记录/M1-codex-round1.log
+
+exec
+/bin/zsh -lc 'cat README.md' in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 0ms:
+# 项目管理工具（AI 并行开发 · 里程碑合并）
+
+> 一个本地、可视化、中文、可被 CLI / MCP / Skill 调用的个人项目管理工具：
+> 让随手想到的新点子能并行开发、预约进下一版，合并时不漏、不乱、不冲突。
+
+- 第一性原理：**git 是事实，台账是承诺，看板是对账单。**
+- 第一个被管理的项目：磁吸背夹。
+
+目录：
+- `docs/00-现场证据/` 现状快照（会话、分支、未合并资料）
+- `docs/01-调研/` 市场调研、竞品分析、社区声音、本机环境
+- `docs/02-产品定义/` 需求、实体模型、用户故事
+- `docs/03-架构/` 技术框架与决策记录
+- `docs/04-验收记录/` 每个里程碑的 Fable 验收 + ChatGPT 二次验收记录
+
+exec
+/bin/zsh -lc "cat 'docs/03-架构/M1-任务卡.md'; cat 'docs/03-架构/M1-实现说明.md'" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 0ms:
+# M1 任务卡：对账单只读内核 + CLI
+
+## 目标
+在不改动任何被管理仓库的前提下，把「分支 × worktree × 桌面会话」联成一张对账单，CLI 中文输出 + `--json`。
+
+## 仓库与栈
+- 本仓库根目录 = `heliu` 包根。Bun 1.3 + TypeScript（strict）。`node_modules` 用 `node_modules.nosync` 实体目录 + 符号链接（iCloud 不同步 `.nosync`），两者都进 `.gitignore`。
+- 依赖最少：`commander`、`yaml`、`zod`（校验 project.yaml 与会话 JSON）、`cli-table3` 或自写对齐（中文全角宽度要正确，可用 `string-width`）。测试用 `bun test`。
+
+## 目录
+```
+src/
+  types.ts
+  core/project.ts      # 读 ~/Library/Application Support/heliu/projects/<name>/project.yaml；<repo>/.heliu/project.yaml 优先
+  core/git.ts          # runGit(repo, args, {timeoutMs=8000, optionalLocks=false}) → {ok, stdout, timedOut}
+  core/branches.ts     # for-each-ref；ahead/behind vs main & integration；is-ancestor；mergedState 三档；可选 merge-tree 预检
+  core/worktrees.ts    # worktree list --porcelain；目录名≠分支名；孤儿 .git/worktrees/*；index.lock；dirty(超时→unknown)
+  core/sessions.ts     # 解析桌面会话 JSON 与 git-worktrees.json（只读、zod 宽松、缺字段容错）
+  core/labels.ts       # 随机分支名 → 可读标签：会话标题 > 首提交主题 > 改动最多的一级目录 + 最后日期
+  core/reconcile.ts    # join → ReconcileReport {health, repos[{branches[FeatureView]}], hygiene}
+  cli/index.ts         # heliu status|branches|sessions|hygiene|doctor|project (add|list) ; --project ; --json ; --precheck
+tests/                 # 用临时 git 仓库造 fixture（多分支、worktree、落后、已合并、孤儿）
+```
+
+## 数据源（已核实）
+- 桌面会话：`~/Library/Application Support/Claude/claude-code-sessions/<账号>/<组织>/local_*.json`，字段：`sessionId, cliSessionId, title, cwd, originCwd, worktreeName, worktreePath, branch, sourceBranch, writtenBranches, prs[{prNumber,repo,url,branch,state}], postTurnSummary{status_category,status_detail,needs_action}, isArchived, createdAt(ms), lastActivityAt(ms), completedTurns, spawnedFrom{sessionId,title}, model`。与仓库的归属用 `originCwd`/`cwd` 的真实路径（realpath）匹配 project.yaml 里的 repo path 或其 `.claude/worktrees/*`。
+- `~/Library/Application Support/Claude/git-worktrees.json`：`worktrees{<name>:{name,path,branch,sourceBranch,baseRepo,leasedBy,createdAt,uncleanSince}}`。
+- 运行中会话：`~/.claude/sessions/<pid>.json`（hostSessionId、name、status idle/busy）。
+
+## 磁吸背夹 project.yaml（写到 `~/Library/Application Support/heliu/projects/磁吸背夹/project.yaml`，并在仓库 `examples/` 放一份副本）
+```yaml
+name: 磁吸背夹
+repos:
+  - id: docs
+    label: 文档仓
+    path: /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹
+    main: main
+    integration: claude/merge-features-refactor-143693
+    remote: github
+    icloud: true
+  - id: firmware
+    label: 固件仓
+    path: /Users/linxiansheng/.cache/backclip-web/esp_claw
+    main: release/backclip-1.1        # 只读核实后修正
+    integration: feat/aios-entry
+  - id: app
+    label: App 仓
+    path: /Users/linxiansheng/.cache/backclip-app-gitlab-20261015
+    main: <只读核实：默认分支>
+```
+
+## git 纪律（硬约束）
+- 允许：`for-each-ref`、`rev-list --count`、`merge-base --is-ancestor`、`merge-tree --write-tree --name-only`、`worktree list --porcelain`、`log -1 --format`、`symbolic-ref`、`rev-parse`、`diff --stat A...B`、`status --porcelain -uno`（仅在 `GIT_OPTIONAL_LOCKS=0` + 超时下）。
+- 禁止：`checkout`、`merge`、`fetch`、`pull`、`push`、`stash`、`worktree add/remove/prune`、`branch -d`、`gc`。代码里用白名单拦截。
+- 每个 repo 并发 ≤4 个 git 进程；iCloud 仓库 dirty 检查默认跳过（`--dirty` 才查）。
+
+## 输出
+- `heliu status --project 磁吸背夹`：顶部健康条（主线 vs 远端 ahead/behind；集成分支未并回主线天数；从未推送分支数；worktree 脏/未知/干净计数），每仓库一张表：标签 | 分支 | worktree | 会话（标题·状态） | 领先/落后主线 | 领先/落后集成 | 合并状态 | 最后提交。
+- `heliu hygiene`：目录名≠分支名、孤儿条目、index.lock、已合并但目录仍在、无提交的 worktree、主目录脏项计数。
+- `heliu sessions`：本项目会话列表（含 blocked/needs_action）。
+- `heliu doctor`：git ≥2.38、bun、数据目录可读、每仓库可达、iCloud 警告。
+- 所有命令支持 `--json`（稳定 schema，供 MCP/看板复用）。
+
+## 验收（Fable 执行）
+1. `bun test` 全绿。
+2. `heliu status --project 磁吸背夹` 60s 内完成、不挂起；文档仓数字对得上：本地分支 75、worktree 54、未合并进 main 51、其中 13 条已被集成分支包含。
+3. 随机分支名（bold-shaw、funny-goldwasser、upbeat-mendeleev）有可读标签。
+4. `--json` 可被 `jq` 解析；中文表格对齐。
+5. 执行期间对三个仓库无任何写入（对比前后 `.git` mtime 与 `git reflog` 长度）。
+# M1 实现说明：对账单只读内核 + CLI（2026-10-26）
+
+> 对应 `M1-任务卡.md`。实现：Opus 5.5；验收：Fable。全程未改动任何被管理仓库。
+
+## 1. 目录结构
+```
+bin/heliu                 #!/usr/bin/env bun 入口（输出写完后显式 exit，防挂起）
+src/types.ts              --json 稳定结构（schemaVersion=1，只追加不改名）
+src/core/git.ts           只读 git 层：子命令+参数白名单、8s 超时、并发≤4、GIT_OPTIONAL_LOCKS=0、sandbox-exec 写保护
+src/core/paths.ts         数据位置（HELIU_HOME / HELIU_CLAUDE_APP_DIR / HELIU_CLAUDE_HOME 可覆盖）
+src/core/project.ts       注册表 project.yaml（zod 校验；<repo>/.heliu/project.yaml 优先；自动识别当前项目）
+src/core/branches.ts      for-each-ref、--merged 三档、ahead/behind、首条独有提交、merge-tree 预检
+src/core/worktrees.ts     worktree list --porcelain、.git/worktrees 只 readdir/stat、脏检查
+src/core/sessions.ts      桌面会话 / git-worktrees.json / 运行中会话，zod 宽松解析
+src/core/labels.ts        随机名识别与标签优先级
+src/core/reconcile.ts     join → ReconcileReport（健康条、分支表、卫生、会话）
+src/core/doctor.ts        环境自检
+src/cli/{index,render,table}.ts   commander 命令、中文渲染、按显示宽度对齐
+tests/                    bun test：临时 fixture 仓库 + 会话 JSON fixture（含缺字段/类型错误/坏文件）
+examples/磁吸背夹.project.yaml    注册表副本（正本在 ~/Library/Application Support/heliu/projects/磁吸背夹/）
+```
+
+## 2. 命令示例
+```bash
+bun install                                   # node_modules → node_modules.nosync（iCloud 不同步）
+bun run bin/heliu doctor                      # git≥2.38、bun、数据目录、注册表、每仓库可达、iCloud 警告
+bun run bin/heliu status --project 磁吸背夹     # 健康条 + 每仓库对账表
+bun run bin/heliu status --precheck --json | jq '.data.repos[].branches[].precheck'
+bun run bin/heliu branches --repo docs --state in_integration
+bun run bin/heliu sessions [--all]            # 默认隐藏已归档
+bun run bin/heliu hygiene                     # 只报告，不动手
+bun run bin/heliu project add <path> [--name 项目] [--integration 分支]
+bun run bin/heliu project list
+```
+全局选项：`--project`（缺省按当前目录/worktree 自动识别，注册表只有一个项目时直接用）、`--json`、`--precheck`、`--dirty`、`--timeout <ms>`、`--wide`。
+
+## 3. 关键设计
+- **合并三档**：`for-each-ref --merged=<主线>` 与 `--merged=<集成>` 两次批量调用；ahead/behind 用 `%(ahead-behind:)`（git≥2.41，否则逐分支 `rev-list --left-right --count`）。集成分支自身单列「集成分支·未并回」。
+- **标签**：会话标题 > 首条独有提交（`log --reverse --first-parent --no-merges <分支> --not <主线> <不含本分支的其他分支>`）> 改动最多的一级目录 > 末次提交 > 分支名。排除「不含本分支的其他分支」是因为固件仓 `feat/aios-*` 共用一段基础提交，只看 `main..branch` 会得到同一个标签。
+- **会话关联**：归属看 `realpath(originCwd/cwd/worktreePath)` 落在哪个仓库根或 worktree（取最深）；分支关联按 `branch` 字段（强）> `writtenBranches`（「路径\0分支」）> 仅当 `branch` 为空时按 cwd 所在 worktree（弱，目录会被复用）。同强度未归档优先、最后活动倒序。运行态取 `~/.claude/sessions/<pid>.json` 且 `kill(pid,0)` 存活。
+- **零写入的三道保证**：①白名单（含参数级：`branch` 仅 `--list`、`config` 仅读、`symbolic-ref` 仅单参数、`worktree` 仅 `list`、禁 `--output`）；②`--no-optional-locks` + `GIT_OPTIONAL_LOCKS=0` + `core.fsmonitor=false` + `gc.auto=0`；③macOS 上每条 git 都包在 `sandbox-exec` 里对仓库根、common dir、外置 worktree `deny file-write*`（路径写入 NFC/NFD 两种形式）。
+- **merge-tree 的坑（实测）**：`--write-tree` 写出已存在的树时，git 会 `utime` 刷新**真实对象库里已有的 pack/松散对象**（fixture 上复现：pack mtime 被改）。对 iCloud 仓这意味着可能触发大 pack 重新上传。做法：`GIT_OBJECT_DIRECTORY` 指向临时隔离区、真实对象库作 alternates 只读；再叠加沙箱让 `utime` 失败，git 退而把对象写进隔离区。沙箱不可用时直接拒绝预检。
+- **iCloud**：脏检查默认跳过（`--dirty` 才做），`.git/worktrees/*` 只 readdir/stat 不读内容（stat 不触发下载）；超时记「未知」不误判。
+
+## 4. 实测数字（2026-10-26 02:00，文档仓与调研对照）
+| 指标 | 调研 | 实测 | 说明 |
+|---|---|---|---|
+| 本地分支 | 75 | 76 | +1：另一个桌面会话 01:23 新建 `claude/ai-phone-assistant-routing-a16f5a` |
+| worktree（不含主目录） | 54 | 55 | 同上 +1 |
+| 未合并进 main | 51 | 52 | 新分支 01:46 有了首个提交（含集成分支自身） |
+| 其中已被集成分支包含 | 13 | **13** | 独立未合并 38 + 集成分支 1 |
+| 从未推送 | 59 | 60 | 新分支未推送 |
+| main vs github/main | 分叉 7/5 | ↑7 ↓5 | |
+| 集成分支领先 main | 102 | 102 | 自 10-22 起 3 天未并回 |
+| 目录名≠分支名 / 孤儿条目 / index.lock | 9 / 2 / 1 | 9 / 2 / 1 | 孤儿：`cool-raman-f78b4c`、`distracted-moore-51d56a` |
+| `.git` 内 iCloud 冲突副本 | 12 | 12 | |
+| 已进主线但目录仍在 / 停在主线顶端 | 13（其中 4） | 9 / 4 | 合计 13 |
+
+固件仓（主线 `release/backclip-1.1`、集成 `feat/aios-entry`）：33 分支、27 worktree，未进主线 20（进集成 14 / 独立 5 / 集成分支 1），1.1 本地无远端引用（从未推送）。App 仓（主线 `release/backclip-1.0`）：10 分支、7 worktree，未进主线 3，主线领先 github 34 个提交。
+`--precheck`：文档仓冲突只出现在 `README.md`、`嵌入式/README.md`、`业务/AI-Coding业务与进度.md`（与集成方案结论一致）；App 仓 `claude/app-0.7.0` 冲突 9 文件（与调研一致）；固件仓 `fix/ble-stop-teardown` 内容等价。
+
+**耗时**：`status` 默认 0.8–1.0 s（墙钟，含 bun 启动；文档仓 12 次 git 调用 0.2 s、固件仓 80 次、App 仓 22 次，0 超时），`--precheck` 约 1.0 s（文档仓 53 次）。远低于 60 s 门槛。
+**零写入自检**：每次运行前后对三仓库 `.git/{HEAD,index,logs/HEAD,packed-refs,config}` 的 mtime|大小、reflog 行数、全部 pack 文件 mtime、松散对象数与最新 mtime、各 worktree index 最新 mtime 做快照比对，默认 / `--precheck` / sessions / branches 均**完全一致**。期间文档仓有并发写入（上面那个新会话的 commit 刷新了 pack mtime 与其 worktree index），已按 reflog 核实与 heliu 无关，比对窗口取紧邻运行前后。
+**测试**：`bun test` 87 个用例全绿（白名单放行/拒绝、超时、status 不回写 index、隔离区+沙箱防 pack 刷新、三档/领先落后/卫生/标签/会话关联/预检、fixture 路径含中文与空格、CLI 与表格对齐）。
+
+## 5. 取舍与已知限制
+- **未在真实 iCloud 仓上跑 `--dirty`**：会触发 dataless 文件下载；超时→未知的路径由单测覆盖。脏检查用 `status --porcelain -uno`，**不统计未跟踪文件**（调研里主目录 59 条未跟踪不会出现）。
+- **目录名≠分支名只查桌面端创建的 worktree**（`.claude/worktrees/` 下或登记在 `git-worktrees.json`）；固件/App 仓的兄弟目录命名（`esp_claw-aios-a1`）不按此规则报。
+- 「内容等价」（ADR-5 第四档）只在 `--precheck` 时给出（试合树 = 目标树），默认三档。
+- 集成分支无会话时标签取改动最多的目录；两个分支指向同一提交时标签必然相同。
+- `sandbox-exec` 是 macOS 专有且被 Apple 标为弃用；不可用时（或 `HELIU_NO_SANDBOX=1`）其余命令仍受白名单 + 可选锁保护，但拒绝 `--precheck`。
+- 运行中会话只用 `kill(pid,0)` 判活，未防 pid 复用；会话字段无官方文档，桌面端改格式时逐字段降级为缺失。
+- Bun 1.3.4 的 `Bun.write(Bun.stdout)` 在管道满时会从头重写（实测 >64KB 的 `--json | jq` 损坏），已改为按字节偏移 `writeSync` 循环。
+- 未做：`heliu fetch`（ADR-4 规定显式命令，M1 不需要）、SQLite 索引缓存（ADR-3，M2 起）、台账/MCP/hooks（M2）。
+
+exec
+/bin/zsh -lc "rg -n '"'^#'"' 'docs/02-产品定义/产品定义_v0.1.md'; sed -n '/"'^## 9/,/''^## 10/p'"' 'docs/02-产品定义/产品定义_v0.1.md'" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 0ms:
+1:# 产品定义 v0.1 —— 合流（Heliu）
+6:## 1. 一句话
+9:## 2. 用户与场景（来自现场证据）
+16:## 3. 用户会怎么说（口语化入口 → 动作）
+28:## 4. 实体模型与状态机
+29:### 功能（Feature）
+36:### 版本（Milestone）
+41:### 预约（Reservation）
+44:### 对账（Reconcile，只读派生，不存储）
+47:### 合并单（Release Plan，可保存可重跑）
+50:## 5. 看板信息架构（中文、小白可懂）
+57:## 6. 调用面
+64:## 7. 非目标
+67:## 8. 数据落点
+72:## 9. 怎么算做成（验收口径，用户体验式）
+## 9. 怎么算做成（验收口径，用户体验式）
+1. 打开看板 10 秒内看懂：磁吸背夹 v1.2 还欠哪几项、哪几项能合、哪几项在等我。
+2. 新开一个会话随口说"做个 X"，不做任何额外动作，看板上出现 X 的卡片并预约到下一版。
+3. 说"合并 v1.2"，先看到预演（顺序、冲突、顺延），确认后合完，发布说明和顺延清单自动生成。
+4. 一条老分支，能一眼看出落后主线多少，并一键同步基线。
+5. 全程没有一次自动 push / 删除；iCloud 仓库扫描不卡死（超时标"未知"）。
+6. ChatGPT（Codex）以普通用户视角走完上述 5 条，给出"能解决问题 / 不能"的结论；最多 3 轮。
+
+exec
+/bin/zsh -lc 'bun run bin/heliu doctor' in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 163ms:
+合流 · 环境自检
+  ✓ git 2.50.1
+  ✓ bun 1.3.4
+  ✓ 桌面会话 281 条可读（281 个文件）：/Users/linxiansheng/Library/Application Support/Claude/claude-code-sessions
+  ✓ git-worktrees.json 登记 61 个 worktree
+  ✓ 运行中会话目录可读：4 个存活 / 4 个记录
+  ✓ 注册表：/Users/linxiansheng/Library/Application Support/heliu/projects（磁吸背夹）
+  ✓ 项目「磁吸背夹」：3 个仓库（/Users/linxiansheng/Library/Application Support/heliu/projects/磁吸背夹/project.yaml）
+  ✓ 文档仓（docs） 可达：/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹
+  ! 文档仓（docs） 在 iCloud 上：工作区脏检查默认跳过（--dirty 才做，单个 worktree 可能超时）
+  ! 固件仓（firmware） 可达：/Users/linxiansheng/.cache/backclip-web/esp_claw；本地没有 github/release/backclip-1.1（只用已有引用，不会 fetch）
+  ✓ App 仓（app） 可达：/Users/linxiansheng/.cache/backclip-app-gitlab-20261015
+
+结论：可用，2 项警告
+
+exec
+/bin/zsh -lc 'bun run bin/heliu status --project 磁吸背夹' in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 592ms:
+合流 · 磁吸背夹 · 2026-10-26 02:06 · 3 个仓库 · 用时 0.6s
+
+健康条
+  文档仓  分支 76 · worktree 55 · 未进主线 52（进集成 13 / 独立 38 / 集成分支 1） · 主线 vs github/main ↑7 ↓5（分叉） · 集成分支领先主线 102，3 天未并回 · 从未推送 60 · 工作区 未检查 56 · 卫生 13 警告 / 14 提示
+  固件仓  分支 33 · worktree 27 · 未进主线 20（进集成 14 / 独立 5 / 集成分支 1） · 主线 vs 远端：本地没有该远端引用（未 fetch 或远端无此分支） · 集成分支领先主线 100，2 天未并回 · 从未推送 28 · 工作区 干净 28 · 卫生 0 警告 / 8 提示
+  App 仓  分支 10 · worktree 7 · 未进主线 3 · 主线 vs github/release/backclip-1.0 ↑34 ↓0 · 从未推送 8 · 工作区 干净 8 · 卫生 0 警告 / 4 提示
+
+■ 文档仓（docs） 主线=main · 集成=claude/merge-features-refactor-143693 · iCloud
+  /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹
+  标签                    分支                                      worktree                      会话（状态·标题）           主线↑/↓   集成↑/↓  合并状态         最后提交
+  ----------------------  ----------------------------------------  ----------------------------  --------------------------  -------  --------  ---------------  ----------
+  AI电话助手来电路由与…   claude/ai-phone-assistant-routing-a16f5a  ai-phone-assis…outing-a16f5a  等你·AI电话助手来电路由与…    ↑1 ↓0   ↑1 ↓102  独立未合并       2026-10-26
+  功能分支合并与代码重构  claude/merge-features-refactor-143693     ai-engineering…ontent-bfff84  等你·功能分支合并与代码重…  ↑102 ↓0         —  集成分支·未并回  2026-10-23
+  API key model selecti…  claude/api-key-model-selection-7f08ac     api-key-model-…ection-7f08ac  已完成·API key model sele…    ↑1 ↓0   ↑1 ↓102  独立未合并       2026-10-23
+  AI原生操作系统调研      claude/ai-native-os-research-867221       tonocard-ai-po…ssment-c6722f  已完成·AI原生操作系统调研     ↑1 ↓0   ↑1 ↓102  独立未合并       2026-10-22
+  执行 AI 电话秘书 POC…   claude/upbeat-mendeleev-83c61c            —                             已归档·执行 AI 电话秘书 P…   ↑20 ↓0    ↑0 ↓82  进集成分支       2026-10-22
+  TonoCard AI电话秘书卡…  claude/tonocard-ai-poc-assessment-c6722f  —                             已归档·TonoCard AI电话秘…     ↑2 ↓0   ↑2 ↓102  独立未合并       2026-10-19
+  磁吸背夹项目文件归档    claude/promo-package-20261019             feihao-repo-ca…zation-7535fa  已完成·磁吸背夹项目文件归…    ↑6 ↓7   ↑1 ↓104  独立未合并       2026-10-19
+  磁吸背夹项目文件归档    claude/magnetic-clip…ject-archive-c588a1  —                             已完成·磁吸背夹项目文件归…    ↑7 ↓7   ↑2 ↓104  独立未合并       2026-10-19
+  同步本地 main 与 GitH…  claude/sync-main-github-20261019          magnetic-clip-…script-d51364  等你·同步本地 main 与 Git…    ↑6 ↓0    ↑0 ↓96  进集成分支       2026-10-19
+  起草小组件规范 v0.2：…  claude/objective-morse-e42064             objective-morse-e42064        已完成·起草小组件规范 v0.…   ↑11 ↓7   ↑6 ↓104  独立未合并       2026-10-16
+  语音链路端到端闭环测试  claude/voice-e2e-loop-testing-dee94b      voice-e2e-loop…esting-dee94b  等你·语音链路端到端闭环测…   ↑15 ↓0    ↑0 ↓87  进集成分支       2026-10-16
+  合并语音应用三档模式…   claude/funny-goldwasser-b9ae93            funny-goldwasser-b9ae93       待验收·合并语音应用三档模…    ↑2 ↓0   ↑0 ↓100  进集成分支       2026-10-16
+  实现 EPP 网关 v0（代…   claude/bold-shaw-093e51                   bold-shaw-093e51              已完成·实现 EPP 网关 v0（…    ↑2 ↓9   ↑2 ↓111  独立未合并       2026-10-16
+  评估系统首页落地路线…   claude/elegant-gauss-1552b1               elegant-gauss-1552b1          等你·评估系统首页落地路线…    ↑1 ↓0   ↑0 ↓101  进集成分支       2026-10-16
+  固件1.0版本集成与烧录   claude/firmware-1-0-integration-b5f991    firmware-1-0-i…ration-b5f991  待验收·固件1.0版本集成与…    ↑13 ↓0    ↑0 ↓89  进集成分支       2026-10-16
+  语音链路和背夹扬声器…   claude/voice-link-sp…ker-playback-a74fdb  voice-link-spe…ayback-a74fdb  已完成·语音链路和背夹扬声…    ↑1 ↓0   ↑0 ↓101  进集成分支       2026-10-16
+  AI应用优化与功能迭代    claude/ai-app-optimization-90536f         ai-app-optimization-90536f    已完成·AI应用优化与功能迭…    ↑4 ↓0    ↑0 ↓98  进集成分支       2026-10-16
+  AI应用生成质量优化      claude/ai-app-generation-quality-3c1c8b   ai-app-generat…uality-3c1c8b  已完成·AI应用生成质量优化     ↑1 ↓0   ↑0 ↓101  进集成分支       2026-10-16
+  ASR语音功能集成         claude/asr-voice-integration-e8596e       asr-voice-integration-e8596e  已完成·ASR语音功能集成      ↑11 ↓11  ↑11 ↓113  独立未合并       2026-10-16
+  首页设计与交互原型      claude/homepage-design-prototype-619d11   homepage-desig…totype-619d11  已完成·首页设计与交互原型     ↑1 ↓1   ↑0 ↓102  进集成分支       2026-10-15
+  Agent逻辑链路架构图     claude/agent-logic-architecture-5a0132    upbeat-mendeleev-83c61c       等你·Agent逻辑链路架构图      ↑0 ↓0   ↑0 ↓102  进主线           2026-10-15
+  AI工程内容补充          claude/ai-engineering-content-bfff84      —                             已归档·AI工程内容补充         ↑0 ↓0   ↑0 ↓102  进主线           2026-10-15
+  record app merge and …  claude/distracted-moore-51d56a            —                             —                             ↑0 ↓0   ↑0 ↓102  进主线           2026-10-15
+  刷最新固件到背夹        claude/flash-latest-firmware-f6bf31       flash-latest-firmware-f6bf31  刷最新固件到背夹              ↑0 ↓0   ↑0 ↓102  进主线           2026-10-15
+  请把我现在最新版本的…   claude/inspiring-greider-dc4a37           inspiring-greider-dc4a37      已完成·请把我现在最新版本…    ↑0 ↓0   ↑0 ↓102  进主线           2026-10-15
+  record app merge and …  claude/magnetic-clip…en-mirroring-4c3559  —                             —                             ↑0 ↓0   ↑0 ↓102  进主线           2026-10-15
+  修复 dbd67483 蓝牙启…   claude/reverent-shamir-6aea9e             reverent-shamir-6aea9e        已完成·修复 dbd67483 蓝牙…    ↑0 ↓0   ↑0 ↓102  进主线           2026-10-15
+  同步本地 main 与 GitH…  claude/vigorous-rosalind-77640d           —                             等你·同步本地 main 与 Git…    ↑0 ↓0   ↑0 ↓102  进主线           2026-10-15
+  主线                    main                                      (主目录)                      嵌入式软件需求文档(+1)            —   ↑0 ↓102  主线             2026-10-15
+  小组件标准规范评估      claude/widget-standa…s-evaluation-eda7b5  widget-standar…uation-eda7b5  已完成·小组件标准规范评估     ↑9 ↓7   ↑4 ↓104  独立未合并       2026-10-15
+  磁吸背夹产品说明书      claude/competent-mestorf-83aba0           —                             已归档·磁吸背夹产品说明书     ↑1 ↓7   ↑1 ↓109  独立未合并       2026-10-15
+  磁吸背夹功能卖点视频    claude/magnetic-clip-video-script-d51364  —                             已归档·磁吸背夹功能卖点视…    ↑2 ↓7   ↑2 ↓109  独立未合并       2026-10-15
+  涂鸦云开发 PoC：背夹…   claude/bold-mahavira-252937               bold-mahavira-252937          已完成·涂鸦云开发 PoC：背…    ↑3 ↓7   ↑3 ↓109  独立未合并       2026-10-15
+  飞号仓库内容分类        claude/feihao-repo-categorization-7535fa  —                             已归档·飞号仓库内容分类       ↑3 ↓7   ↑0 ↓106  进集成分支       2026-10-15
+  推送卡片同步到背夹      claude/push-card-sync-backclip-4c3877     push-card-sync…ckclip-4c3877  已完成·推送卡片同步到背夹     ↑2 ↓7   ↑0 ↓107  进集成分支       2026-10-15
+  AI应用优化与边界探索    claude/ai-app-optimi…n-boundaries-0a2a80  ai-app-optimiz…daries-0a2a80  已完成·AI应用优化与边界探…    ↑1 ↓9   ↑1 ↓111  独立未合并       2026-10-15
+  Apple Aqara 与磁吸背…   claude/apple-aqara-v…agnetic-clip-a056ed  apple-aqara-vs…c-clip-a056ed  已完成·Apple Aqara 与磁吸…    ↑1 ↓7   ↑1 ↓109  独立未合并       2026-10-15
+  主题系统架构设计        claude/theme-system-architecture-1cbb25   theme-system-a…ecture-1cbb25  等你·主题系统架构设计(+2)   ↑10 ↓14  ↑10 ↓116  独立未合并       2026-10-15
+  语音对话应用思维框架    claude/voice-dialogue-framework-499d60    voice-dialogue…mework-499d60  语音对话应用思维框架          ↑1 ↓9   ↑0 ↓110  进集成分支       2026-10-15
+  背夹 HomeKit 接入可行…  claude/backclip-home…-feasibility-91c5e9  backclip-homek…bility-91c5e9  已完成·背夹 HomeKit 接入…     ↑0 ↓7   ↑0 ↓109  进主线           2026-10-15
+  固件同步到 GitHub       claude/firmware-sync-github-776584        firmware-sync-github-776584   已完成·固件同步到 GitHub      ↑1 ↓9   ↑1 ↓111  独立未合并       2026-10-15
+  ASR语音功能集成 (fork)  claude/cool-raman-f78b4c                  —                             已归档·ASR语音功能集成 (f…   ↑0 ↓11   ↑0 ↓113  进主线           2026-10-15
+  ASR语音功能集成 (fork)  claude/nifty-euclid-c78859                —                             已归档·ASR语音功能集成 (f…   ↑0 ↓11   ↑0 ↓113  进主线           2026-10-15
+  蓝牙取景功能 Lua 应用   claude/bluetooth-vie…nder-lua-app-124252  bluetooth-view…ua-app-124252  蓝牙取景功能 Lua 应用        ↑0 ↓12   ↑0 ↓114  进主线           2026-10-14
+  磁吸背夹 CLI 监听功能…  claude/magnetic-clip…i-monitoring-577a21  magnetic-clip-…toring-577a21  等你·磁吸背夹 CLI 监听功…    ↑4 ↓14   ↑4 ↓116  独立未合并       2026-10-14
+  竖版背夹卸载功能UI      claude/vertical-case-uninstall-ui-eb0832  vertical-case-…all-ui-eb0832  已完成·竖版背夹卸载功能UI    ↑4 ↓15   ↑4 ↓117  独立未合并       2026-10-14
+  背夹使用场景穷举        claude/back-clip-use-cases-21d4e9         back-clip-use-cases-21d4e9    已完成·背夹使用场景穷举      ↑4 ↓14   ↑4 ↓116  独立未合并       2026-10-14
+  Live2D 交互角色可行性…  claude/live2d-intera…ve-character-98f128  live2d-interac…racter-98f128  等你·Live2D 交互角色可行…    ↑2 ↓14   ↑2 ↓116  独立未合并       2026-10-14
+  磁吸背夹竖版触屏焦点…   claude/magnetic-clip…-touch-focus-8bbfc2  magnetic-clip-…-focus-8bbfc2  等你·磁吸背夹竖版触屏焦点…   ↑3 ↓14   ↑3 ↓116  独立未合并       2026-10-14
+  竖版背夹卸载功能UI (f…  claude/quirky-villani-bb2ba2              quirky-villani-bb2ba2         等你·竖版背夹卸载功能UI (…   ↑1 ↓15   ↑1 ↓117  独立未合并       2026-10-14
+  磁吸背夹固件刷写兼容性  claude/muse-magnetic…lip-firmware-9694ac  muse-magnetic-…rmware-9694ac  等你·磁吸背夹固件刷写兼容…   ↑0 ↓14   ↑0 ↓116  进主线           2026-10-14
+  Fix invalid image src…  claude/nice-franklin-9216f4               nice-franklin-9216f4          已完成·Fix invalid image …   ↑0 ↓14   ↑0 ↓116  进主线           2026-10-14
+  嵌入式 GitLab 代码克隆  claude/embedded-gitlab-clone-d54afc       embedded-gitlab-clone-d54afc  已完成·嵌入式 GitLab 代码…   ↑0 ↓15   ↑0 ↓117  进主线           2026-10-14
+  嵌入式 GitLab 代码克…   claude/lucid-jackson-da9d6b               lucid-jackson-da9d6b          已完成·嵌入式 GitLab 代码…   ↑0 ↓16   ↑0 ↓118  进主线           2026-10-14
+  Micropixel Lua framew…  claude/micropixel-lu…ompatibility-49359f  micropixel-lua…bility-49359f  已完成·Micropixel Lua fra…   ↑1 ↓20   ↑1 ↓122  独立未合并       2026-10-14
+  背夹底座标识图          claude/ai-clip-base-diagrams-bc15f6       ai-clip-base-diagrams-bc15f6  已完成·背夹底座标识图        ↑1 ↓32   ↑1 ↓134  独立未合并       2026-10-09
+  Meta Muse 开放生态调研  claude/meta-muse-eco…tem-research-f429b3  meta-muse-ecos…search-f429b3  已完成·Meta Muse 开放生态…   ↑1 ↓39   ↑1 ↓141  独立未合并       2026-10-08
+  嵌入式端HTML显示可行性  claude/embedded-html…-feasibility-157de3  embedded-html-…bility-157de3  已完成·嵌入式端HTML显示可…   ↑2 ↓41   ↑2 ↓143  独立未合并       2026-09-28
+  磁吸背夹 HTML 原型构建  claude/magnetic-clip…ml-prototype-1642f0  magnetic-clip-…totype-1642f0  等你·磁吸背夹 HTML 原型构…   ↑1 ↓41   ↑1 ↓143  独立未合并       2026-09-24
+  磁吸背夹交互原型        claude/magnetic-clip…on-prototype-467d2f  magnetic-clip-…totype-467d2f  等你·磁吸背夹交互原型        ↑0 ↓41   ↑0 ↓143  进主线           2026-09-24
+  MCP 服务连接与授权      claude/mcp-service-setup-e8078f           mcp-service-setup-e8078f      等你·MCP 服务连接与授权      ↑0 ↓41   ↑0 ↓143  进主线           2026-09-24
+  千问办公硬件集成参考    claude/qianwen-offic…-integration-923679  qianwen-office…ration-923679  已完成·千问办公硬件集成参…   ↑0 ↓41   ↑0 ↓143  进主线           2026-09-24
+  AI背夹洞察同步          claude/ai-backclip-insights-sync-52d9cf   magnetic-clip-prd-712295      等你·AI背夹洞察同步          ↑1 ↓43   ↑1 ↓145  独立未合并       2026-09-23
+  原型功能补全与迭代      claude/prototype-com…on-iteration-8cf1b2  magnetic-clip-prd-e1cd13      已完成·原型功能补全与迭代    ↑4 ↓43   ↑4 ↓145  独立未合并       2026-09-23
+  底座需求文档梳理        claude/base-requirements-doc-dd2357       magnetic-clip-prd-a291b6      底座需求文档梳理             ↑1 ↓74   ↑1 ↓176  独立未合并       2026-09-07
+  POC市场调研与可视化分…  claude/poc-market-re…rch-analysis-587415  magnetic-clip-prd-197f58      POC市场调研与可视化分析      ↑1 ↓74   ↑1 ↓176  独立未合并       2026-09-07
+  场景挖掘                claude/scenario-discovery-d9fcb4          scenario-discovery-d9fcb4     场景挖掘                     ↑1 ↓85   ↑1 ↓187  独立未合并       2026-09-04
+  HTML交互页面原型        claude/html-interactive-prototype-f39588  html-interacti…totype-f39588  HTML交互页面原型             ↑1 ↓86   ↑1 ↓188  独立未合并       2026-09-04
+  磁吸背夹产品需求文档    claude/magnetic-clip-prd-197f58           —                             已归档·磁吸背夹产品需求文…   ↑1 ↓86   ↑1 ↓188  独立未合并       2026-09-04
+  磁吸背夹产品需求文档    claude/magnetic-clip-prd-1e9dc7           —                             已归档·磁吸背夹产品需求文…   ↑0 ↓86   ↑0 ↓188  进主线           2026-09-03
+  add magnetic back-cli…  claude/magnetic-clip-prd-58748e           —                             —                            ↑0 ↓86   ↑0 ↓188  进主线           2026-09-03
+  磁吸背夹产品需求文档    claude/magnetic-clip-prd-a291b6           —                             已归档·磁吸背夹产品需求文…   ↑0 ↓86   ↑0 ↓188  进主线           2026-09-03
+  add magnetic back-cli…  claude/magnetic-clip-prd-e1cd13           —                             —                            ↑0 ↓86   ↑0 ↓188  进主线           2026-09-03
+  磁吸背夹产品需求文档    claude/magnetic-clip-prd-712295           —                             已归档·磁吸背夹产品需求文…   ↑1 ↓87   ↑1 ↓189  独立未合并       2026-09-03
+  MVP演示场景与技术节点   claude/mvp-demo-tech-roadmap-82b543       —                             已归档·MVP演示场景与技术…    ↑9 ↓87   ↑9 ↓189  独立未合并       2026-08-31
+  ESP Claw 原子化功能分…  claude/esp-claw-atomic-analysis-6aa6cd    —                             已归档·ESP Claw 原子化功…    ↑1 ↓88   ↑1 ↓190  独立未合并       2026-08-31
+
+■ 固件仓（firmware） 主线=release/backclip-1.1 · 集成=feat/aios-entry
+  /Users/linxiansheng/.cache/backclip-web/esp_claw
+  标签                    分支                          worktree                 会话（状态·标题）  主线↑/↓  集成↑/↓  合并状态         最后提交
+  ----------------------  ----------------------------  -----------------------  -----------------  -------  -------  ---------------  ----------
+  改动集中在 components…  feat/aios-entry               esp_claw-aios            —                  ↑100 ↓0        —  集成分支·未并回  2026-10-23
+  timeline: 时间线 v2 …   feat/aios-timeline-lanes      esp_claw-aios-a7b        —                   ↑95 ↓0    ↑0 ↓5  进集成分支       2026-10-23
+  cards: 打开卡片流焦点…  feat/aios-cards-fixes         esp_claw-aios-a5b        —                   ↑95 ↓0    ↑0 ↓5  进集成分支       2026-10-23
+  callsec: 通话卡 id 与…  feat/aios-fw-followups        esp_claw-aios-c1         —                   ↑87 ↓0   ↑0 ↓13  进集成分支       2026-10-23
+  speak: 首页回复朗读改…  feat/aios-stream-tts          esp_claw-aios-c2         —                   ↑79 ↓0   ↑0 ↓21  进集成分支       2026-10-23
+  call_agent: 电话秘书…   feat/callsec-humanize         esp_claw-aios-a8         —                   ↑57 ↓0   ↑0 ↓43  进集成分支       2026-10-23
+  timeline: 时间线日志…   feat/aios-timeline            esp_claw-aios-a7         —                   ↑55 ↓0   ↑0 ↓45  进集成分支       2026-10-23
+  drawer: 应用标签模块 …  feat/aios-drawer              esp_claw-aios-a6         —                   ↑56 ↓0   ↑0 ↓44  进集成分支       2026-10-23
+  aios-cards: 卡片流模…   feat/aios-cards               esp_claw-aios-a5         —                   ↑55 ↓0   ↑0 ↓45  进集成分支       2026-10-23
+  companion: 参数包加墨…  feat/aios-ink-companion       esp_claw-aios-a4b        —                   ↑48 ↓0   ↑0 ↓52  进集成分支       2026-10-23
+  aios: 开机后预热图标…   feat/aios-vswap               esp_claw-aios-a1c        —                   ↑48 ↓0   ↑0 ↓52  进集成分支       2026-10-23
+  aios: 阶段 2 实机场景…  feat/aios-core                esp_claw-aios-a1         —                   ↑41 ↓0   ↑0 ↓59  进集成分支       2026-10-23
+  stage: 参数包装载接受…  feat/aios-stage               esp_claw-aios-a3         —                   ↑37 ↓0   ↑0 ↓63  进集成分支       2026-10-23
+  companion: 精灵包 HVC…  feat/aios-companion-assets    esp_claw-aios-a4         —                   ↑20 ↓0   ↑0 ↓80  进集成分支       2026-10-23
+  aios: 分类器长按带起…   feat/aios-theme-ops           esp_claw-aios-a2         —                   ↑17 ↓0   ↑0 ↓83  进集成分支       2026-10-23
+  voice_cloud: 对话服务…  feat/chat-provider-effort     esp_claw-keymodel        —                    ↑1 ↓0  ↑1 ↓100  独立未合并       2026-10-23
+  主线                    release/backclip-1.1          esp_claw-v11             —                        —  ↑0 ↓100  主线             2026-10-22
+  callsec: 通话纪要存 F…  feat/call-secretary           esp_claw-callsec         —                   ↑0 ↓25  ↑0 ↓125  进主线           2026-10-22
+  voice: 回复朗读——背夹…  feat/voice-playback           esp_claw-play            —                   ↑0 ↓44  ↑0 ↓144  进主线           2026-10-16
+  epp: 「蓝牙取景」EPP …  feat/ai-app-optimization      esp_claw-aiopt           —                   ↑0 ↓36  ↑0 ↓136  进主线           2026-10-16
+  capture: 截图叠上顶层…  fix/voice-e2e                 esp_claw-e2e             —                   ↑0 ↓45  ↑0 ↓145  进主线           2026-10-16
+  1.0: use a placeholde…  release/backclip-1.0          esp_claw-voice           —                   ↑0 ↓52  ↑0 ↓152  进主线           2026-10-16
+  ble: tear down by wha…  fix/ble-stop-teardown         esp_claw-blefix          —                   ↑1 ↓55  ↑1 ↓155  独立未合并       2026-10-16
+  ble: free boot-time i…  fix/ble-boot-ram              —                        —                   ↑1 ↓87  ↑1 ↓187  独立未合并       2026-10-16
+  record application in…  codex/ble-live-apps           —                        —                   ↑0 ↓87  ↑0 ↓187  进主线           2026-10-15
+  Find the voice mic sc…  feat/ble-voice-asr            —                        —                   ↑0 ↓96  ↑0 ↓196  进主线           2026-10-15
+  Record successful iPh…  codex/media-hid-encryption    (主目录)                 —                   ↑0 ↓98  ↑0 ↓198  进主线           2026-10-15
+  Merge fix/portrait-ra…  feat/portrait-app-menu        —                        —                  ↑0 ↓101  ↑0 ↓201  进主线           2026-10-14
+  snake_game: lay out f…  fix/portrait-raw-touch        esp_claw-raw-touch       —                  ↑0 ↓106  ↑0 ↓206  进主线           2026-10-14
+  ui_squareline: detach…  feat/portrait-ui              esp_claw-fix-imgsrc      —                  ↑0 ↓108  ↑0 ↓208  进主线           2026-10-14
+  ui_squareline: drag t…  feat/portrait-uninstall-drag  esp_claw-uninstall-drag  —                  ↑2 ↓109  ↑2 ↓209  独立未合并       2026-10-14
+  优化代码生成质量以及…   feat/llm-videcoding-optimize  —                        —                  ↑0 ↓121  ↑0 ↓221  进主线           2026-10-14
+  Initial commit          main                          —                        —                  ↑4 ↓123  ↑4 ↓223  独立未合并       2026-08-28
+
+■ App 仓（app） 主线=release/backclip-1.0
+  /Users/linxiansheng/.cache/backclip-app-gitlab-20261015
+  标签                    分支                          worktree               会话（状态·标题）  主线↑/↓  集成↑/↓  合并状态    最后提交
+  ----------------------  ----------------------------  ---------------------  -----------------  -------  -------  ----------  ----------
+  app: app_state 拆成八…  feat/aios-app                 backclip-app-aios      —                    ↑9 ↓0        —  独立未合并  2026-10-23
+  app: 对话模型可选 Ope…  feat/api-key-model-select     backclip-app-keymodel  —                    ↑1 ↓0        —  独立未合并  2026-10-23
+  app: describe voice m…  merge/voice-modes-20261016    backclip-app-merge     —                    ↑0 ↓0        —  进主线      2026-10-16
+  主线                    release/backclip-1.0          (主目录)               —                        —        —  主线        2026-10-16
+  viewfinder: 背夹上点…   feat/ai-app-optimization      backclip-app-aiopt     —                   ↑0 ↓11        —  进主线      2026-10-16
+  voice: semi-transpare…  feat/voice-app-modes          backclip-app-modes     —                   ↑0 ↓13        —  进主线      2026-10-16
+  voice: only count sim…  fix/voice-e2e                 backclip-app-e2e       —                   ↑0 ↓12        —  进主线      2026-10-16
+  merge baked config an…  claude/app-0.7.0              backclip-app-070       —                   ↑2 ↓47        —  独立未合并  2026-10-16
+  route BLE device audi…  codex/app-merge-asr           —                      —                   ↑0 ↓47        —  进主线      2026-10-15
+  添加app实现             feat/llm-videcoding-optimize  —                      —                   ↑0 ↓50        —  进主线      2026-10-15
+
+图例：worktree 后 * = 有未提交改动，? = 检查超时/未知；会话 (+N) = 另有 N 个关联会话；--json 输出完整字段。
+
+exec
+/bin/zsh -lc 'bun run bin/heliu hygiene --project 磁吸背夹' in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 429ms:
+合流 · 磁吸背夹 · 2026-10-26 02:06 · 3 个仓库 · 用时 0.5s
+（只报告，不动手；清理请人工确认后执行）
+
+■ 文档仓（docs） 主线=main · 集成=claude/merge-features-refactor-143693 · iCloud
+  /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹
+  [警告] 残留 index.lock（1）
+    - 残留锁文件 .git/worktrees/ai-app-generation-quality-3c1c8b/index.lock
+  [警告] 孤儿 .git/worktrees 条目（2）
+    - 孤儿条目 .git/worktrees/distracted-moore-51d56a（缺 gitdir）
+    - 孤儿条目 .git/worktrees/cool-raman-f78b4c（缺 gitdir）
+  [警告] 目录名 ≠ 分支名（9）
+    - 目录 ai-engineering-content-bfff84 实际在分支 claude/merge-features-refactor-143693 上（目录被复用）
+    - 目录 feihao-repo-categorization-7535fa 实际在分支 claude/promo-package-20261019 上（目录被复用）
+    - 目录 magnetic-clip-prd-197f58 实际在分支 claude/poc-market-research-analysis-587415 上（目录被复用）
+    - 目录 magnetic-clip-prd-712295 实际在分支 claude/ai-backclip-insights-sync-52d9cf 上（目录被复用）
+    - 目录 magnetic-clip-prd-a291b6 实际在分支 claude/base-requirements-doc-dd2357 上（目录被复用）
+    - 目录 magnetic-clip-prd-e1cd13 实际在分支 claude/prototype-completion-iteration-8cf1b2 上（目录被复用）
+    - 目录 magnetic-clip-video-script-d51364 实际在分支 claude/sync-main-github-20261019 上（目录被复用）
+    - 目录 tonocard-ai-poc-assessment-c6722f 实际在分支 claude/ai-native-os-research-867221 上（目录被复用）
+    - 目录 upbeat-mendeleev-83c61c 实际在分支 claude/agent-logic-architecture-5a0132 上（目录被复用）
+  [警告] iCloud 冲突副本（1）
+    - .git 内有 12 个 iCloud 冲突副本（如 .git/index 2、.git/worktrees/widget-standards-evaluation-eda7b5/index 2、.git/worktrees/embedded-gitlab-clone-d54afc/index 2）
+  [提示] 分支已进主线但 worktree 仍在（9）
+    - 分支 claude/backclip-homekit-feasibility-91c5e9 已进主线，worktree 目录仍在
+    - 分支 claude/bluetooth-viewfinder-lua-app-124252 已进主线，worktree 目录仍在
+    - 分支 claude/embedded-gitlab-clone-d54afc 已进主线，worktree 目录仍在
+    - 分支 claude/lucid-jackson-da9d6b 已进主线，worktree 目录仍在
+    - 分支 claude/magnetic-clip-interaction-prototype-467d2f 已进主线，worktree 目录仍在
+    - 分支 claude/mcp-service-setup-e8078f 已进主线，worktree 目录仍在
+    - 分支 claude/muse-magnetic-clip-firmware-9694ac 已进主线，worktree 目录仍在
+    - 分支 claude/nice-franklin-9216f4 已进主线，worktree 目录仍在
+    - 分支 claude/qianwen-office-hardware-integration-923679 已进主线，worktree 目录仍在
+  [提示] worktree 相对主线 0 提交（4）
+    - worktree flash-latest-firmware-f6bf31 停在主线顶端，相对主线 0 提交
+    - worktree inspiring-greider-dc4a37 停在主线顶端，相对主线 0 提交
+    - worktree reverent-shamir-6aea9e 停在主线顶端，相对主线 0 提交
+    - worktree upbeat-mendeleev-83c61c 停在主线顶端，相对主线 0 提交
+  [提示] 主目录脏项（1）
+    - 主目录脏检查已跳过（iCloud 仓，--dirty 才检查）
+
+■ 固件仓（firmware） 主线=release/backclip-1.1 · 集成=feat/aios-entry
+  /Users/linxiansheng/.cache/backclip-web/esp_claw
+  [提示] 分支已进主线但 worktree 仍在（7）
+    - 分支 feat/ai-app-optimization 已进主线，worktree 目录仍在
+    - 分支 feat/call-secretary 已进主线，worktree 目录仍在
+    - 分支 fix/voice-e2e 已进主线，worktree 目录仍在
+    - 分支 feat/portrait-ui 已进主线，worktree 目录仍在
+    - 分支 feat/voice-playback 已进主线，worktree 目录仍在
+    - 分支 fix/portrait-raw-touch 已进主线，worktree 目录仍在
+    - 分支 release/backclip-1.0 已进主线，worktree 目录仍在
+  [提示] worktree 分离 HEAD（1）
+    - worktree esp_claw-a663 处于分离 HEAD（a663a07b）
+
+■ App 仓（app） 主线=release/backclip-1.0
+  /Users/linxiansheng/.cache/backclip-app-gitlab-20261015
+  [提示] 分支已进主线但 worktree 仍在（3）
+    - 分支 feat/ai-app-optimization 已进主线，worktree 目录仍在
+    - 分支 fix/voice-e2e 已进主线，worktree 目录仍在
+    - 分支 feat/voice-app-modes 已进主线，worktree 目录仍在
+  [提示] worktree 相对主线 0 提交（1）
+    - worktree backclip-app-merge 停在主线顶端，相对主线 0 提交
+
+exec
+/bin/zsh -lc 'bun run bin/heliu sessions --project 磁吸背夹' in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 493ms:
+合流 · 磁吸背夹 · 会话 76 条（显示 61，等你处理 17）
+  最后活动          状态    标题                            仓库  分支                                  worktree                      待你处理                              PR
+  ----------------  ------  ------------------------------  ----  ------------------------------------  ----------------------------  ------------------------------------  ---------------
+  2026-10-26 01:51  等你    AI电话助手来电路由与语气定制    docs  claude/ai-phone-as…nt-routing-a16f5a  ai-phone-assis…outing-a16f5a  对6项拍板（可直接回“默认”采用推荐值…  —
+  2026-10-25 04:47  等你    功能分支合并与代码重构          docs  claude/merge-featu…s-refactor-143693  ai-engineering…ontent-bfff84  将背夹 USB 线从电脑拔下，等 3 秒后…   —
+  2026-10-23 16:40  已完成  AI原生操作系统调研              docs  claude/ai-native-os-research-867221   tonocard-ai-po…ssment-c6722f  —                                     —
+  2026-10-23 15:32  —       刷最新固件到背夹                docs  claude/flash-latest-firmware-f6bf31   flash-latest-firmware-f6bf31  —                                     —
+  2026-10-23 12:16  已完成  API key model selection confi…  docs  claude/api-key-mod…-selection-7f08ac  api-key-model-…ection-7f08ac  —                                     —
+  2026-10-23 09:45  等你    Agent逻辑链路架构图             docs  claude/agent-logic…chitecture-5a0132  upbeat-mendeleev-83c61c       那个 93 MB 文件还没发到你的远程设备…  —
+  2026-10-19 13:54  已完成  磁吸背夹项目文件归档            docs  claude/magnetic-cl…ct-archive-c588a1  feihao-repo-ca…zation-7535fa  —                                     #3 open,#5 open
+  2026-10-19 11:08  等你    同步本地 main 与 GitHub main…   docs  claude/vigorous-rosalind-77640d       magnetic-clip-…script-d51364  决定先合并 PR #2 还是 #4（合完后本…   #4 open
+  2026-10-19 00:41  已完成  请把我现在最新版本的嵌入式固…   docs  claude/inspiring-greider-dc4a37       inspiring-greider-dc4a37      —                                     —
+  2026-10-19 00:02  等你    语音链路端到端闭环测试          docs  claude/voice-e2e-loop-testing-dee94b  voice-e2e-loop…esting-dee94b  把背夹 USB 和手机 ADB 接回电脑        —
+  2026-10-16 23:20  已完成  首页设计与交互原型              docs  claude/homepage-de…-prototype-619d11  homepage-desig…totype-619d11  —                                     —
+  2026-10-16 23:19  等你    评估系统首页落地路线：原生 C …  docs  claude/elegant-gauss-1552b1           elegant-gauss-1552b1          回答 Q1–Q12（建议先答 Q5、Q7、Q10）   —
+  2026-10-16 23:19  已完成  起草小组件规范 v0.2：统一原生…  docs  claude/objective-morse-e42064         objective-morse-e42064        —                                     —
+  2026-10-16 23:12  已完成  AI应用生成质量优化              docs  claude/ai-app-gene…on-quality-3c1c8b  ai-app-generat…uality-3c1c8b  —                                     —
+  2026-10-16 23:11  待验收  合并语音应用三档模式分支到 re…  docs  claude/funny-goldwasser-b9ae93        funny-goldwasser-b9ae93       —                                     —
+  2026-10-16 22:48  已完成  语音链路和背夹扬声器播放        docs  claude/voice-link-…r-playback-a74fdb  voice-link-spe…ayback-a74fdb  —                                     —
+  2026-10-16 22:48  已完成  AI应用优化与边界探索            docs  claude/ai-app-opti…boundaries-0a2a80  ai-app-optimiz…daries-0a2a80  —                                     —
+  2026-10-16 22:48  已完成  实现 EPP 网关 v0（代调 MCP / …  docs  claude/bold-shaw-093e51               bold-shaw-093e51              —                                     —
+  2026-10-16 22:35  待验收  固件1.0版本集成与烧录           docs  claude/firmware-1-…ntegration-b5f991  firmware-1-0-i…ration-b5f991  —                                     #2 open
+  2026-10-16 17:13  已完成  AI应用优化与功能迭代            docs  claude/ai-app-optimization-90536f     ai-app-optimization-90536f    —                                     —
+  2026-10-16 09:57  已完成  btw: 目前它的语音是通过开发版…  docs  —                                     —                             —                                     —
+  2026-10-16 07:50  已完成  ASR语音功能集成                 docs  claude/asr-voice-integration-e8596e   asr-voice-integration-e8596e  —                                     —
+  2026-10-16 07:50  已完成  修复 dbd67483 蓝牙启动内存不足  docs  claude/reverent-shamir-6aea9e         reverent-shamir-6aea9e        —                                     —
+  2026-10-15 20:07  已完成  小组件标准规范评估              docs  claude/widget-stan…evaluation-eda7b5  widget-standar…uation-eda7b5  —                                     —
+  2026-10-15 20:00  已完成  推送卡片同步到背夹              docs  claude/push-card-s…c-backclip-4c3877  push-card-sync…ckclip-4c3877  —                                     —
+  2026-10-15 16:30  已完成  涂鸦云开发 PoC：背夹控制并显…   docs  claude/bold-mahavira-252937           bold-mahavira-252937          —                                     —
+  2026-10-15 16:28  已完成  背夹 HomeKit 接入可行性         docs  claude/backclip-ho…easibility-91c5e9  backclip-homek…bility-91c5e9  —                                     —
+  2026-10-15 15:49  —       语音对话应用思维框架            docs  claude/voice-dialo…-framework-499d60  voice-dialogue…mework-499d60  —                                     —
+  2026-10-15 11:51  已完成  Apple Aqara 与磁吸背夹对比      docs  claude/apple-aqara…netic-clip-a056ed  apple-aqara-vs…c-clip-a056ed  —                                     —
+  2026-10-15 11:44  等你    主题系统架构设计                docs  claude/theme-syste…chitecture-1cbb25  theme-system-a…ecture-1cbb25  选要做哪几件：1 刷 c38a2762 语音固…   —
+  2026-10-15 10:50  等你    btw: 备份yousmy                 docs  —                                     —                             在另一个 Codex 会话里停掉音乐控制台…  —
+  2026-10-15 10:50  已完成  固件同步到 GitHub               docs  claude/firmware-sync-github-776584    firmware-sync-github-776584   —                                     —
+  2026-10-15 10:39  已完成  btw: 你刚是通过蓝牙烧录吗？这…  docs  —                                     —                             —                                     —
+  2026-10-15 10:16  —       蓝牙取景功能 Lua 应用           docs  claude/bluetooth-v…er-lua-app-124252  bluetooth-view…ua-app-124252  —                                     —
+  2026-10-14 23:08  等你    磁吸背夹固件刷写兼容性          docs  claude/muse-magnet…p-firmware-9694ac  muse-magnetic-…rmware-9694ac  确认可以覆盖板上的 ESP-Claw（已有备…  —
+  2026-10-14 22:43  已完成  竖版背夹卸载功能UI              docs  claude/vertical-ca…install-ui-eb0832  vertical-case-…all-ui-eb0832  —                                     —
+  2026-10-14 22:27  等你    磁吸背夹 CLI 监听功能评估       docs  claude/magnetic-cl…monitoring-577a21  magnetic-clip-…toring-577a21  让另一个任务释放背夹，并用手机把背…   —
+  2026-10-14 21:35  等你    Live2D 交互角色可行性评估       docs  claude/live2d-inte…-character-98f128  live2d-interac…racter-98f128  确认：是否配置远端并合并 claude/liv…  —
+  2026-10-14 21:33  已完成  背夹使用场景穷举                docs  claude/back-clip-use-cases-21d4e9     back-clip-use-cases-21d4e9    —                                     —
+  2026-10-14 21:07  等你    磁吸背夹竖版触屏焦点错误        docs  claude/magnetic-cl…ouch-focus-8bbfc2  magnetic-clip-…-focus-8bbfc2  确认在 janauto 账号下建私有 GitHub …  —
+  2026-10-14 18:22  已完成  Fix invalid image src after h…  docs  claude/nice-franklin-9216f4           nice-franklin-9216f4          —                                     —
+  2026-10-14 18:13  等你    竖版背夹卸载功能UI (fork)       docs  claude/quirky-villani-bb2ba2          quirky-villani-bb2ba2         确认是否推送 feat/portrait-uninstal…  —
+  2026-10-14 17:14  已完成  嵌入式 GitLab 代码克隆          docs  claude/embedded-gitlab-clone-d54afc   embedded-gitlab-clone-d54afc  —                                     —
+  2026-10-14 16:36  已完成  嵌入式 GitLab 代码克隆 (fork)   docs  claude/lucid-jackson-da9d6b           lucid-jackson-da9d6b          —                                     —
+  2026-10-14 14:57  已完成  Micropixel Lua framework comp…  docs  claude/micropixel-…patibility-49359f  micropixel-lua…bility-49359f  —                                     —
+  2026-10-09 14:25  已完成  背夹底座标识图                  docs  claude/ai-clip-base-diagrams-bc15f6   ai-clip-base-diagrams-bc15f6  —                                     —
+  2026-10-08 03:09  已完成  Meta Muse 开放生态调研          docs  claude/meta-muse-e…m-research-f429b3  meta-muse-ecos…search-f429b3  —                                     —
+  2026-09-29 10:08  等你    MCP 服务连接与授权              docs  claude/mcp-service-setup-e8078f       mcp-service-setup-e8078f      complete `/mcp` → `qwennote` → "Aut…  —
+  2026-09-28 17:17  已完成  嵌入式端HTML显示可行性          docs  claude/embedded-ht…easibility-157de3  embedded-html-…bility-157de3  —                                     —
+  2026-09-28 16:25  已完成  千问办公硬件集成参考            docs  claude/qianwen-off…ntegration-923679  qianwen-office…ration-923679  —                                     —
+  2026-09-28 10:42  等你    磁吸背夹交互原型                docs  claude/magnetic-cl…-prototype-467d2f  magnetic-clip-…totype-467d2f  tell me which part to change          —
+  2026-09-24 17:41  等你    磁吸背夹 HTML 原型构建          docs  claude/magnetic-cl…-prototype-1642f0  magnetic-clip-…totype-1642f0  Do you want the AI canvas definitio…  —
+  2026-09-23 21:01  等你    AI背夹洞察同步                  docs  claude/ai-backclip…ights-sync-52d9cf  magnetic-clip-prd-712295      confirm: push to GitHub remote? mer…  —
+  2026-09-23 20:55  已完成  原型功能补全与迭代              docs  claude/prototype-c…-iteration-8cf1b2  magnetic-clip-prd-e1cd13      —                                     —
+  2026-09-07 18:39  —       底座需求文档梳理                docs  claude/base-requirements-doc-dd2357   magnetic-clip-prd-a291b6      —                                     —
+  2026-09-07 13:55  —       POC市场调研与可视化分析         docs  claude/poc-market-…h-analysis-587415  magnetic-clip-prd-197f58      —                                     —
+  2026-09-04 12:39  —       场景挖掘                        docs  claude/scenario-discovery-d9fcb4      —                             —                                     —
+  2026-09-04 12:12  —       HTML交互页面原型                docs  claude/html-intera…-prototype-f39588  —                             —                                     —
+  2026-08-31 01:23  —       嵌入式软件需求文档              docs  —                                     —                             —                                     —
+  2026-08-31 00:57  —       开发板文档整理                  docs  —                                     —                             —                                     —
+  2026-08-26 17:28  —       MVP实现场景梳理                 docs  —                                     —                             —                                     —
+
+另有 15 条已归档会话未显示（--all 显示全部）。
+
+exec
+/bin/zsh -lc 'bun run bin/heliu status --project 磁吸背夹 --json | head -c 2000' in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 452ms:
+{
+  "schemaVersion": 1,
+  "command": "status",
+  "generatedAt": "2026-10-25T18:06:12.066Z",
+  "project": {
+    "name": "磁吸背夹",
+    "source": "/Users/linxiansheng/Library/Application Support/heliu/projects/磁吸背夹/project.yaml"
+  },
+  "data": {
+    "schemaVersion": 1,
+    "generatedAt": "2026-10-25T18:06:11.545Z",
+    "elapsedMs": 520,
+    "project": {
+      "name": "磁吸背夹",
+      "source": "/Users/linxiansheng/Library/Application Support/heliu/projects/磁吸背夹/project.yaml"
+    },
+    "options": {
+      "precheck": false,
+      "dirty": false,
+      "timeoutMs": 8000
+    },
+    "repos": [
+      {
+        "id": "docs",
+        "label": "文档仓",
+        "path": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹",
+        "icloud": true,
+        "main": "main",
+        "integration": "claude/merge-features-refactor-143693",
+        "remote": "github",
+        "reachable": true,
+        "error": null,
+        "warnings": [],
+        "counts": {
+          "branches": 76,
+          "worktrees": 55,
+          "mergedIntoMain": 24,
+          "unmergedIntoMain": 52,
+          "inIntegration": 13,
+          "independent": 38,
+          "neverPushed": 60
+        },
+        "health": {
+          "mainVsRemote": {
+            "remoteRef": "refs/remotes/github/main",
+            "ahead": 7,
+            "behind": 5,
+            "note": null
+          },
+          "integration": {
+            "branch": "claude/merge-features-refactor-143693",
+            "exists": true,
+            "mergedIntoMain": false,
+            "aheadOfMain": 102,
+            "behindMain": 0,
+            "since": "2026-10-22T14:02:12.000Z",
+            "unmergedDays": 3
+          },
+          "worktreeDirty": {
+            "clean": 0,
+            "dirty": 0,
+            "unknown": 0,
+            "skipped": 56
+          },
+          "hygieneWarnings": 13,
+          "hygieneInfos": 14
+        },
+        "branches": [
+          {
+            "branch": "cl
+codex
+五条命令都成功运行，`status` 约 0.6 秒完成，分支汇总的加总关系成立。影响快速阅读的是：默认表格很长，待处理事项被截断，而且会话列表里“等你”的行数看起来与顶部计数不一致；我会再用完整 JSON 核对这些数字。
+
+exec
+/bin/zsh -lc "bun run bin/heliu sessions --project 磁吸背夹 --json | python3 -c 'import json,sys; d=json.load(sys.stdin); x=d[\"data\"]; print(type(x).__name__); print(list(x) if isinstance(x,dict) else len(x)); print(json.dumps(x[:1] if isinstance(x,list) else {k:(v[:1] if isinstance(v,list) else v) for k,v in x.items()},ensure_ascii=False,indent=2))'" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 463ms:
+dict
+['total', 'sessions']
+{
+  "total": 76,
+  "sessions": [
+    {
+      "sessionId": "local_b7ec8a51-a58e-4ef7-bdfc-e12ee36d9804",
+      "cliSessionId": "7e89fc60-132e-4fbe-a574-8240a9b7a9ef",
+      "title": "AI电话助手来电路由与语气定制",
+      "repo": "docs",
+      "branch": "claude/ai-phone-assistant-routing-a16f5a",
+      "worktreeName": "ai-phone-assistant-routing-a16f5a",
+      "worktreePath": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/ai-phone-assistant-routing-a16f5a",
+      "cwd": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/ai-phone-assistant-routing-a16f5a",
+      "status": "blocked",
+      "statusCategory": "blocked",
+      "statusDetail": "POC方案已提交647f164未推送；待拍板6项",
+      "needsAction": "对6项拍板（可直接回“默认”采用推荐值）；另定方案文档推不推送到私有仓库",
+      "isArchived": false,
+      "running": "idle",
+      "createdAt": "2026-10-25T17:23:37.152Z",
+      "lastActivityAt": "2026-10-25T17:51:14.970Z",
+      "completedTurns": 1,
+      "model": "claude-opus-5-5",
+      "spawnedFrom": null,
+      "prs": []
+    }
+  ]
+}
+
+exec
+/bin/zsh -lc "bun run bin/heliu status --project 磁吸背夹 --json | python3 -c 'import json,sys,collections; d=json.load(sys.stdin)[\"data\"]; print(\"完整 JSON 解析成功\"); print(\"data fields\",list(d));
+for r in d[\"repos\"]:
+ print(r[\"id\"],json.dumps(r[\"counts\"],ensure_ascii=False)); print(\"branch fields\",list(r[\"branches\"][0])); print(\"branch sample\",json.dumps(r[\"branches\"][0],ensure_ascii=False)[:450]); print(\"worktrees\",len(r.get(\"worktrees\",[])),\"dirty counts\",r[\"health\"][\"worktreeDirty\"])
+'" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 432ms:
+完整 JSON 解析成功
+data fields ['schemaVersion', 'generatedAt', 'elapsedMs', 'project', 'options', 'repos', 'sessions']
+docs {"branches": 76, "worktrees": 55, "mergedIntoMain": 24, "unmergedIntoMain": 52, "inIntegration": 13, "independent": 38, "neverPushed": 60}
+branch fields ['branch', 'ref', 'sha', 'role', 'mergedState', 'label', 'labelSource', 'randomName', 'lastCommitAt', 'lastCommitSubject', 'vsMain', 'vsIntegration', 'upstream', 'pushed', 'worktree', 'sessions', 'precheck']
+branch sample {"branch": "claude/ai-phone-assistant-routing-a16f5a", "ref": "refs/heads/claude/ai-phone-assistant-routing-a16f5a", "sha": "647f16476a05e6e25a5e4cfaa8be10a4ed82e248", "role": "feature", "mergedState": "unmerged", "label": "AI电话助手来电路由与语气定制", "labelSource": "session", "randomName": false, "lastCommitAt": "2026-10-25T17:46:57.000Z", "lastCommitSubject": "docs: 规划 AI 电话助手来电人设路由与待办 POC", "vsMain": {"ahead": 1, "behind": 0}, "vsIntegration": {"ahead":
+worktrees 56 dirty counts {'clean': 0, 'dirty': 0, 'unknown': 0, 'skipped': 56}
+firmware {"branches": 33, "worktrees": 27, "mergedIntoMain": 13, "unmergedIntoMain": 20, "inIntegration": 14, "independent": 5, "neverPushed": 28}
+branch fields ['branch', 'ref', 'sha', 'role', 'mergedState', 'label', 'labelSource', 'randomName', 'lastCommitAt', 'lastCommitSubject', 'vsMain', 'vsIntegration', 'upstream', 'pushed', 'worktree', 'sessions', 'precheck']
+branch sample {"branch": "feat/aios-entry", "ref": "refs/heads/feat/aios-entry", "sha": "a349aa5191e3f857fc614f3701268d4eb56428d2", "role": "integration", "mergedState": "unmerged", "label": "改动集中在 components/（90 个文件）", "labelSource": "top_dir", "randomName": false, "lastCommitAt": "2026-10-23T11:59:17.000Z", "lastCommitSubject": "merge(aios): A5b 卡片流实机修复——打开时焦点归首张、按住时推迟重建、home_reset 作废排队按键并掐断滑动、场景守卫与断言", "vsMain": {"ahead": 100, "behind": 0}, "vsIntegration":
+worktrees 28 dirty counts {'clean': 28, 'dirty': 0, 'unknown': 0, 'skipped': 0}
+app {"branches": 10, "worktrees": 7, "mergedIntoMain": 7, "unmergedIntoMain": 3, "inIntegration": 0, "independent": 3, "neverPushed": 8}
+branch fields ['branch', 'ref', 'sha', 'role', 'mergedState', 'label', 'labelSource', 'randomName', 'lastCommitAt', 'lastCommitSubject', 'vsMain', 'vsIntegration', 'upstream', 'pushed', 'worktree', 'sessions', 'precheck']
+branch sample {"branch": "feat/aios-app", "ref": "refs/heads/feat/aios-app", "sha": "30d36face426b9bee7f9a4659c191975651aade3", "role": "feature", "mergedState": "unmerged", "label": "app: app_state 拆成八个控制器，协议层补 2.0 操作与 hello.ops 协商", "labelSource": "first_commit", "randomName": false, "lastCommitAt": "2026-10-23T12:08:39.000Z", "lastCommitSubject": "feat(app): 记录页镜像时间线 v2——分支筛选胶囊、色点色轨与标签", "vsMain": {"ahead": 9, "behind": 0}, "vsIntegration": null, "upstream"
+worktrees 8 dirty counts {'clean': 8, 'dirty': 0, 'unknown': 0, 'skipped': 0}
+
+exec
+/bin/zsh -lc "bun run bin/heliu sessions --project 磁吸背夹 --json | python3 -c 'import json,sys,collections; d=json.load(sys.stdin)[\"data\"]; s=d[\"sessions\"]; print(\"总数\",d[\"total\"],\"显示\",len(s)); print(\"status\",dict(collections.Counter(x[\"status\"] for x in s))); print(\"needsAction 非空\",sum(bool(x[\"needsAction\"]) for x in s)); print(\"blocked 或 needsAction 非空\",sum(x[\"status\"]==\"blocked\" or bool(x[\"needsAction\"]) for x in s)); print(\"blocked 但 needsAction 为空\",[(x[\"title\"],x[\"statusDetail\"]) for x in s if x[\"status\"]==\"blocked\" and not x[\"needsAction\"]]); print(\"非blocked但有needsAction\",[(x[\"title\"],x[\"status\"]) for x in s if x[\"status\"]"'!="blocked" and x["needsAction"]])'"'" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 413ms:
+总数 76 显示 76
+status {'blocked': 17, 'completed': 32, 'unknown': 10, 'archived': 15, 'review_ready': 2}
+needsAction 非空 19
+blocked 或 needsAction 非空 19
+blocked 但 needsAction 为空 []
+非blocked但有needsAction [('TonoCard AI电话秘书卡 POC评估', 'archived'), ('AI工程内容补充', 'archived')]
+
+exec
+/bin/zsh -lc "rg -n '等你|needsAction|从未推送|pushed|wide|主线↑' src/cli/render.ts src/core/branches.ts src/cli/index.ts" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 0ms:
+src/cli/index.ts:4: * 全局：--project <name>  --json  --precheck  --dirty  --timeout <ms>  --wide
+src/cli/index.ts:22:  wide?: boolean;
+src/cli/index.ts:63:  .option("--wide", "表格不截断");
+src/cli/index.ts:75:    else out(renderStatus(report, { wide: g.wide }));
+src/cli/index.ts:102:      else parts.push(renderBranchTable(r, { wide: g.wide, filter }));
+src/cli/index.ts:109:  .description("本项目的桌面会话（标题、分支、状态、等你处理、PR）")
+src/cli/index.ts:116:    else out(renderSessions(p.name, sessions, { all: o.all, wide: g.wide }));
+src/cli/render.ts:93:  parts.push(`从未推送 ${c.neverPushed}`);
+src/cli/render.ts:122:export function renderBranchTable(r: RepoReport, opts: { wide?: boolean; filter?: (b: FeatureView) => boolean } = {}): string {
+src/cli/render.ts:128:    { header: "主线↑/↓", align: "right" },
+src/cli/render.ts:145:  return renderTable(columns, rows, { wide: opts.wide, indent: "  " });
+src/cli/render.ts:148:export function renderStatus(report: ReconcileReport, opts: { wide?: boolean } = {}): string {
+src/cli/render.ts:212:export function renderSessions(projectName: string, sessions: SessionView[], opts: { all?: boolean; wide?: boolean } = {}): string {
+src/cli/render.ts:215:  const needs = shown.filter((s) => s.status === "blocked" || s.needsAction).length;
+src/cli/render.ts:216:  const out: string[] = [`合流 · ${projectName} · 会话 ${sessions.length} 条（显示 ${shown.length}，等你处理 ${needs}）`];
+src/cli/render.ts:234:    s.needsAction ?? (s.statusCategory === "blocked" ? s.statusDetail ?? "（未说明）" : "—"),
+src/cli/render.ts:237:  out.push(rows.length ? renderTable(columns, rows, { wide: opts.wide, indent: "  " }) : "  （无会话）");
+
+exec
+/bin/zsh -lc "bun run bin/heliu status --project 磁吸背夹 --json | python3 -c 'import json,sys,collections; d=json.load(sys.stdin)[\"data\"];
+for r in d[\"repos\"]:
+ bs=r[\"branches\"]; print(r[\"label\"],\"行数\",len(bs),\"合并状态\",dict(collections.Counter(b[\"mergedState\"] for b in bs)),\"角色\",dict(collections.Counter(b[\"role\"] for b in bs)),\"落后主线\",sum(bool(b[\"vsMain\"] and b[\"vsMain\"][\"behind\"]>0) for b in bs));
+s=[x for x in d[\"sessions\"] if not x[\"isArchived\"]]; print(\"未归档\",len(s),\"等你\",sum(x[\"status\"]==\"blocked\" or bool(x[\"needsAction\"]) for x in s))'" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ exited 1 in 427ms:
+Traceback (most recent call last):
+  File "<string>", line 4, in <module>
+  File "<string>", line 4, in <listcomp>
+TypeError: string indices must be integers
+文档仓 行数 76 合并状态 {'unmerged': 39, 'in_integration': 13, 'in_main': 24} 角色 {'feature': 74, 'integration': 1, 'main': 1} 落后主线 53
+固件仓 行数 33 合并状态 {'unmerged': 6, 'in_integration': 14, 'in_main': 13} 角色 {'integration': 1, 'feature': 31, 'main': 1} 落后主线 16
+App 仓 行数 10 合并状态 {'unmerged': 3, 'in_main': 7} 角色 {'feature': 9, 'main': 1} 落后主线 6
+
+exec
+/bin/zsh -lc "sed -n '1,75p' src/cli/render.ts; sed -n '120,166p' src/cli/render.ts; sed -n '212,246p' src/cli/render.ts; rg -n 'pushed|neverPushed|upstream|remoteRefs' src/core/branches.ts src/core/reconcile.ts" in /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具
+ succeeded in 0ms:
+/**
+ * 各命令的中文文本输出。
+ */
+import type {
+  AheadBehind,
+  DoctorCheck,
+  FeatureView,
+  HygieneIssue,
+  HygieneKind,
+  ReconcileReport,
+  RepoReport,
+  SessionView,
+} from "../types.ts";
+import { SESSION_STATUS_LABEL } from "../core/sessions.ts";
+import { pad, renderTable, width, type Column } from "./table.ts";
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+export function fmtDate(isoStr: string | null): string {
+  if (!isoStr) return "—";
+  const d = new Date(isoStr);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+export function fmtDateTime(isoStr: string | null): string {
+  if (!isoStr) return "—";
+  const d = new Date(isoStr);
+  return `${fmtDate(isoStr)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+const fmtAB = (ab: AheadBehind | null) => (ab ? `↑${ab.ahead} ↓${ab.behind}` : "—");
+const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+
+export function mergedStateText(b: FeatureView): string {
+  let base: string;
+  if (b.role === "main") base = "主线";
+  else if (b.role === "integration") base = b.mergedState === "in_main" ? "集成分支·已并回" : "集成分支·未并回";
+  else base = b.mergedState === "in_main" ? "进主线" : b.mergedState === "in_integration" ? "进集成分支" : "独立未合并";
+  const p = b.precheck;
+  if (p) {
+    if (p.timedOut) base += "·试合超时";
+    else if (p.error) base += /unrelated histories/.test(p.error) ? "·历史无关" : "·试合出错";
+    else if (p.contentEquivalent) base += "·内容等价";
+    else if ((p.conflictFiles ?? 0) > 0) base += `·冲突${p.conflictFiles}`;
+    else base += "·可直合";
+  }
+  return base;
+}
+
+function worktreeCell(b: FeatureView): string {
+  const w = b.worktree;
+  if (!w) return "—";
+  const name = w.isMain ? "(主目录)" : w.dirName;
+  const mark = w.dirty === "dirty" ? " *" : w.dirty === "unknown" ? " ?" : "";
+  return name + mark;
+}
+
+function sessionCell(b: FeatureView): string {
+  const s = b.sessions[0];
+  if (!s) return "—";
+  const more = b.sessions.length > 1 ? `(+${b.sessions.length - 1})` : "";
+  const status = s.status === "unknown" ? "" : `${SESSION_STATUS_LABEL[s.status]}·`;
+  return `${status}${s.title ?? "无标题"}${more}`;
+}
+
+export function healthLine(r: RepoReport): string {
+  if (!r.reachable || !r.counts || !r.health) {
+    return `✗ ${r.error ?? "不可达"}（已跳过，heliu doctor 查看详情）`;
+  }
+  const c = r.counts;
+  const h = r.health;
+  const parts: string[] = [];
+  parts.push(`分支 ${c.branches}`);
+  parts.push(`worktree ${c.worktrees}`);
+  const unmergedDetail = r.integration
+    ? `（进集成 ${c.inIntegration} / 独立 ${c.independent}${h.integration?.exists && !h.integration.mergedIntoMain ? " / 集成分支 1" : ""}）`
+    : "";
+  parts.push(`未进主线 ${c.unmergedIntoMain}${unmergedDetail}`);
+}
+
+export function renderBranchTable(r: RepoReport, opts: { wide?: boolean; filter?: (b: FeatureView) => boolean } = {}): string {
+  const columns: Column[] = [
+    { header: "标签", max: 22 },
+    { header: "分支", max: 40, cut: "middle" },
+    { header: "worktree", max: 28, cut: "middle" },
+    { header: "会话（状态·标题）", max: 26 },
+    { header: "主线↑/↓", align: "right" },
+    { header: "集成↑/↓", align: "right" },
+    { header: "合并状态" },
+    { header: "最后提交" },
+  ];
+  const list = opts.filter ? r.branches.filter(opts.filter) : r.branches;
+  const rows = list.map((b) => [
+    b.label,
+    b.branch,
+    worktreeCell(b),
+    sessionCell(b),
+    b.role === "main" ? "—" : fmtAB(b.vsMain),
+    fmtAB(b.vsIntegration),
+    mergedStateText(b),
+    fmtDate(b.lastCommitAt),
+  ]);
+  if (!rows.length) return "  （无分支）";
+  return renderTable(columns, rows, { wide: opts.wide, indent: "  " });
+}
+
+export function renderStatus(report: ReconcileReport, opts: { wide?: boolean } = {}): string {
+  const out: string[] = [renderHeader(report), "", "健康条", renderHealth(report)];
+  for (const r of report.repos) {
+    out.push("", repoTitle(r));
+    for (const w of r.warnings) out.push(`  ! ${w}`);
+    if (!r.reachable) {
+      out.push(`  ✗ ${r.error ?? "不可达"}，已跳过`);
+      continue;
+    }
+    if (r.error) out.push(`  ! ${r.error}`);
+    out.push(renderBranchTable(r, opts));
+  }
+  out.push("", "图例：worktree 后 * = 有未提交改动，? = 检查超时/未知；会话 (+N) = 另有 N 个关联会话；--json 输出完整字段。");
+  return out.join("\n");
+}
+
+const HYGIENE_TITLE: Record<HygieneKind, string> = {
+  dir_branch_mismatch: "目录名 ≠ 分支名",
+  orphan_admin_dir: "孤儿 .git/worktrees 条目",
+export function renderSessions(projectName: string, sessions: SessionView[], opts: { all?: boolean; wide?: boolean } = {}): string {
+  const shown = opts.all ? sessions : sessions.filter((s) => !s.isArchived);
+  const hidden = sessions.length - shown.length;
+  const needs = shown.filter((s) => s.status === "blocked" || s.needsAction).length;
+  const out: string[] = [`合流 · ${projectName} · 会话 ${sessions.length} 条（显示 ${shown.length}，等你处理 ${needs}）`];
+  const columns: Column[] = [
+    { header: "最后活动" },
+    { header: "状态" },
+    { header: "标题", max: 30 },
+    { header: "仓库" },
+    { header: "分支", max: 36, cut: "middle" },
+    { header: "worktree", max: 28, cut: "middle" },
+    { header: "待你处理", max: 36 },
+    { header: "PR", max: 16 },
+  ];
+  const rows = shown.map((s) => [
+    fmtDateTime(s.lastActivityAt),
+    SESSION_STATUS_LABEL[s.status],
+    s.title ?? "无标题",
+    s.repo,
+    s.branch ?? "—",
+    s.worktreeName ?? (s.worktreePath ? s.worktreePath.split("/").pop() ?? "" : "—"),
+    s.needsAction ?? (s.statusCategory === "blocked" ? s.statusDetail ?? "（未说明）" : "—"),
+    s.prs.length ? s.prs.map((p) => `#${p.number ?? "?"}${p.state ? " " + p.state.toLowerCase() : ""}`).join(",") : "—",
+  ]);
+  out.push(rows.length ? renderTable(columns, rows, { wide: opts.wide, indent: "  " }) : "  （无会话）");
+  if (hidden > 0) out.push("", `另有 ${hidden} 条已归档会话未显示（--all 显示全部）。`);
+  return out.join("\n");
+}
+
+export function renderDoctor(checks: DoctorCheck[]): string {
+  const mark = { ok: "✓", warn: "!", fail: "✗" } as const;
+  const out = ["合流 · 环境自检"];
+  for (const c of checks) out.push(`  ${mark[c.level]} ${c.message}`);
+  const fails = checks.filter((c) => c.level === "fail").length;
+src/core/branches.ts:18:  upstream: string | null;
+src/core/branches.ts:24:  const fmt = ["%(refname)", "%(objectname)", "%(committerdate:unix)", "%(upstream)", "%(contents:subject)"].join("%1f");
+src/core/branches.ts:29:    const [ref = "", sha = "", ct = "", upstream = "", ...subj] = line.split(SEP);
+src/core/branches.ts:38:      upstream: upstream || null,
+src/core/reconcile.ts:92:  remoteRefs: Set<string>;
+src/core/reconcile.ts:145:    remoteRefs: new Set(),
+src/core/reconcile.ts:174:  const [branchesRes, mainExists, integExists, remoteRefs, wtRes] = await Promise.all([
+src/core/reconcile.ts:187:  scan.remoteRefs = remoteRefs;
+src/core/reconcile.ts:356:  for (const r of scan.remoteRefs) {
+src/core/reconcile.ts:409:        const pushed = remoteNames.has(b.name) || (!!b.upstream && scan.remoteRefs.has(b.upstream));
+src/core/reconcile.ts:423:          upstream: b.upstream,
+src/core/reconcile.ts:424:          pushed,
+src/core/reconcile.ts:465:    neverPushed: branches.filter((b) => !b.pushed).length,
+src/core/reconcile.ts:534:    const remoteRef = cfg.remote ? `refs/remotes/${cfg.remote}/${cfg.main}` : (mainRaw?.upstream ?? null);
+src/core/reconcile.ts:536:      if (scan.remoteRefs.has(remoteRef)) {
+
+codex
+核对后，会话计数没有矛盾：76 条中隐藏了 15 条已归档会话，显示的 61 条里确有 17 条“等你”；完整 JSON 也能正常解析。保留意见主要是默认长表难以在 10 秒内读清，以及“从未推送”的说法过强——它实际依据的是本地远端引用是否存在，不能证明历史上从未推送。
+
+codex
+{
+  "verdict": "有保留",
+  "summary": "五条指定命令均成功运行，无沙箱阻塞，status 约 0.6 秒完成，全程未修改文件。数字自洽：文档仓未进主线 52＝13＋38＋1，固件仓 20＝14＋5＋1，App 仓 3；会话 76＝显示 61＋归档 15，其中 17 条等我处理。界面提示主要为中文，能查清合并状态和落后数量，但默认长表与截断让我无法在 10 秒内掌握重点，部分英文原文和术语也需要理解成本。",
+  "solved": {
+    "版本遗漏": "部分解决",
+    "分支落后": "已解决",
+    "大版本待办": "本里程碑不涉及"
+  },
+  "blocking_issues": [
+    {
+      "title": "信息齐全，但默认输出难以快速找到该关注的事项",
+      "repro": "运行 status --project 磁吸背夹，默认展示三个仓库共 119 条分支，未合并、已合并和落后分支混排；再运行 sessions --project 磁吸背夹，17 条等我处理混在 61 条会话中，“待你处理”内容多处被省略号截断。",
+      "impact": "我仍需逐行寻找、切换命令并展开内容，无法在 10 秒内看清哪些没合、哪些落后、哪些等我；已有 --wide 可以展开，但没有解决重点筛选问题。"
+    },
+    {
+      "title": "“从未推送”把有限证据表述成确定事实",
+      "repro": "运行 status --project 磁吸背夹，健康条显示“从未推送 60／28／8”；只读核对实现可见，该数字依据本地是否存在同名远端引用或有效上游引用计算。",
+      "impact": "缺少本地引用不能证明历史上从未推送，可能让我误判远端备份情况；应表述为“本地未发现远端引用”，并提示未刷新远端。"
+    }
+  ],
+  "suggestions": [
+    "默认提供简短行动摘要：独立未合并、已进集成待回主线、落后、等我处理；完整表作为展开项。",
+    "为待处理会话提供独立列表和单条详情，完整显示行动内容及会话定位信息。",
+    "解释 ↑／↓ 表示领先／落后的提交数，并注明 worktree 数不含主目录、工作区检查数包含主目录。",
+    "下一里程碑加入版本待办与功能预约，将“本版承诺”对照实际分支；未实现自动合并不作为 M1 扣分项。"
+  ]
+}
+tokens used
+54,698
+{
+  "verdict": "有保留",
+  "summary": "五条指定命令均成功运行，无沙箱阻塞，status 约 0.6 秒完成，全程未修改文件。数字自洽：文档仓未进主线 52＝13＋38＋1，固件仓 20＝14＋5＋1，App 仓 3；会话 76＝显示 61＋归档 15，其中 17 条等我处理。界面提示主要为中文，能查清合并状态和落后数量，但默认长表与截断让我无法在 10 秒内掌握重点，部分英文原文和术语也需要理解成本。",
+  "solved": {
+    "版本遗漏": "部分解决",
+    "分支落后": "已解决",
+    "大版本待办": "本里程碑不涉及"
+  },
+  "blocking_issues": [
+    {
+      "title": "信息齐全，但默认输出难以快速找到该关注的事项",
+      "repro": "运行 status --project 磁吸背夹，默认展示三个仓库共 119 条分支，未合并、已合并和落后分支混排；再运行 sessions --project 磁吸背夹，17 条等我处理混在 61 条会话中，“待你处理”内容多处被省略号截断。",
+      "impact": "我仍需逐行寻找、切换命令并展开内容，无法在 10 秒内看清哪些没合、哪些落后、哪些等我；已有 --wide 可以展开，但没有解决重点筛选问题。"
+    },
+    {
+      "title": "“从未推送”把有限证据表述成确定事实",
+      "repro": "运行 status --project 磁吸背夹，健康条显示“从未推送 60／28／8”；只读核对实现可见，该数字依据本地是否存在同名远端引用或有效上游引用计算。",
+      "impact": "缺少本地引用不能证明历史上从未推送，可能让我误判远端备份情况；应表述为“本地未发现远端引用”，并提示未刷新远端。"
+    }
+  ],
+  "suggestions": [
+    "默认提供简短行动摘要：独立未合并、已进集成待回主线、落后、等我处理；完整表作为展开项。",
+    "为待处理会话提供独立列表和单条详情，完整显示行动内容及会话定位信息。",
+    "解释 ↑／↓ 表示领先／落后的提交数，并注明 worktree 数不含主目录、工作区检查数包含主目录。",
+    "下一里程碑加入版本待办与功能预约，将“本版承诺”对照实际分支；未实现自动合并不作为 M1 扣分项。"
+  ]
+}
