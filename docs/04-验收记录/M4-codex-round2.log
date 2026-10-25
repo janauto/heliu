@@ -1,0 +1,2396 @@
+快照：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M4-r2-0d7dedb（0d7dedb）
+HELIU_HOME 副本：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M4-r2-0d7dedb-heliu-home
+Reading additional input from stdin...
+OpenAI Codex v0.164.0-alpha.11.1
+--------
+workdir: /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: high
+reasoning summaries: none
+session id: 01a17506-9365-72a0-b2db-b1dca270cbf7
+--------
+user
+你是「合流（heliu）」的普通用户：个人开发者，在 Claude 桌面应用里同时开十几个会话开发同一个项目。请以用户体验视角验收里程碑 M4「按里程碑合并」，不做压力测试、不做异常注入。**绝对不要对真实的磁吸背夹仓库执行 `release run`；只允许 `preview`（只读）与 `rehearse`（在 ~/.cache 下的克隆上演练）。**
+
+M4 承诺：一句"合并 vX"→ 预演（顺序、冲突、顺延）→ 确认 → 顺序合入集成分支 → 冲突交子代理 → 打 tag → 发布说明 → 未完成项显式顺延；永不 push；可回滚。
+
+步骤：
+1. 读 README.md、docs/03-架构/M4-任务卡.md、docs/03-架构/M4-实现说明.md。
+2. 在临时 fixture（实现说明给出的脚本）上完整走：`heliu release preview <里程碑>` → 看合并单草稿 → `heliu release run <里程碑> --dry-run` → `--yes` 执行 → 检查集成分支包含了哪些、未完成项是否顺延并标 `rolled_from`、tag 是否存在、发布说明是否生成 → `heliu release rollback <里程碑>` 后引用是否回到旧值。
+3. 对真实项目：`heliu release preview vNext --project 磁吸背夹`（只读）看顺序与冲突文件是否可理解；如实现说明提供了已完成的演练报告（rehearse 结果），阅读它并核对其中"真仓库零写入"的证据。
+4. 判断：不懂 git 的用户能否从预演输出看懂"会合哪些、为什么这几条要等、哪些会顺延"？确认步骤是否足够醒目？"未推送"提醒是否明确？
+5. 按 schema 输出：verdict、summary（3 句内）、solved（版本遗漏：M4 核心——顺延是否显式；分支落后：同步基线是否可预演；大版本待办：沿用 M2/M3）、blocking_issues、suggestions（≤5，面向 M5 接入与打包）。
+warning: Under-development features enabled: chronicle. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Users/linxiansheng/.codex/config.toml.
+codex
+我会先读验收范围和实现说明，再用临时 fixture 走完合并与回滚；真实磁吸背夹项目只做只读预演，并核对已有演练证据。
+
+exec
+/bin/zsh -lc "pwd; git status --short; rg --files -g 'AGENTS.md' -g 'README.md' -g '*M4*' -g '*fixture*'; rg -n 'heliu|合流' /Users/linxiansheng/.codex/memories/MEMORY.md" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ exited 1 in 0ms:
+/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+README.md
+docs/03-架构/M4-任务卡.md
+docs/03-架构/M4-实现说明.md
+docs/04-验收记录/prompts/M4.md
+docs/04-验收记录/M4.md
+docs/04-验收记录/M4-codex-round1.log
+docs/04-验收记录/M4-演练报告.md
+docs/04-验收记录/M4-codex-round1.json
+tests/helpers/fixture.ts
+tests/helpers/release-fixture.ts
+
+exec
+/bin/zsh -lc 'cat README.md docs/03-架构/M4-任务卡.md docs/03-架构/M4-实现说明.md' in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 0ms:
+# 合流（heliu）
+
+**合流是一个本机运行的中文版本台账**：它把 git 分支、worktree 和 Claude 桌面应用里的会话对上账，让你随口说的新点子变成功能卡、预约到某一版。
+**它解决的是「并行开了十几个会话之后，一版到底还欠什么、哪些能合、哪些在等我」**：看板 10 秒看懂，合并按版本走预演 → 确认 → 合入 → 顺延，不漏、不乱、不偷偷动你的仓库。
+**一句话：git 是事实，台账是承诺，看板是对账单。**
+
+![合流看板 · 总览（深色）](docs/04-验收记录/截图/M3-总览-深色.jpg)
+
+## 三句话就能用
+
+在任何 Claude 会话里直接说，或者在终端敲命令：
+
+| 你说 | 终端命令 | 会话里调用的 MCP 工具 |
+|---|---|---|
+| 「我有个新点子：让背夹支持闹钟」 | `heliu 新点子 "让背夹支持闹钟"`（默认预约到下一版，在 worktree 里会自动绑定当前分支与会话） | `heliu_feature_add` |
+| 「1.2 还欠什么？」 | `heliu 待办 v1.2`（加 `--precheck` 在临时区试合，分出「有冲突」） | `heliu_milestone_todo` |
+| 「合并 1.2」 | 先 `heliu 合并 v1.2 --预演` 生成合并单 → 看过、改好决定 → `heliu 合并 v1.2`（终端里逐条确认） | `heliu_release_preview`（只出预演；MCP 不提供执行合并的工具，执行要在终端里跑 `heliu 合并`） |
+
+## 安装（三步）
+
+1. **装 bun**（已有可跳过）：`curl -fsSL https://bun.sh/install | bash`
+2. **跑安装脚本**：`scripts/install.sh`（想先看会做什么：`scripts/install.sh --dry-run`）。它会：`bun install`（`node_modules` 软链到 `node_modules.nosync`，iCloud 不同步）→ 注册 user 级 MCP `heliu` → 把本仓库加成本地 marketplace `heliu-local` 并安装插件 `heliu@heliu-local`（带 `/heliu` Skill、hooks、MCP）。卸载：`scripts/uninstall.sh`（不删台账与缓存）。
+3. **接入你的项目**：`bin/heliu project add <仓库路径>`，向导会猜主线、集成分支、远端、是否在 iCloud，打一张中文摘要等你确认，然后建台账。再 `bin/heliu board --project <项目名>` 打开看板。
+
+想在任何目录直接敲 `heliu`：把 `bin/heliu` 链到你 PATH 里的某个目录，例如 `ln -s "$PWD/bin/heliu" /usr/local/bin/heliu`。`bin/heliu` 是个 sh 包装，自己找 bun，不依赖 PATH 里有 bun。
+
+## 命令速查
+
+全局选项：`--project <名>`（缺省按当前目录识别）· `--json`（稳定 JSON）· `--precheck`（试合）· `--wide`（表格不截断）。
+
+| 想做什么 | 命令 | MCP 工具 |
+|---|---|---|
+| 项目现在什么情况（健康条 + 现在最该做的） | `heliu status`（`--full` 全部分支长表） | `heliu_status` |
+| 某一版还欠什么 | `heliu 待办 [v1.2 / 下一版]`（`--precheck` 分出有冲突） | `heliu_milestone_todo` |
+| 登记新点子 | `heliu 新点子 "<一句话>" [--预约 v1.2 / --unreserved / --no-bind]` | `heliu_feature_add` |
+| 改预约 | `heliu 预约 F-0003 v1.3`（版本不存在就新建；写 `无` 取消预约） | `heliu_feature_reserve` |
+| 我在哪（分支 / 功能卡 / 预约 / 落后多少） | `heliu 我在哪` | `heliu_whereami` |
+| 把现有分支登记成草稿卡 | `heliu sync --dry-run` → `heliu sync` | `heliu_sync` |
+| 打开看板 | `heliu board [--port 7788] [--no-open]` | — |
+| 合并 · 预演（生成合并单，只读仓库） | `heliu 合并 v1.2 --预演`；改决定 `heliu release set v1.2 F-0012 顺延` | `heliu_release_preview`、`heliu_release_plan_set_decision` |
+| 合并 · 执行 | `heliu 合并 v1.2`（逐条确认；`--dry-run` 只说明会怎么做；`--to-main` 能快进才快进主线） | 不提供 |
+| 合并 · 演练（在克隆上完整跑一遍） | `heliu 演练 v1.2` | — |
+| 合并 · 回滚 | `heliu 回滚 v1.2` | — |
+| 会话 / 卫生 / 环境 | `heliu sessions` · `heliu hygiene` · `heliu doctor` | `heliu_sessions`、`heliu_hygiene` |
+| 里程碑 | `heliu milestone add / list / freeze / rename` | `heliu_milestone_list` |
+| 接入新仓库 | `heliu project add <路径> [--integration <分支>] [--ledger repo] [--yes]` | — |
+
+## 工作原理
+
+- **对账（事实，实时算、不落盘）**：每次都用只读 git 命令（`for-each-ref`、`rev-list`、`merge-base`、`merge-tree` 试合等）现算每个分支是否进了主线 / 集成分支、领先落后多少、试合会冲突哪些文件，再和桌面应用的会话记录（标题、在等你回答什么、最后活动）对上。iCloud 仓库的命令都带超时，超时标「未知」，不会卡死。
+- **台账（承诺，纯文本）**：`milestones.yaml` + 每张功能卡一个 `features/F-0001-<标题>.md`（frontmatter 记标题、状态、预约到哪一版、绑定的仓库/分支/会话、验收档位、从哪版顺延来）。只记 git 里没有的东西，人可以直接读改。
+- **hooks 零额外动作**：插件注册 SessionStart 与 Stop 两个 hook。会话一开始注入「你在哪个分支、对应哪张功能卡、预约哪一版、落后主线多少」；每轮结束把最后活动记进本机缓存。注入的提示会请会话在你明确提出新需求时调用 `heliu_feature_add` 登记（用你的原话当标题），你不用额外操作。
+- **看板**：本机网页（只监听 127.0.0.1），总览 / 版本列（拖卡片改预约）/ 卫生 / 会话 / 合并预演，浅深色随系统，手机宽度可看。
+
+## 安全承诺
+
+- **只读**：除了你确认过的 `heliu 合并`（和 `回滚`），所有命令对被管理仓库的 git 数据只读；git 调用走白名单，macOS 上再包一层 `sandbox-exec` 写保护；试合在临时对象区进行；`heliu 演练` 只在缓存目录的克隆上执行。台账如果按 `--ledger repo` 放进仓库，heliu 只写仓库里的 `.heliu/` 目录。
+- **合并只写三样东西**：集成分支、版本 tag，以及加了 `--to-main` 且能快进时的主线。有冲突的合并在 `~/.cache/heliu/` 下的临时 worktree 里做，不碰你的工作目录；每次移动引用都先记进合并单，可 `heliu 回滚`。
+- **不 push、不 fetch、不删分支、不删 worktree**。远端对比只用本地已有的引用；推送永远由你决定。
+- 台账写在你选的位置（缺省 `~/Library/Application Support/heliu/projects/<项目>/ledger/`），数据库只放在 `~/Library/Application Support/heliu/`，不放 iCloud。
+
+## 文档索引
+
+- `docs/02-产品定义/产品定义_v0.1.md`：做什么、为什么、看板信息架构、怎么算做成
+- `docs/03-架构/架构决策_v0.1.md`：7 条 ADR（技术栈、数据落点、git 只读纪律、hooks……）
+- `docs/03-架构/M1…M5-任务卡.md` 与 `M1…M5-实现说明.md`：每个里程碑的规格与实现细节、实测数字
+- `docs/04-验收记录/`：每个里程碑的验收记录（Fable 终验 + Codex 二次验收）、截图、M4 演练报告
+- `docs/00-现场证据/`、`docs/01-调研/`：现状快照、竞品与社区调研、Claude Code 接入点核实
+- `skills/heliu/SKILL.md`：主控会话里怎么用 heliu 工具
+
+## 已知限制
+
+- 只在 macOS + Bun 1.3 上开发和验证过；写保护沙箱依赖 macOS 的 `sandbox-exec`，没有它时 `--precheck` 试合会被拒绝（看板上显示「未能试合」，不会当成无冲突）。
+- iCloud 仓库默认不做工作区脏检查（会触发文件下载），`--dirty` 才查。
+- 桌面应用的会话 JSON 没有官方文档：字段变了会逐项降级为「缺失」；目前会话记录里没有 `claude://` 链接，看板的「打开会话」按钮置灰，改为复制会话 ID。
+- 合并遇到普通文件冲突时交给 Claude 子代理解，需要本机 `claude` CLI 已登录；真实 Opus 解冲突还没有端到端验证过（见 M4 实现说明）。仓库没配集成分支的项不会被合并（默认顺延）。
+- 同时注册 user 级 MCP 和插件时，会话里 heliu 工具会出现两份（插件自带同名 MCP）；只想要一份：`scripts/install.sh --no-mcp`。
+- 注册表里有多个项目后，在项目目录之外运行命令需要加 `--project <名>`。
+- 看板一次服务一个项目；拖拽改预约只支持桌面浏览器，手机上用卡片展开后的下拉。
+- 仓库放在 iCloud Drive 时，Claude 桌面应用的「预览」（`.claude/launch.json`）启动器拿不到 iCloud 目录的访问权（报 `Operation not permitted`），看板请在终端用 `bin/heliu board` 启动。
+- 在本仓库目录内开会话时，根目录的 `.mcp.json`（插件配置）会被当作项目级 MCP 配置再读一次，提示 `CLAUDE_PLUGIN_ROOT` 未定义；无害，插件自带的 `plugin:heliu:heliu` 才是生效的那份。
+# M4 任务卡：按里程碑合并（合并单 → 预检 → 执行 → 顺延）
+
+## 目标
+把用户手写的《总分支合并与重构方案》勾选表变成可执行的合并单：一句"合并 v1.2"→ 预演 → 确认 → 按顺序合入集成分支 → 冲突交子代理 → 打 tag → 发布说明 → 未完成项显式顺延。**这是全项目唯一会写被管理仓库的阶段**，必须有确认、有回滚记录、不碰用户的工作目录。
+
+## 命令
+- `heliu release preview <里程碑>`（只读）：预约到该版的功能 → 每个绑定分支的三档状态、`merge-tree` 试合冲突、落后数、会话状态 → 生成合并单草稿 `<ledger>/releases/<里程碑>.md`（frontmatter 机器段 + 人读勾选表）。顺序：已进集成（跳过）→ 无冲突 → 有冲突 → 未完成（开发中/等你回答，默认"顺延"，可改"等它"）。
+- `heliu release run <里程碑> [--dry-run] [--yes] [--to-main]`：按合并单执行。无 `--yes` 时逐条确认。
+- `heliu release rehearse <里程碑>`：把主仓库 `git clone --shared` 到 `~/.cache/heliu/rehearsal/<项目>/<时间>/`，在克隆上完整跑一遍 run，输出结果与耗时。**验收只在 rehearse 上做，真仓库由用户手动触发。**
+- `heliu release rollback <里程碑>`：按合并单记录的 `old_sha` 用 `update-ref` 把集成分支指回去（只回退 heliu 自己移动过的引用）。
+- 中文别名：`heliu 合并 v1.2 --预演`、`heliu 合并 v1.2`、`heliu 演练 v1.2`。
+
+## 合并机制（不碰 iCloud 工作目录）
+1. **无冲突分支**：纯对象库合并——`merge-tree --write-tree` → `commit-tree <tree> -p <集成> -p <分支>` → `update-ref refs/heads/<集成> <new> <old>`（带旧值校验）。不需要工作树。
+2. **有冲突分支**：在 `~/.cache/heliu/worktrees/<项目>/<里程碑>/`（**非 iCloud**）`git worktree add --detach` 集成分支 → `git merge --no-commit <分支>` →
+   - 对 project.yaml `union_files`（磁吸背夹：`README.md`、`嵌入式/README.md`、`业务/AI-Coding业务与进度.md`）用 `git merge-file --union`，再按"新日期在前"排序段落（可配置关闭）；
+   - 其余冲突交**解冲突子代理**：`claude -p --model opus --permission-mode acceptEdits --allowedTools "Read" "Edit" "Bash(git diff *)" "Bash(git add *)" "Bash(git status *)" --max-budget-usd 2 "…"`，提示词包含两侧分支的功能卡标题与首条提交说明，要求只解冲突、不重构、解完 `git add`；
+   - 若 project.yaml 有 `checks`（如 `bun test` / 固件 `host_tests.sh`），合并后在该 worktree 里跑，失败则停下来问；
+   - `commit` → `update-ref` 回到集成分支 → `worktree remove`。
+3. **完成**：`tag -a <里程碑> -m "<发布说明摘要>"`；`--to-main` 时若能快进则 `update-ref main`，否则列出来问。**绝不 push**，结尾提醒"N 个引用未推送"。
+4. **顺延**：未合入的功能 → `milestone: next`、`rolled_from += [<里程碑>]`；里程碑状态 → `已发布`；发布说明 `releases/<里程碑>.md` 追加"已合入 / 顺延 / 冲突处理 / 旧引用（可回滚）"。
+
+## 安全闸
+- 合并前校验：集成分支 `old_sha` 与合并单一致，否则中止（说明仓库在预演后动过）。
+- 每次 `update-ref` 记录 `{ref, old, new, time}` 到合并单，供 rollback。
+- 只写 `refs/heads/<集成>`、`refs/tags/<里程碑>`、（可选）`refs/heads/<主线>`；不动任何功能分支，不删任何东西。
+- 临时 worktree 一律在 `~/.cache/heliu/`，执行完即删；意外中断时下次启动提示清理。
+
+## 验收（Fable）
+1. fixture：3 条无冲突 + 1 条冲突（union 文件）+ 1 条冲突（普通文件，用 stub 解冲突器）+ 1 条未完成 → preview 顺序正确；run 后集成分支包含 5 条、未完成项顺延且 `rolled_from` 正确；rollback 后引用回到 old。
+2. `heliu release rehearse v1.2 --project 磁吸背夹`：在克隆上对真实合并单执行，报告每条结果、索引文件冲突走 union、普通冲突由 Opus 解决（记录轮次与花费）、tag 存在、未推送提醒。
+3. 真仓库零写入（rehearse 期间对三个真实仓库做快照比对）。
+# M4 实现说明：按里程碑合并（合并单 → 预检 → 执行 → 顺延 → 回滚）（2026-10-26）
+
+> 对应 `M4-任务卡.md`。实现：Opus 5.5；验收：Fable。这是全项目唯一写被管理仓库的阶段；本轮只在 fixture 与**克隆**上执行过，真仓库零写入（第 7 节）。
+> 第 2 轮（Codex 第 1 轮反馈）：新增「未能试合」档与「待定」决定、执行前摘要 + 输入 yes 才执行、doctor 三项自检、演练报告附原始快照，见第 10 节。
+
+## 1. 目录（新增 / 改动）
+```
+src/core/git.ts          + runGitWrite / assertWriteAllowed / sandboxWriteProfile / wrapInSandbox（写模式，独立白名单，只读运行器未放宽）
+src/core/release-plan.ts 合并单格式：类型、frontmatter 往返、人读勾选表、刷新时保留用户决定、执行记录/发布说明
+src/core/release.ts      preview（只读仓库，只写合并单草稿）、set（改决定）
+src/core/release-run.ts  run（安全闸 → 逐项合并 → 收尾/顺延）、rollback
+src/core/union.ts        union 文件：merge-file 标记 → 两边内容都保留、新日期在前（纯函数可单测）
+src/core/resolver.ts     解冲突子代理（claude -p）调用、提示词、JSON 解析、认证失败识别
+src/core/rehearse.ts     演练：clone --mirror --shared → preview（真仓库只读）→ run --yes（克隆）→ 报告
+src/core/snapshot.ts     零写入证据：.git 元数据与仓库根的 stat 快照
+src/cli/release.ts       registerReleaseCommands(program)（index.ts 只加 import + 一行调用）
+src/cli/render-release.ts 中文渲染          src/mcp/release-tools.ts  2 个 MCP 工具（server.ts 只加注册行）
+src/core/ledger.ts       + releaseUpdate（顺延/改状态/回滚恢复，记变更记录）
+src/core/project.ts      + union_sort_by_date      src/core/paths.ts + heliuCacheDir（~/.cache/heliu，HELIU_CACHE_DIR 可覆盖）
+tests/release.test.ts · tests/helpers/release-fixture.ts
+```
+
+## 2. 命令
+```bash
+heliu 合并 v1.2 --预演            # = release preview：生成/刷新 <台账>/releases/v1.2.md（保留你改过的决定）
+heliu release set v1.2 F-0012 顺延   # 改决定：卡号或 #序号；并入 / 顺延 / 等它 / 不并 / 待定
+heliu 合并 v1.2 --dry-run         # 逐项说明会怎么做，不动任何引用、不写审计
+heliu 合并 v1.2                   # = release run：先打印执行前摘要，输入 yes 才执行（直接回车 = 取消）；--yes 不确认；--to-main 能快进才快进主线
+heliu 演练 v1.2 --report <文件>    # = release rehearse：主仓库克隆上完整跑一遍 + 真仓库零写入比对
+heliu 回滚 v1.2                   # = release rollback：按 refs_moved 逆序指回旧值、删自己打的 tag、恢复功能卡
+```
+MCP：`heliu_release_preview`（只读仓库，会写合并单草稿）、`heliu_release_plan_set_decision`。**不提供执行合并的 MCP 工具**（测试断言工具名里没有 run/merge/rollback）。
+
+## 3. 合并单格式（样例，节选）
+```yaml
+---
+milestone: v1.2
+status: 草稿            # 草稿 | 执行中 | 待续 | 已发布 | 已回滚
+integration_branch: integ   # 主仓库的（镜像 repos[] 中那一条）
+base_sha: 4a9b749f…
+repos: [{repo: docs, label: 文档仓, integration_branch: integ, base_sha: 4a9b749f…, main: main, main_sha: be58…}]
+items:
+  - {feature: F-0004, title: 进度更新 U, decision: 并入, default_decision: 并入, state: 有冲突, repo: docs,
+     branch: feat/fu, branch_sha: ac04…, behind: 4, precheck: {conflicts: [README.md], union: [README.md], other: []}}
+  - {feature: F-0006, decision: 顺延, default_decision: 顺延, state: 未完成, detail: 会话等你回答：确认要不要做 B, …}
+refs_moved: []        # 执行后：{repo, ref, old, new, time, note}
+ledger_changes: []    # 执行后：{feature, from, to, note}（回滚依据）
+---
+| # | 决定 | 功能 | 仓库 · 分支 | 状态 | 试合冲突 | 说明 / 结果 |
+| 5 | [x] 并入 | F-0004 进度更新 U | 文档仓 · `feat/fu` | 有冲突 | union：README.md | 落后集成 4 · 已合入 · → 4a68b11 · union 1 个 |
+## 执行记录 / ## 发布说明（执行时追加；预演刷新时原样保留）
+```
+- **顺序**：已进集成（跳过）→ 无冲突 → 有冲突（只有 union 文件的在前，再按冲突文件数）→ 未能试合 → 未完成 → 无法合并。每项另写 `tier`（与看板 ReleaseTier 同名：in_integration / clean / conflict / precheck_failed / unfinished，外加 unmergeable）与建议动作。
+- **默认决定**：可合的「并入」；未能试合「待定」；未完成（绑定会话 blocked / 运行中，或卡片状态 想法 / 开发中）与无法合并（分支不存在、仓库没配集成分支等）「顺延」。
+- **汇总行**：`新增待合 N · 已在集成 M · 有冲突 C · 未能试合 F · 未检查 U · 顺延 D`（另有等它 / 不并 / 待定时追加）；新增待合 = 决定并入且不是已进集成 / 有冲突 / 无法合并的。
+- **刷新保留**：同一项（卡号 + 仓库 + 分支）若 `decision ≠ default_decision` 视为用户改过，刷新后保留。勾选表每次重生成，直接改表格不生效（文件头写明）。
+
+## 4. 合并机制
+1. **安全闸**（全部通过才动手，否则整体中止、什么都不写）：每个要写的仓库，集成分支当前 sha == 合并单 `base_sha`；集成分支（`--to-main` 时含主线）**若在某个 worktree 里检出则中止**——移动被检出的引用会让那个目录看起来「有改动」（磁吸背夹实测：文档仓集成分支检出在 `.claude/worktrees/ai-engineering-content-bfff84`，固件仓 `feat/aios-entry` 检出在 `esp_claw-aios`），`--allow-checked-out` 才继续；目标 tag 已存在则中止（不覆盖）。
+2. **无冲突**：`merge-tree --write-tree` → `commit-tree <树> -p <集成> -p <预演时的分支提交>` → `update-ref -m … refs/heads/<集成> <新> <旧>`。合入的是预演时记录的 `branch_sha`，之后的新提交不带进来（结果里注明「分支在预演后又有新提交」）。
+3. **有冲突**：`~/.cache/heliu/worktrees/<项目>/<里程碑>/<仓库>` 里 `worktree add --detach`（同一次运行复用，后续项 `reset --hard` 对齐）→ `merge --no-commit --no-ff` →
+   union 文件：从 index 取三方（`cat-file -p :1/2/3:<文件>`）→ `merge-file -p --marker-size=32` → 每个冲突块集成侧在前、合入侧在后，块内**每个条目都带日期**时按新日期在前稳定排序（否则保持 union 原序；`union_sort_by_date: false` 时直接 `merge-file --union`）→ `git add`；
+   其余冲突交解冲突器（最多 2 轮），之后校验：无未合并路径、无冲突标记、**无冲突的已暂存文件 oid 未被改动**（否则判失败）、丢弃未暂存改动与未跟踪文件 → `commit` → `update-ref`。
+4. **checks**（project.yaml，可空）：合并结果在临时 worktree 里逐条 `sh -c` 跑（沙箱内，默认 10 分钟超时）；失败该项「失败·待处理」、**不移动引用**；非 `--yes` 时问「输入 yes 跳过它继续，直接回车 = 停止」。
+5. **每次 update-ref 先记后动**：先把 `{ref, old, new}` 写进合并单再执行，失败则删掉记录——中断后 rollback 也能凭「当前值 == new / == old」判断。
+6. **收尾**（没有「等它」与未执行项时）：每个仓库 `tag -a <里程碑> -m <摘要> <集成顶端>`；`--to-main` 能快进才 `update-ref` 主线，否则列出主线独有提交数请你决定；功能卡：有顺延/失败绑定 → 下一版 + `rolled_from += [本版]`，全部合入 → 状态「已合入」（快进了主线则「已进主线」；验收档位不动，ADR-5），全部「不并」→ 改为未预约；里程碑 → 已发布；合并单末尾写发布说明（已合入 / 顺延 / 冲突处理 / 旧引用可回滚 / 未推送）。结尾打印「未推送：refs/heads/<集成> 与 refs/tags/<里程碑>（按仓库规矩，推送由你决定）」。
+7. **「等它」/「待定」**：本次合入其余项、记 refs_moved，但不打 tag、不顺延、不改「已发布」，合并单状态「待续」、里程碑停在「合并中」；「待定」项结果记「跳过·待定」，不并入也不顺延，留在本版，结尾汇总列出；等它好了 / 确认后重新预演（已合入的显示为已进集成）再执行。
+8. **rollback**：refs_moved 逆序：分支引用校验当前值 == new 才 `update-ref ref old new`（== old 视为已回退；其他值说明之后有人动过，停止）；tag 校验指向 heliu 打的那个对象才 `tag -d`；然后 ledger_changes 逆序恢复（卡片发布后又被改过的不动、列出原值），里程碑恢复执行前状态。
+9. 执行开始时里程碑先改「合并中」，「下一版」自然指向后一个规划中的版本；没有就新建 vNext（若本版就叫 vNext，新建的是 vNext2）。
+
+## 5. 写模式运行器 `runGitWrite(repo, args, {reason, auditLog, cacheRoot, allowRefs, policy})`
+- 白名单：merge-tree（仅 --write-tree）· commit-tree · write-tree · update-ref（必须三参数带旧值、引用在 allowRefs 内，禁 -d/--stdin）· tag（仅 `-a <名> -m … <提交>` 与 `-d <名>`，名在 allowRefs 内，禁 -f/签名）· worktree（仅 `add --detach <缓存内路径>` 与 `remove <缓存内路径>`）· merge / merge-file / add（禁 -A/-f）/ commit（禁 --amend/-a）/ checkout / reset / read-tree（**cwd 必须在 ~/.cache/heliu 内**）· clone（必须 --shared/--reference、源为本地路径、目标在缓存内）。push / fetch / pull / branch / gc / prune / clean / rebase / stash / config 等直接拒绝。
+- 每次调用**先写一行审计**到 `<台账>/releases/<里程碑>.log`（时间 · 执行/拒绝 · 原因 · 目录 · 完整参数），失败再补一行退出码。
+- 注入 `core.hooksPath=/dev/null`、`commit.gpgSign/tag.gpgSign=false`、`rerere.enabled=false`、`GIT_EDITOR=true`、`GIT_LFS_SKIP_SMUDGE=1`、`gc.auto=0`；commit 自动加 `--no-verify`；仓库没配 user.name/email 时用 `heliu <heliu@localhost>`。
+- 沙箱：`(deny file-write* <所有被管理仓库根与 common dir>)(allow file-write* <目标 common dir> <~/.cache/heliu>)`——SBPL 后写的规则优先（实测确认），所以 heliu 能写对象库/引用，但写不到用户的工作目录与 `.claude/worktrees/*`。解冲突器与 checks 进程也包在同一沙箱里。真实执行时沙箱不可用只警告（白名单仍在）；**演练时沙箱不可用直接拒绝**（见第 7 节）。
+
+## 6. 解冲突器（`src/core/resolver.ts`）
+- 二进制：`HELIU_CLAUDE_BIN` → 桌面版内置 `…/claude-code/2.1.308/a93ded4b1b47/claude.app/Contents/MacOS/claude` → PATH 里的 `claude`；测试用 `HELIU_RESOLVER_STUB=<脚本>`（`/bin/sh <脚本>`，同参数、同 stdin）。
+- 命令：`/usr/bin/env -u CLAUDECODE <claude> -p --model opus --permission-mode acceptEdits --allowedTools Read Edit Write "Bash(git diff *)" "Bash(git add *)" "Bash(git status *)" "Bash(git checkout --theirs *)" "Bash(git checkout --ours *)" --max-budget-usd 2 --output-format json`，cwd = 临时 worktree，**提示词走 stdin**（放在参数里会被 `--allowedTools` 的可变参数吞掉）。环境对象里同样删掉 CLAUDECODE。
+- 提示词：两侧（集成分支名 + 最近改过这些冲突文件的提交说明；合入侧功能卡号、标题、分支、首条提交说明）、冲突文件列表、规则「只解冲突、不重构、两边功能都保留、解完 git add、不 commit/push/切分支/改 .git、最后每个文件一行『文件：做法』」。
+- 记录到合并单：`resolver: {files, rounds, turns, cost_usd(total_cost_usd), ok, summary}`；本次运行总预算默认 $10（`--budget` / `HELIU_RESOLVER_TOTAL_BUDGET`），超了后续冲突项判失败。
+- **认证实测（2026-10-26，本机在桌面版会话里调用）**：嵌套启动本身没问题（去掉 CLAUDECODE 后不再拒绝；沙箱内外一样），但桌面内置 CLI 报「OAuth session expired and could not be refreshed」（它的令牌由桌面宿主续期，独立子进程续不了；只去 CLAUDECODE、再去宿主续期标记、去掉全部 CLAUDE_* 三种环境都一样），终端里的 npm 版 `~/.nvm/…/bin/claude` 报「Not logged in」。已做：识别这类输出 → 立即判失败（$0、不重试第二轮），提示「在终端里用该 claude 登录后重试，或设 HELIU_CLAUDE_BIN」。`HELIU_RESOLVER_ENV=host-refresh|clean` 保留为兜底开关。**真实 Opus 解冲突端到端未验证**；代码路径由桩覆盖。
+
+## 7. 演练（rehearse）与报告摘要
+流程：沙箱必须可用 → 三仓库 stat 快照（前）→ 台账整份复制到 `~/.cache/heliu/rehearsal/<项目>/<时间>/ledger`（合并单、审计日志、改过的卡都在副本里）→ `git clone --mirror --shared <主仓库>`（只有引用、对象库只读引用；沙箱 deny 三个真实仓库）→ preview 对**真实仓库只读**（会话状态与试合与真执行一致）→ run --yes 在克隆上（project.yaml 临时只含主仓库并指向克隆；其他仓库的项标「未演练」、不改它们的卡）→ 快照（后）比对 → 报告。
+**为什么演练必须沙箱**（实测）：在 `--shared` 克隆里跑 `merge-tree`，不加沙箱时源仓库 `.git` 快照变了（git 写已存在的对象时去刷新 alternates 里那份的 mtime）；加沙箱后完全一致。
+
+**报告摘要**（`heliu 演练 下一版 --project 磁吸背夹`，2026-10-26 05:41，第 2 轮修复后重跑；04:58、05:01 两次结果相同；全文见 `docs/04-验收记录/M4-演练报告.md`）：
+- 合并单 61 项（文档仓 41 · 固件仓 17 · App 仓 3）。文档仓克隆上：**合入 18**（9 项纯对象库、9 项走临时 worktree——其中 F-0018 预检无冲突、执行时因前面的合入才冲突；冲突全部是三个 union 索引文件，共 24 处按新日期在前排序）· 已在集成 11 · 失败 0 · **顺延 12**（8 项会话等你回答 + 4 项卡片「开发中」）· 固件/App 14 项「未演练」；附注 tag `vNext` 已打；解冲突器 0 轮、$0（文档仓没有普通冲突）。
+- 合并单汇总：`新增待合 10 · 已在集成 25 · 有冲突 8 · 未能试合 0 · 未检查 0 · 顺延 18`（原来笼统的「并入 43」= 25 + 10 + 8）。
+- 耗时：克隆 34ms（--mirror --shared 只复制引用）· 预演 0.9s · 执行 7.5s · 合计 8.6s。写保护沙箱全程启用。
+- **真仓库零写入**：三仓库 stat 快照 898 / 676 / 416 项前后完全一致（原始文件 `snapshots/before-*.tsv`、`after-*.tsv` 存在演练目录，报告给相对路径）；真仓库集成分支仍是 base_sha `4329a38`、无 `vNext` tag；真台账没有 `releases/`；109 行审计全部在台账副本、全部带沙箱、0 条 push/fetch。
+- 沙箱不可用（`HELIU_NO_SANDBOX=1`）时同一份真实数据：`新增待合 0 · 已在集成 25 · 有冲突 0 · 未能试合 25 · 未检查 0 · 顺延 11`（修复前这 25 项显示为「有冲突」且无冲突文件）。
+- union 质量复核：三个文件残留标记 0；「消失」的行每个文件 1 行，都是 F-0027 分支自己改写的（正常合并），重复行都是集成分支原有的表格分隔行/代码围栏。
+
+## 8. 测试
+`bun test` **219** 个全绿（合入 main 后，其中 `tests/release.test.ts` 26 个），`tsc --noEmit` 通过。第 2 轮新增：沙箱不可用时预演分档为「未能试合 · 待定」且汇总行「有冲突 0」（子进程 + `HELIU_NO_SANDBOX=1`）、run 跳过待定项不并入不顺延不收尾、确认默认取消（`isYes` + 注入确认返回 false 时什么都不写）、看板草稿拒绝执行并备份、doctor 三项自检、无头 claude 探测（桩）。`tests/release.test.ts`：写模式白名单拒绝 push/fetch/pull/branch -d/gc/config、缓存外的 reset/checkout/merge/add/commit、无旧值或越界的 update-ref、缓存外 worktree、非 --shared clone，拒绝也写审计；union 日期识别/排序/保持原序/diff3 标记；解冲突器参数与提示词、JSON 解析、未登录立即判失败（$0、不重试）；预演顺序与默认决定、往返、刷新保留决定；非交互无 --yes 拒绝；--dry-run 不动引用不写审计；base_sha 不匹配整体中止；run --yes 后集成分支包含 5 条 + 已进集成 1 条、附注 tag、union 新日期在前、桩 --ours、refs_moved 首尾相接、fb 顺延到 v1.3 且 rolled_from=[v1.2]、审计日志、临时 worktree 已删、用户主目录与功能分支不动；rollback 引用与 tag 复原、台账恢复、里程碑恢复「冻结」；checks 失败不移动引用 + 「等它」不收尾 + 待续后回滚；CLI 别名 `合并 --预演`、`release set`、`合并 --dry-run`、无 --yes 报错。`tests/mcp.test.ts` 改为按工具名列表计数（13 个）。
+
+## 9. 偏离任务卡与已知限制
+- **按仓库存 base_sha / 集成分支**（任务卡是单个字段）：磁吸背夹三个仓库集成分支各不相同；顶层两个字段镜像主仓库。tag 打在每个实际涉及的仓库上，refs_moved 每条带 repo。
+- 里程碑自身的 `integration_branch` 字段暂不使用，以 project.yaml 各仓库的 `integration` 为准；仓库没配集成分支（App 仓）的项「无法合并」并默认顺延——heliu 不会自建集成分支，也不会直接往主线合。
+- 「未完成」把卡片状态「开发中/想法」也算进去（任务卡：开发中/等你回答）；sync 生成的草稿卡多数是「开发中」，所以真实合并单里它们默认顺延，做完的卡请改「待合并」或把决定改成「并入」。
+- union_files 是项目级、精确路径匹配（NFC 规范化），对所有仓库生效；不支持通配符。排序只在冲突块内、且每个条目都带日期时进行，不改动冲突块以外的内容。
+- 只演练主仓库（固件仓、App 仓「未演练」）；多仓库同时执行的路径只在单测（单仓库）里覆盖到逻辑，未在真实多仓库上跑过。
+- 解冲突器的真实 Opus 调用因本机 CLI 未登录未能端到端验证（第 6 节）。**补验步骤**：在普通终端执行 `claude login`（或把 `HELIU_CLAUDE_BIN` 指向已登录的 claude）→ `heliu doctor` 看「无头 claude」一项变为可用 → 重跑 `heliu 演练 下一版 --project 磁吸背夹`（文档仓目前没有普通冲突；要看到真实 Opus 解冲突，需要预约一个有普通冲突的分支，例如固件仓的 F-0044，但固件仓暂不在演练范围）。
+- 交互确认用 Bun 的 `prompt()`，只在 TTY 下可用；非 TTY 必须 `--yes`。
+- 中断恢复：临时 worktree 残留会在下次执行开始时清理；若目录已被手工删除，仓库里可能留下一条可 prune 的 worktree 登记（heliu 不执行 `worktree prune`，因为它会顺带清掉用户的条目），`heliu hygiene` 会报。
+
+## 10. 第 2 轮（Codex 第 1 轮反馈）
+- **未能试合**（阻塞 1）：预演复用 M3 的 `precheckStateOf`（src/core/todo.ts）判试合三态；请求了试合却没得到结果（沙箱建不起来 / 超时 / 出错）→「未能试合」档、`tier: precheck_failed`、默认「待定」、建议动作「重新试合或人工确认」，绝不算有冲突。优先级：会话等你回答 / 运行中 → 未完成；其次未能试合（与看板同口径）；再看卡片「开发中」与冲突。
+- **run 跳过待定**：决定仍是「待定」的项不并入、不顺延、留在本版，结尾汇总；本版先不收尾（同「等它」）。
+- **确认**：去掉逐条 y/n，改为先打印执行前摘要（新增合入逐条 / 已在集成 / 不在本次合入按原因分组：等你回答、开发中、无法合并、未能试合·待定、等它、不并），再「输入 yes 执行，直接回车 = 取消」；发布前、checks 失败、回滚也都是输入 yes 才继续，回车 = 取消 / 停止。取消时什么都不写。
+- **union 文案**统一为「两边内容都保留、新日期在前」。
+- **doctor 三项自检**（阻塞 2）：`sandbox`（sandbox-exec 是否可用及影响）；`headless-claude`（`<claude> -p "ok" --max-budget-usd 0.01 --output-format json`，20s 超时；`--max-budget-usd 0` 会被 CLI 拒绝为非法参数，实测；未登录时不发生调用、$0，提示「请在终端执行 claude login」；`HELIU_DOCTOR_SKIP_CLAUDE=1` 跳过，测试 fixture 默认跳过）；每个仓库 `:integration`（是否配置、是否存在）。
+- **演练报告**附前后 stat 快照原始文件（演练目录 `snapshots/`，相对路径），并写明写保护沙箱已启用。
+- **看板草稿兼容**（顺带发现）：M3 看板在同一路径 `<台账>/releases/<里程碑>.md` 写 schema 1 草稿（逐条 tier/bindings，decision 并入/顺延/待定）。M4 现写 `heliu: release-plan`、`schema: 2`；读到看板草稿时 run / set 拒绝并提示先预演，预演先备份到 `releases/.history/<里程碑>-看板草稿-<时间>.md` 再生成可执行合并单，看板草稿里的决定不导入、列出与新默认不同的项。看板不会覆盖非「草稿」状态的合并单（M3 已有判断）。
+
+exec
+/bin/zsh -lc "cat tests/helpers/release-fixture.ts tests/helpers/fixture.ts package.json docs/04-验收记录/M4-演练报告.md; sed -n '1,150p' tests/release.test.ts; cat src/cli/release.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 0ms:
+/**
+ * M4 合并执行 fixture：主线 main + 集成分支 integ；
+ *   feat/f1、f2、f3 无冲突 · feat/fu 与集成分支同处改 README.md（union 文件）· feat/fc 与集成分支同行改 src.txt（普通冲突）·
+ *   feat/fb 未完成（绑定会话 blocked）· feat/fi 已进集成分支。台账：v1.2（冻结，7 张卡）、v1.3（规划中）。
+ * 另附桩解冲突器（对冲突文件 checkout --ours + add，打印 claude 风格 JSON）。
+ */
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Ledger } from "../../src/core/ledger.ts";
+import { gitW } from "./fixture.ts";
+
+export interface RFx {
+  root: string;
+  repo: string;
+  ledger: string;
+  cache: string;
+  heliuHome: string;
+  claudeApp: string;
+  env: Record<string, string>;
+  sha: Record<string, string>;
+  ids: Record<string, string>;
+}
+
+function commit(repo: string, file: string, content: string, msg: string): void {
+  mkdirSync(join(repo, file, ".."), { recursive: true });
+  writeFileSync(join(repo, file), content);
+  gitW(repo, "add", file);
+  gitW(repo, "commit", "-q", "-m", msg);
+}
+
+export function buildReleaseFixture(opts: { checks?: string[] } = {}): RFx {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "heliu-release-")));
+  const repo = join(root, "仓 库");
+  mkdirSync(repo);
+  gitW(repo, "init", "-q", "-b", "main");
+  gitW(repo, "config", "commit.gpgsign", "false");
+  commit(repo, "README.md", "# 项目\n\n## 进度\n- 2026-10-01 建仓\n\n## 其他\n说明\n", "c1: 初始化");
+  commit(repo, "src.txt", "line1\nline2\nline3\n", "c2: 源码");
+  // 集成分支：README 进度追加一行 + 改 src.txt 第二行
+  gitW(repo, "checkout", "-q", "-b", "integ");
+  commit(repo, "README.md", "# 项目\n\n## 进度\n- 2026-10-01 建仓\n- 2026-10-20 集成：合入 A\n\n## 其他\n说明\n", "integ: 进度 10-20");
+  commit(repo, "src.txt", "line1\nline2 集成版\nline3\n", "integ: 改 src");
+  const mk = (b: string, file: string, content: string, msg: string, from = "main") => {
+    gitW(repo, "checkout", "-q", "-b", b, from);
+    commit(repo, file, content, msg);
+  };
+  mk("feat/f1", "a1.txt", "a1\n", "feat: 功能一");
+  mk("feat/f2", "a2.txt", "a2\n", "feat: 功能二");
+  mk("feat/f3", "dir/a3.txt", "a3\n", "feat: 功能三");
+  mk("feat/fu", "README.md", "# 项目\n\n## 进度\n- 2026-10-01 建仓\n- 2026-10-22 新功能 U\n\n## 其他\n说明\n", "feat: 进度 10-22");
+  mk("feat/fc", "src.txt", "line1\nline2 冲突分支版\nline3\n", "feat: 冲突地改 src");
+  mk("feat/fb", "b.txt", "b\n", "feat: 还没做完");
+  mk("feat/fi", "i.txt", "i\n", "feat: 已进集成");
+  gitW(repo, "checkout", "-q", "integ");
+  gitW(repo, "merge", "-q", "--no-ff", "-m", "merge fi", "feat/fi");
+  gitW(repo, "checkout", "-q", "main");
+  const sha: Record<string, string> = {};
+  for (const b of ["main", "integ", "feat/f1", "feat/f2", "feat/f3", "feat/fu", "feat/fc", "feat/fb", "feat/fi"]) sha[b] = gitW(repo, "rev-parse", b);
+
+  const heliuHome = join(root, "heliu-home");
+  const ledger = join(root, "台账");
+  const cache = join(root, "cache");
+  const claudeApp = join(root, "claude-app");
+  const claudeHome = join(root, "claude-home");
+  mkdirSync(join(heliuHome, "projects", "演示"), { recursive: true });
+  mkdirSync(join(claudeHome, "sessions"), { recursive: true });
+  const yaml = [
+    "name: 演示",
+    `ledger: ${JSON.stringify(ledger)}`,
+    "repos:",
+    "  - id: docs",
+    "    label: 文档仓",
+    `    path: ${JSON.stringify(repo)}`,
+    "    main: main",
+    "    integration: integ",
+    "union_files:",
+    "  - README.md",
+    ...(opts.checks?.length ? ["checks:", ...opts.checks.map((c) => `  - ${JSON.stringify(c)}`)] : []),
+    "",
+  ].join("\n");
+  writeFileSync(join(heliuHome, "projects", "演示", "project.yaml"), yaml);
+  // 会话：fb 等你回答
+  const sessDir = join(claudeApp, "claude-code-sessions", "acct", "org");
+  mkdirSync(sessDir, { recursive: true });
+  writeFileSync(
+    join(sessDir, "local_fb.json"),
+    JSON.stringify({
+      sessionId: "local_fb",
+      title: "还没做完的功能",
+      cwd: repo,
+      originCwd: repo,
+      branch: "feat/fb",
+      postTurnSummary: { status_category: "blocked", status_detail: "等确认", needs_action: "确认要不要做 B" },
+      isArchived: false,
+      lastActivityAt: 1792900000000,
+    }),
+  );
+  // 台账
+  const l = new Ledger(ledger);
+  l.addMilestone({ id: "v1.2" });
+  l.addMilestone({ id: "v1.3" });
+  const ids: Record<string, string> = {};
+  const add = (key: string, title: string, branch: string) => {
+    ids[key] = l.addFeature({ title, milestone: "v1.2", bindings: [{ repo: "docs", branch, worktree: null, session: null, pr: null }], status: "待合并" }).feature.id;
+  };
+  add("f1", "功能一", "feat/f1");
+  add("f2", "功能二", "feat/f2");
+  add("f3", "功能三", "feat/f3");
+  add("fu", "进度更新 U", "feat/fu");
+  add("fc", "冲突功能 C", "feat/fc");
+  add("fb", "还没做完的 B", "feat/fb");
+  add("fi", "已进集成 I", "feat/fi");
+  l.freezeMilestone("v1.2");
+  // 桩解冲突器：吃掉提示词，对冲突文件 checkout --ours + add，打印 claude 风格 JSON
+  const stub = join(root, "resolver-stub.sh");
+  writeFileSync(
+    stub,
+    [
+      "#!/bin/sh",
+      "cat > /dev/null",
+      'printf "%s\\n" "$HELIU_CONFLICT_FILES" | while IFS= read -r f; do [ -n "$f" ] && git checkout --ours -- "$f" && git add -- "$f"; done',
+      `printf '%s\\n' '{"type":"result","subtype":"success","is_error":false,"num_turns":3,"result":"src.txt：保留集成分支一侧（桩）","total_cost_usd":0.12}'`,
+      "",
+    ].join("\n"),
+  );
+  chmodSync(stub, 0o755);
+  return {
+    root,
+    repo,
+    ledger,
+    cache,
+    heliuHome,
+    claudeApp,
+    env: { HELIU_HOME: heliuHome, HELIU_CLAUDE_APP_DIR: claudeApp, HELIU_CLAUDE_HOME: claudeHome, HELIU_CACHE_DIR: cache, HELIU_RESOLVER_STUB: stub },
+    sha,
+    ids,
+  };
+}
+
+/**
+ * 测试 fixture：在临时目录里造一个「主线 + 集成分支 + 三类分支 + worktree + 卫生问题」的仓库。
+ * 注意：fixture 搭建需要写操作（commit/merge/worktree add），这里直接 spawn git，
+ * 绝不经过 src/core/git.ts 的只读白名单（白名单会、也应该拒绝这些命令）。
+ */
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+let tick = 0;
+/** 写入型 git（仅限 fixture） */
+export function gitW(cwd: string, ...args: string[]): string {
+  tick++;
+  const date = `2026-10-${String(1 + Math.min(tick, 27)).padStart(2, "0")}T10:00:00+08:00`;
+  const r = Bun.spawnSync({
+    cmd: ["git", "-C", cwd, ...args],
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "fixture",
+      GIT_AUTHOR_EMAIL: "fixture@example.com",
+      GIT_COMMITTER_NAME: "fixture",
+      GIT_COMMITTER_EMAIL: "fixture@example.com",
+      GIT_AUTHOR_DATE: date,
+      GIT_COMMITTER_DATE: date,
+      GIT_CONFIG_NOSYSTEM: "1",
+      HOME: tmpdir(),
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (r.exitCode !== 0) throw new Error(`fixture git ${args.join(" ")} 失败：${r.stderr.toString()}`);
+  return r.stdout.toString().trim();
+}
+
+function commit(repo: string, file: string, content: string, msg: string): string {
+  writeFileSync(join(repo, file), content);
+  gitW(repo, "add", file);
+  gitW(repo, "commit", "-q", "-m", msg);
+  return gitW(repo, "rev-parse", "HEAD");
+}
+
+export interface Fixture {
+  root: string;
+  repo: string;
+  claudeApp: string;
+  claudeHome: string;
+  heliuHome: string;
+  env: Record<string, string>;
+  wt: Record<string, string>;
+  cleanup(): void;
+}
+
+export const B = {
+  main: "main",
+  integ: "integ",
+  mergedMain: "claude/merged-main-aaaaaa",
+  inInteg: "claude/in-integ-bbbbbb",
+  standalone: "claude/bold-shaw-cccccc",
+  behind: "claude/behind-dddddd",
+  conflict: "claude/conflict-ffffff",
+  atTip: "claude/at-tip-999999",
+} as const;
+
+export function buildFixture(): Fixture {
+  tick = 0;
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "heliu-fixture-")));
+  // 路径含中文与空格：覆盖 iCloud「Mobile Documents/磁吸背夹」这类真实路径的转义与沙箱匹配
+  const repo = join(root, "磁吸 仓库");
+  mkdirSync(repo);
+  gitW(repo, "init", "-q", "-b", "main");
+  gitW(repo, "config", "commit.gpgsign", "false");
+
+  // 主线 c1..c3
+  const c1 = commit(repo, "README.md", "# 项目\n\n第一版\n", "c1: 初始化");
+  commit(repo, "docs.md", "文档\n", "c2: 文档");
+  commit(repo, "plan.md", "计划\n", "c3: 计划");
+
+  // 已进主线：从 main 分出 → 一条提交 → --no-ff 合回 main
+  gitW(repo, "checkout", "-q", "-b", B.mergedMain);
+  commit(repo, "a.txt", "a\n", "feat: 已进主线的功能");
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "merge", "-q", "--no-ff", "-m", "merge: 合入 merged-main", B.mergedMain);
+
+  // 集成分支：从 main 分出，自己改 README
+  gitW(repo, "checkout", "-q", "-b", B.integ);
+  commit(repo, "README.md", "# 项目\n\n集成分支版本\n", "integ: 改 README");
+
+  // 已进集成分支：从 main 分出 → 一条提交 → --no-ff 合入 integ
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "checkout", "-q", "-b", B.inInteg);
+  commit(repo, "b.txt", "b\n", "feat: 已进集成的功能");
+  gitW(repo, "checkout", "-q", B.integ);
+  gitW(repo, "merge", "-q", "--no-ff", "-m", "merge: 合入 in-integ", B.inInteg);
+
+  // 独立未合并（随机名）：从 main 分出
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "checkout", "-q", "-b", B.standalone);
+  commit(repo, "c.txt", "c\n", "feat: EPP 网关首个提交");
+  commit(repo, "c2.txt", "c2\n", "feat: EPP 网关第二个提交");
+
+  // 冲突分支：与集成分支改同一行 README
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "checkout", "-q", "-b", B.conflict);
+  commit(repo, "README.md", "# 项目\n\n冲突分支版本\n", "feat: 冲突地改 README");
+
+  // 落后主线：从 c1 分出
+  gitW(repo, "checkout", "-q", "-b", B.behind, c1);
+  mkdirSync(join(repo, "legacy"), { recursive: true });
+  commit(repo, "legacy/old.md", "old\n", "docs: 老分支");
+
+  // 停在主线顶端、无提交
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "branch", B.atTip, "main");
+
+  // 远端跟踪引用：模拟 origin/main 落后、in-integ 已推送（远端地址不存在，heliu 也绝不会 fetch）
+  gitW(repo, "remote", "add", "origin", "/nonexistent/origin.git");
+  gitW(repo, "update-ref", "refs/remotes/origin/main", c1);
+  gitW(repo, "update-ref", `refs/remotes/origin/${B.inInteg}`, gitW(repo, "rev-parse", B.inInteg));
+
+  // worktree：三个桌面端风格目录 + 一个目录名≠分支名
+  const wtDir = join(repo, ".claude", "worktrees");
+  mkdirSync(wtDir, { recursive: true });
+  const wt = {
+    standalone: join(wtDir, "bold-shaw-cccccc"),
+    reused: join(wtDir, "reused-dir-eeeeee"),
+    merged: join(wtDir, "merged-main-aaaaaa"),
+    atTip: join(wtDir, "at-tip-999999"),
+  };
+  gitW(repo, "worktree", "add", "-q", wt.standalone, B.standalone);
+  gitW(repo, "worktree", "add", "-q", wt.reused, B.behind);
+  gitW(repo, "worktree", "add", "-q", wt.merged, B.mergedMain);
+  gitW(repo, "worktree", "add", "-q", wt.atTip, B.atTip);
+
+  // 卫生问题：孤儿管理目录（缺 gitdir）+ 残留 index.lock
+  const orphan = join(repo, ".git", "worktrees", "x");
+  mkdirSync(orphan, { recursive: true });
+  writeFileSync(join(orphan, "HEAD"), "ref: refs/heads/gone\n");
+  writeFileSync(join(repo, ".git", "worktrees", "bold-shaw-cccccc", "index.lock"), "");
+
+  // Claude 桌面数据
+  const claudeApp = join(root, "claude-app");
+  const claudeHome = join(root, "claude-home");
+  const heliuHome = join(root, "heliu-home");
+  const sessDir = join(claudeApp, "claude-code-sessions", "acct", "org");
+  mkdirSync(sessDir, { recursive: true });
+  mkdirSync(join(claudeHome, "sessions"), { recursive: true });
+  mkdirSync(heliuHome, { recursive: true });
+  const fixtures = join(import.meta.dir, "..", "fixtures", "sessions");
+  for (const f of readdirSync(fixtures)) {
+    const text = readFileSync(join(fixtures, f), "utf8").replaceAll("__REPO__", repo);
+    writeFileSync(join(sessDir, f), text);
+  }
+  writeFileSync(
+    join(claudeApp, "git-worktrees.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      worktrees: {
+        "bold-shaw-cccccc": { name: "bold-shaw-cccccc", path: wt.standalone, branch: B.standalone, baseRepo: repo, leasedBy: "local_full", createdAt: 1, uncleanSince: null },
+        "reused-dir-eeeeee": { name: "reused-dir-eeeeee", path: wt.reused, branch: "claude/reused-dir-eeeeee", baseRepo: repo, leasedBy: null },
+      },
+    }),
+  );
+  // 运行中会话：用当前测试进程的 pid，保证「存活」
+  writeFileSync(
+    join(claudeHome, "sessions", `${process.pid}.json`),
+    JSON.stringify({ pid: process.pid, hostSessionId: "local_full", sessionId: "cli-full", name: "实现 EPP 网关 v0", status: "busy", cwd: wt.standalone }),
+  );
+  writeFileSync(join(claudeHome, "sessions", `${process.pid}.abc.key`), "ignored");
+
+  return {
+    root,
+    repo,
+    claudeApp,
+    claudeHome,
+    heliuHome,
+    // HELIU_DOCTOR_SKIP_CLAUDE：doctor 的无头 claude 探测会真的启动 claude，测试里跳过
+    env: { HELIU_HOME: heliuHome, HELIU_CLAUDE_APP_DIR: claudeApp, HELIU_CLAUDE_HOME: claudeHome, HELIU_DOCTOR_SKIP_CLAUDE: "1" },
+    wt,
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+/** 零写入快照：关键 git 文件的 mtime/大小 + 对象/引用文件清单 */
+export function gitSnapshot(repo: string): string {
+  const out: string[] = [];
+  const g = join(repo, ".git");
+  for (const f of ["HEAD", "index", "logs/HEAD", "packed-refs", "config"]) {
+    try {
+      const s = statSync(join(g, f));
+      out.push(`${f}|${s.mtimeMs}|${s.size}`);
+    } catch {
+      out.push(`${f}|missing`);
+    }
+  }
+  const walk = (d: string, rel: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, e.name);
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) walk(p, r);
+      else {
+        const s = statSync(p);
+        out.push(`${r}|${s.mtimeMs}|${s.size}`);
+      }
+    }
+  };
+  walk(g, "");
+  return out.sort().join("\n");
+}
+{
+  "name": "heliu",
+  "version": "0.2.0",
+  "description": "合流（heliu）：分支 × worktree × 桌面会话对账单 + 功能卡/里程碑台账（CLI · MCP · hooks · Skill）",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "heliu": "./bin/heliu"
+  },
+  "scripts": {
+    "heliu": "bun run bin/heliu",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "commander": "15.0.0",
+    "hono": "4.13.14",
+    "preact": "11.0.2",
+    "string-width": "8.3.0",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  }
+}
+# M4 演练报告：磁吸背夹 vNext（2026-10-26 05:41）
+
+> 由 `heliu release rehearse vNext --project 磁吸背夹` 生成。全部写入只发生在演练目录：`/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107`。
+
+## 结论
+- 主仓库 文档仓 克隆上执行：合入 **18** · 已在集成 11 · 失败·待处理 0 · 顺延 **12** · 未演练 14
+- tag：文档仓 vNext → 329b066
+- 合并单：新增待合 10 · 已在集成 25 · 有冲突 8 · 未能试合 0 · 未检查 0 · 顺延 18
+- 解冲突器（Opus）花费：$0.00
+- 耗时：克隆 34ms · 预演 857ms · 执行 7.5s · 合计 8.6s
+- 真仓库零写入：**一致**（三仓库 stat 快照前后完全相同）
+- 写保护沙箱：**已启用**（sandbox-exec；克隆、试合、合并、解冲突器、checks 全部 deny 真实仓库的根目录与 .git）
+- 未推送：文档仓：refs/heads/claude/merge-features-refactor-143693 与 refs/tags/vNext（演练克隆上的引用，不影响真仓库）
+
+## 逐项结果
+| # | 决定 | 功能 | 分支 | 预演状态 | 试合冲突 | 执行结果 |
+|---|---|---|---|---|---|---|
+| 1 | 并入 | F-0019 语音对话应用思维框架 | docs `claude/voice-dialogue-framework-499d60` | 已进集成 | — | 已在集成 |
+| 2 | 并入 | F-0023 推送卡片同步到背夹 | docs `claude/push-card-sync-backclip-4c3877` | 已进集成 | — | 已在集成 |
+| 3 | 并入 | F-0026 首页设计与交互原型 | docs `claude/homepage-design-prototype-619d11` | 已进集成 | — | 已在集成 |
+| 4 | 并入 | F-0028 AI应用生成质量优化 | docs `claude/ai-app-generation-quality-3c1c8b` | 已进集成 | — | 已在集成 |
+| 5 | 并入 | F-0029 AI应用优化与功能迭代 | docs `claude/ai-app-optimization-90536f` | 已进集成 | — | 已在集成 |
+| 6 | 并入 | F-0030 语音链路和背夹扬声器播放 | docs `claude/voice-link-speaker-playback-a74fdb` | 已进集成 | — | 已在集成 |
+| 7 | 并入 | F-0031 固件1.0版本集成与烧录 | docs `claude/firmware-1-0-integration-b5f991` | 已进集成 | — | 已在集成 |
+| 8 | 并入 | F-0032 评估系统首页落地路线：原生 C 重写 vs 主题外壳 | docs `claude/elegant-gauss-1552b1` | 已进集成 | — | 已在集成 |
+| 9 | 并入 | F-0034 合并语音应用三档模式分支到 release/backclip-1.0 | docs `claude/funny-goldwasser-b9ae93` | 已进集成 | — | 已在集成 |
+| 10 | 并入 | F-0035 语音链路端到端闭环测试 | docs `claude/voice-e2e-loop-testing-dee94b` | 已进集成 | — | 已在集成 |
+| 11 | 并入 | F-0037 同步本地 main 与 GitHub main（解决三份总览冲突） | docs `claude/sync-main-github-20261019` | 已进集成 | — | 已在集成 |
+| 12 | 并入 | F-0045 aios: 分类器长按带起手坐标；静默窗口内按下的整次不算长按 | firmware `feat/aios-theme-ops` | 已进集成 | — | 未演练 |
+| 13 | 并入 | F-0046 companion: 精灵包 HVC1 生成/回读与参数包校验工具 | firmware `feat/aios-companion-assets` | 已进集成 | — | 未演练 |
+| 14 | 并入 | F-0047 stage: 参数包装载接受 palette.outline（line 的别名）与 mouth，内置默认对齐 A4 的 SYSTEM 包 | firmware `feat/aios-stage` | 已进集成 | — | 未演练 |
+| 15 | 并入 | F-0048 aios: 阶段 2 实机场景——戳公仔、按住说话、公仔上慢滑、四种外观与主题联动 | firmware `feat/aios-core` | 已进集成 | — | 未演练 |
+| 16 | 并入 | F-0049 aios: 开机后预热图标包，抽屉首次打开不卡；触摸注入抬起前补终点按下采样 | firmware `feat/aios-vswap` | 已进集成 | — | 未演练 |
+| 17 | 并入 | F-0050 companion: 参数包加墨点变体 ink 与白纸主题 paper | firmware `feat/aios-ink-companion` | 已进集成 | — | 未演练 |
+| 18 | 并入 | F-0051 aios-cards: 卡片流模型——48 张 upsert、淘汰、过期、排序与 backclip.card/1 校验，宿主测试 test_cards | firmware `feat/aios-cards` | 已进集成 | — | 未演练 |
+| 19 | 并入 | F-0052 drawer: 应用标签模块 hv_tags——9 类、规则兜底、user > phone-ai > rule 合并、tags.json 读写 | firmware `feat/aios-drawer` | 已进集成 | — | 未演练 |
+| 20 | 并入 | F-0053 timeline: 时间线日志核心与左拨面板（替换阶段 3 桩） | firmware `feat/aios-timeline` | 已进集成 | — | 未演练 |
+| 21 | 并入 | F-0054 call_agent: 电话秘书对话像人、不重复问——已问清单、上两轮注入、话术轮换 | firmware `feat/callsec-humanize` | 已进集成 | — | 未演练 |
+| 22 | 并入 | F-0055 speak: 首页回复朗读改流式合成 + 播放环形缓冲预攒，Wi-Fi 接收窗口放大 | firmware `feat/aios-stream-tts` | 已进集成 | — | 未演练 |
+| 23 | 并入 | F-0056 callsec: 通话卡 id 与时间线 ref 改用 Flash 纪要编号 call:<seq> | firmware `feat/aios-fw-followups` | 已进集成 | — | 未演练 |
+| 24 | 并入 | F-0057 cards: 打开卡片流焦点回到第一张；按着卡片时推迟 30 s 同步引起的重建 | firmware `feat/aios-cards-fixes` | 已进集成 | — | 未演练 |
+| 25 | 并入 | F-0058 timeline: 时间线 v2 数据层——每条事件带 lane（项目分支）与标签，加 journal_lanes | firmware `feat/aios-timeline-lanes` | 已进集成 | — | 未演练 |
+| 26 | 并入 | F-0005 原型功能补全与迭代 | docs `claude/prototype-completion-iteration-8cf1b2` | 无冲突 | 无 | 已合入 · → 95a3603 |
+| 27 | 并入 | F-0008 嵌入式端HTML显示可行性 | docs `claude/embedded-html-display-feasibility-157de3` | 无冲突 | 无 | 已合入 · → b477e15 |
+| 28 | 并入 | F-0009 Meta Muse 开放生态调研 | docs `claude/meta-muse-ecosystem-research-f429b3` | 无冲突 | 无 | 已合入 · → 28d2abb |
+| 29 | 并入 | F-0010 背夹底座标识图 | docs `claude/ai-clip-base-diagrams-bc15f6` | 无冲突 | 无 | 已合入 · → 1cecfed |
+| 30 | 并入 | F-0016 竖版背夹卸载功能UI | docs `claude/vertical-case-uninstall-ui-eb0832` | 无冲突 | 无 | 已合入 · → 9e7f8e9 |
+| 31 | 并入 | F-0018 固件同步到 GitHub | docs `claude/firmware-sync-github-776584` | 无冲突 | 无 | 已合入 · → f153420 · union 1 个 |
+| 32 | 并入 | F-0021 Apple Aqara 与磁吸背夹对比 | docs `claude/apple-aqara-vs-magnetic-clip-a056ed` | 无冲突 | 无 | 已合入 · → 6ea02ea |
+| 33 | 并入 | F-0038 磁吸背夹项目文件归档 | docs `claude/promo-package-20261019` | 无冲突 | 无 | 已合入 · → 2913d5c |
+| 34 | 并入 | F-0039 AI原生操作系统调研 | docs `claude/ai-native-os-research-867221` | 无冲突 | 无 | 已合入 · → b5f4dee |
+| 35 | 并入 | F-0040 API key model selection configuration | docs `claude/api-key-model-selection-7f08ac` | 无冲突 | 无 | 已合入 · → 22e42cf |
+| 36 | 并入 | F-0011 Micropixel Lua framework compatibility | docs `claude/micropixel-lua-compatibility-49359f` | 有冲突 | union（两边内容都保留、新日期在前）：README.md | 已合入 · → 5687999 · union 1 个 |
+| 37 | 并入 | F-0015 背夹使用场景穷举 | docs `claude/back-clip-use-cases-21d4e9` | 有冲突 | union（两边内容都保留、新日期在前）：README.md | 已合入 · → 2214076 · union 1 个 |
+| 38 | 并入 | F-0024 涂鸦云开发 PoC：背夹控制并显示涂鸦设备状态 | docs `claude/bold-mahavira-252937` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、嵌入式/README.md | 已合入 · → 685646f · union 2 个 |
+| 39 | 并入 | F-0025 小组件标准规范评估 | docs `claude/widget-standards-evaluation-eda7b5` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、嵌入式/README.md | 已合入 · → 664061f · union 2 个 |
+| 40 | 并入 | F-0036 起草小组件规范 v0.2：统一原生首页与 EPP 数据格式 | docs `claude/objective-morse-e42064` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、嵌入式/README.md | 已合入 · → a338e03 · union 1 个 |
+| 41 | 并入 | F-0022 AI应用优化与边界探索 | docs `claude/ai-app-optimization-boundaries-0a2a80` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md | 已合入 · → 82d8299 · union 3 个 |
+| 42 | 并入 | F-0027 ASR语音功能集成 | docs `claude/asr-voice-integration-e8596e` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md | 已合入 · → 86f72dd · union 3 个 |
+| 43 | 并入 | F-0033 实现 EPP 网关 v0（代调 MCP / CLI） | docs `claude/bold-shaw-093e51` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md | 已合入 · → 329b066 · union 3 个 |
+| 44 | 顺延 | F-0001 HTML交互页面原型 | docs `claude/html-interactive-prototype-f39588` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 无 | 不合 |
+| 45 | 顺延 | F-0002 场景挖掘 | docs `claude/scenario-discovery-d9fcb4` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 无 | 不合 |
+| 46 | 顺延 | F-0003 POC市场调研与可视化分析 | docs `claude/poc-market-research-analysis-587415` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 无 | 不合 |
+| 47 | 顺延 | F-0004 底座需求文档梳理 | docs `claude/base-requirements-doc-dd2357` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 无 | 不合 |
+| 48 | 顺延 | F-0006 AI背夹洞察同步 | docs `claude/ai-backclip-insights-sync-52d9cf` | 未完成（会话等你回答：confirm: push to GitHub remote? merge V2 branch? git init on USB folder? share a） | 无 | 不合 |
+| 49 | 顺延 | F-0007 磁吸背夹 HTML 原型构建 | docs `claude/magnetic-clip-html-prototype-1642f0` | 未完成（会话等你回答：Do you want the AI canvas definition in the PRD (§4.2) updated to match "voice →） | 无 | 不合 |
+| 50 | 顺延 | F-0012 竖版背夹卸载功能UI (fork) | docs `claude/quirky-villani-bb2ba2` | 未完成（会话等你回答：确认是否推送 feat/portrait-uninstall-drag 到 janauto/esp_claw） | 无 | 不合 |
+| 51 | 顺延 | F-0013 磁吸背夹竖版触屏焦点错误 | docs `claude/magnetic-clip-portrait-touch-focus-8bbfc2` | 未完成（会话等你回答：确认在 janauto 账号下建私有 GitHub 仓库并推送项目文档） | union（两边内容都保留、新日期在前）：README.md、嵌入式/README.md | 不合 |
+| 52 | 顺延 | F-0014 Live2D 交互角色可行性评估 | docs `claude/live2d-interactive-character-98f128` | 未完成（会话等你回答：确认：是否配置远端并合并 claude/live2d-interactive-character-98f128 到 main；以及“兼容MUSE”是要真接入Mu） | union（两边内容都保留、新日期在前）：README.md、业务/AI-Coding业务与进度.md | 不合 |
+| 53 | 顺延 | F-0017 磁吸背夹 CLI 监听功能评估 | docs `claude/magnetic-clip-cli-monitoring-577a21` | 未完成（会话等你回答：让另一个任务释放背夹，并用手机把背夹配到 esp-claw-D07132 的 2.4G 网络，然后告诉我） | union（两边内容都保留、新日期在前）：README.md | 不合 |
+| 54 | 顺延 | F-0020 主题系统架构设计 | docs `claude/theme-system-architecture-1cbb25` | 未完成（会话等你回答：选要做哪几件：1 刷 c38a2762 语音固件；2 推送小家外壳；3 推送语音固件到公开仓库） | union（两边内容都保留、新日期在前）：README.md | 不合 |
+| 55 | 顺延 | F-0041 AI电话助手来电路由与语气定制 | docs `claude/ai-phone-assistant-routing-a16f5a` | 未完成（会话等你回答：对6项拍板（可直接回“默认”采用推荐值）；另定方案文档推不推送到私有仓库） | union（两边内容都保留、新日期在前）：README.md、嵌入式/README.md | 不合 |
+| 56 | 顺延 | F-0042 ui_squareline: drag the centre icon to a trash to uninstall it | firmware `feat/portrait-uninstall-drag` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 需解冲突：components/common/system_ui/src/home_screen.c、components/common/ui_squareline/include/ui_squareline.h、components/common/ui_squareline/src/ui_page.c、components/common/ui_squareline/src/ui_squareline.c、components/common/ui_squareline/src/ui_squareline_priv.h、tools/system_ui_preview/README.md、tools/system_ui_preview/main.c | 不合 |
+| 57 | 顺延 | F-0043 ble: tear down by what actually came up when bridge start fails | firmware `fix/ble-stop-teardown` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 无 | 不合 |
+| 58 | 顺延 | F-0044 voice_cloud: 对话服务商 chat_provider 与思维链深度 chat_effort | firmware `feat/chat-provider-effort` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 需解冲突：components/common/system_ui/src/home_ops.c | 不合 |
+| 59 | 顺延 | F-0059 merge baked config and direct Bailian ASR fallback into app 0.7.0 | app `claude/app-0.7.0` | 无法合并（仓库未配置集成分支（project.yaml integration）） | — | 不合 |
+| 60 | 顺延 | F-0060 app: 对话模型可选 OpenAI / DeepSeek 与思维链深度 | app `feat/api-key-model-select` | 无法合并（仓库未配置集成分支（project.yaml integration）） | — | 不合 |
+| 61 | 顺延 | F-0061 app: app_state 拆成八个控制器，协议层补 2.0 操作与 hello.ops 协商 | app `feat/aios-app` | 无法合并（仓库未配置集成分支（project.yaml integration）） | — | 不合 |
+
+## 冲突怎么解的
+- F-0018：union（两边内容都保留、新日期在前）嵌入式/README.md
+- F-0011：union（两边内容都保留、新日期在前）README.md
+- F-0015：union（两边内容都保留、新日期在前）README.md
+- F-0024：union（两边内容都保留、新日期在前）README.md、嵌入式/README.md
+- F-0025：union（两边内容都保留、新日期在前）README.md、嵌入式/README.md
+- F-0036：union（两边内容都保留、新日期在前）README.md
+- F-0022：union（两边内容都保留、新日期在前）README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md
+- F-0027：union（两边内容都保留、新日期在前）README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md
+- F-0033：union（两边内容都保留、新日期在前）README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md
+
+## 顺延
+- F-0001 HTML交互页面原型 → vNext2（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」））
+- F-0002 场景挖掘 → vNext2（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」））
+- F-0003 POC市场调研与可视化分析 → vNext2（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」））
+- F-0004 底座需求文档梳理 → vNext2（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」））
+- F-0006 AI背夹洞察同步 → vNext2（会话等你回答：confirm: push to GitHub remote? merge V2 branch? git init on USB folder? share a）
+- F-0007 磁吸背夹 HTML 原型构建 → vNext2（会话等你回答：Do you want the AI canvas definition in the PRD (§4.2) updated to match "voice →）
+- F-0012 竖版背夹卸载功能UI (fork) → vNext2（会话等你回答：确认是否推送 feat/portrait-uninstall-drag 到 janauto/esp_claw）
+- F-0013 磁吸背夹竖版触屏焦点错误 → vNext2（会话等你回答：确认在 janauto 账号下建私有 GitHub 仓库并推送项目文档）
+- F-0014 Live2D 交互角色可行性评估 → vNext2（会话等你回答：确认：是否配置远端并合并 claude/live2d-interactive-character-98f128 到 main；以及“兼容MUSE”是要真接入Mu）
+- F-0017 磁吸背夹 CLI 监听功能评估 → vNext2（会话等你回答：让另一个任务释放背夹，并用手机把背夹配到 esp-claw-D07132 的 2.4G 网络，然后告诉我）
+- F-0020 主题系统架构设计 → vNext2（会话等你回答：选要做哪几件：1 刷 c38a2762 语音固件；2 推送小家外壳；3 推送语音固件到公开仓库）
+- F-0041 AI电话助手来电路由与语气定制 → vNext2（会话等你回答：对6项拍板（可直接回“默认”采用推荐值）；另定方案文档推不推送到私有仓库）
+
+## 真仓库零写入（stat 快照比对）
+| 仓库 | 快照项 | 新增 | 删除 | 变化 | 原始快照（相对演练目录） |
+|---|---|---|---|---|---|
+| 文档仓 | 898 | 0 | 0 | 0 | `snapshots/before-docs.tsv` → `snapshots/after-docs.tsv` |
+| 固件仓 | 676 | 0 | 0 | 0 | `snapshots/before-firmware.tsv` → `snapshots/after-firmware.tsv` |
+| App 仓 | 416 | 0 | 0 | 0 | `snapshots/before-app.tsv` → `snapshots/after-app.tsv` |
+- 每行「相对路径<TAB>mtime毫秒|大小」，可直接 `diff` 两个文件复核；演练目录：`/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107`。
+
+## 未演练
+- 只克隆主仓库（文档仓）；固件仓、App 仓 的项标「未演练」，台账副本里不改它们。
+
+## 位置
+- 克隆：`/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107/docs.git`
+- 台账副本（合并单 / 审计日志 / 改过的功能卡）：`/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107/ledger`
+- 可直接删除整个演练目录：`rm -rf "/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107"`
+
+---
+
+## 人工核查（Opus，演练后只读复核，2026-10-26 05:42）
+
+> 以上为命令自动生成；本节是演练后用 heliu 只读运行器（沙箱 deny 真仓库与克隆）复核的事实。
+> 同样的演练在 04:58、05:01 各跑过一次（合入 18 · 顺延 12 · 失败 0 · 真仓库快照一致）；本次 05:41 为 Codex 第 1 轮修复后重跑（报告新增原始快照文件与沙箱状态），旧演练目录已删除。
+
+**真仓库零写入（三道证据）**
+1. stat 快照：文档仓 898 项、固件仓 676 项、App 仓 416 项（原始文件 `snapshots/before-*.tsv` / `after-*.tsv`，逐对 `diff` 无差异）（`.git` 的 HEAD/index/config/packed-refs、refs、logs、objects/pack、objects/info、objects/xx 条目数与最新 mtime、worktrees/*，以及仓库根与顶层条目），前后完全一致。
+2. 引用：真仓库集成分支 `claude/merge-features-refactor-143693` 仍是 `4329a38`（= 合并单 base_sha）；真仓库没有 `refs/tags/vNext`；克隆 94 个引用 = 真仓库 93 个 + 新 tag。
+3. 台账：真台账 `~/Library/Application Support/heliu/projects/磁吸背夹/ledger` 没有 `releases/` 目录，vNext 仍是「规划中」；审计日志（109 行，全部「执行」、全部带沙箱，0 条 push/fetch）只在副本 `…/20261026-054107/ledger/releases/vNext.log`。
+
+**克隆上的结果**
+- 集成分支 first-parent 新增 18 个合并提交，附注 tag `vNext` 指向顶端 `329b066`；临时 worktree 已删（克隆 worktree 列表只剩自身）。
+- 三个 union 索引文件：残留冲突标记 0。合并后「集成分支原有、现已消失」的行每个文件 1 行，逐条追到都是 F-0027「ASR语音功能集成」分支自己改写的那一行（P1 端侧语音创作 / P1 语音链路），属正常合并结果，不是 union 丢内容；重复行（表格分隔行、代码块围栏）在集成分支里本来就重复。
+- 预演时 F-0018 试合无冲突，执行时在 `嵌入式/README.md` 冲突：前面已合入的分支改动了集成分支，执行时按实时集成分支重算，走了 union。逐项预检只是参考，执行以实时结果为准。
+
+**为什么没有「普通冲突交 Opus」的记录**
+- 文档仓本次可合的 18 项，冲突全部落在三个 union 索引文件（与 10-22 集成方案、M1 预检结论一致），没有需要解冲突器的文件，所以花费 $0、轮次 0。
+- 需要解冲突器的普通冲突只出现在固件仓：F-0042（7 个文件，主要是 ui_squareline 的 .c/.h）、F-0044（home_ops.c），两者都是「开发中」默认顺延，且固件仓不在本次演练范围。
+- 另外，本机独立调用 `claude -p` 目前无法登录：桌面版内置 CLI 报 OAuth 过期（令牌由桌面宿主续期），终端 npm 版报未登录。解冲突器已能识别这种情况：立即判「失败·待处理」，花费 $0、不重试；冲突项会顺延，不会写坏集成分支。真实 Opus 解冲突要等你在终端里登录 claude（或设 `HELIU_CLAUDE_BIN` 指向已登录的 claude）后重跑演练补验。代码路径已由桩解冲突器在单测里覆盖（`tests/release.test.ts`）。
+
+**顺延与「下一版」**
+- 12 项顺延 = 8 项绑定会话「等你回答」+ 4 项卡片状态「开发中」（F-0001～F-0004，9 月的老分支）。sync 草稿里固件仓的「开发中」卡也默认顺延，但固件仓未演练，台账副本里没动它们。
+- 本版就是 vNext，执行时 vNext 改为「合并中」，顺延目标是新建的 `vNext2`（台账副本里）。真实发布前建议先把 vNext 改名为具体版本号（`heliu milestone rename vNext v1.2`），这只是建议，本次没有改你的真台账。
+
+**真实执行前要知道的（事实）**
+- 文档仓集成分支正检出在 `.claude/worktrees/ai-engineering-content-bfff84`，固件仓 `feat/aios-entry` 检出在 `esp_claw-aios`。`heliu 合并` 会因此中止：移动被检出的引用会让那个目录显示为「有改动」。需要先在该目录切走，或明确加 `--allow-checked-out`。
+- App 仓没有配置集成分支，它的 3 项「无法合并」并默认顺延；heliu 不会自建集成分支，也不会直接往主线合。
+- 本报告的引用与 tag 只在克隆上，真仓库什么都没推送，也没有需要推送的东西。
+
+**Codex 第 1 轮补充：沙箱不可用时的预演（真实数据，台账临时副本，真台账未写）**
+- `HELIU_NO_SANDBOX=1` 下对磁吸背夹「下一版」预演：`新增待合 0 · 已在集成 25 · 有冲突 0 · 未能试合 25 · 未检查 0 · 顺延 11`（未能试合 25 项全部默认「待定」；8 项会话等你回答、3 项 App 仓无集成分支照常顺延）。原因原文：「无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检」。修复前同样条件下这 25 项被显示为「有冲突」且没有冲突文件。
+- 同一份真实数据在沙箱可用时：`新增待合 10 · 已在集成 25 · 有冲突 8 · 未能试合 0 · 未检查 0 · 顺延 18`（即原来笼统的「并入 43」= 25 + 10 + 8）。
+/**
+ * M4 合并执行：写模式运行器白名单、union 纯函数、解冲突器参数、合并单预演/刷新、run --dry-run / base_sha 闸 / run --yes / rollback、
+ * checks 失败、CLI 别名。
+ *
+ * fixture：主线 main + 集成分支 integ；
+ *   f1/f2/f3 无冲突（各加一个文件）· fu 与集成分支同处改 README.md（union 文件）· fc 与集成分支同行改 src.txt（普通冲突，桩解冲突器用 --ours）·
+ *   fb 未完成（绑定会话 blocked）· fi 已进集成分支。
+ */
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { assertWriteAllowed, GitForbiddenError, runGitWrite } from "../src/core/git.ts";
+import { Ledger } from "../src/core/ledger.ts";
+import { heliuPaths } from "../src/core/paths.ts";
+import { loadProject } from "../src/core/project.ts";
+import { previewRelease, setPlanDecision } from "../src/core/release.ts";
+import { loadPlan, parsePlan, planCountsLine, serializePlan } from "../src/core/release-plan.ts";
+import { isYes, rollbackRelease, runRelease } from "../src/core/release-run.ts";
+import { buildResolverPrompt, parseResolverOutput, probeResolver, resolverArgs, resolverBinary, runResolver } from "../src/core/resolver.ts";
+import { combineHunk, entryDate, unionFromMarkers } from "../src/core/union.ts";
+import { gitW } from "./helpers/fixture.ts";
+import { buildReleaseFixture, type RFx } from "./helpers/release-fixture.ts";
+
+const BIN = join(import.meta.dir, "..", "bin", "heliu");
+
+function refsOf(repo: string): string {
+  return gitW(repo, "for-each-ref", "--format=%(refname) %(objectname)");
+}
+const isAncestor = (repo: string, a: string, b: string): boolean =>
+  Bun.spawnSync({ cmd: ["git", "-C", repo, "merge-base", "--is-ancestor", a, b] }).exitCode === 0;
+
+let fx: RFx;
+const savedEnv: Record<string, string | undefined> = {};
+function useEnv(env: Record<string, string>): void {
+  for (const [k, v] of Object.entries(env)) {
+    if (!(k in savedEnv)) savedEnv[k] = process.env[k];
+    process.env[k] = v;
+  }
+}
+
+beforeAll(() => {
+  fx = buildReleaseFixture();
+  useEnv(fx.env);
+});
+afterAll(() => {
+  for (const [k, v] of Object.entries(savedEnv)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  rmSync(fx.root, { recursive: true, force: true });
+});
+
+const project = () => loadProject(heliuPaths({ ...process.env, ...fx.env }), "演示");
+const paths = () => heliuPaths({ ...process.env, ...fx.env });
+
+describe("写模式运行器（runGitWrite 白名单）", () => {
+  const opts = () => ({ cacheRoot: fx.cache, allowRefs: ["refs/heads/integ", "refs/tags/v1.2"] });
+  const deny = (cwd: string, args: string[]) => expect(() => assertWriteAllowed(cwd, args, opts())).toThrow(GitForbiddenError);
+  const allow = (cwd: string, args: string[]) => expect(() => assertWriteAllowed(cwd, args, opts())).not.toThrow();
+  const Z = "0".repeat(40);
+  const A = "a".repeat(40);
+  const Bs = "b".repeat(40);
+
+  test("拒绝 push / fetch / pull / branch -d / gc / config", () => {
+    for (const a of [["push", "origin", "integ"], ["fetch", "origin"], ["pull"], ["branch", "-d", "x"], ["gc"], ["config", "user.name", "x"], ["stash"], ["clean", "-fd"]]) deny(fx.repo, a);
+  });
+  test("reset --hard / checkout / merge / commit / add 只允许在 heliu 临时目录内", () => {
+    deny(fx.repo, ["reset", "--hard", "HEAD"]);
+    deny(fx.repo, ["checkout", "main"]);
+    deny(fx.repo, ["merge", "--no-commit", "feat/f1"]);
+    deny(fx.repo, ["commit", "-m", "x"]);
+    deny(fx.repo, ["add", "README.md"]);
+    const wt = join(fx.cache, "worktrees", "演示", "v1.2", "docs");
+    allow(wt, ["reset", "--hard", "-q", A]);
+    allow(wt, ["merge", "--no-commit", "--no-ff", A]);
+    allow(wt, ["add", "--", "README.md"]);
+    deny(wt, ["add", "-A"]);
+    deny(wt, ["commit", "--amend", "-m", "x"]);
+    deny(wt, ["merge", "-s", "ours", A]);
+  });
+  test("update-ref 必须带旧值、只许写允许的引用；不允许 -d / --stdin", () => {
+    allow(fx.repo, ["update-ref", "-m", "x", "refs/heads/integ", A, Bs]);
+    deny(fx.repo, ["update-ref", "refs/heads/integ", A]);
+    deny(fx.repo, ["update-ref", "refs/heads/main", A, Bs]);
+    deny(fx.repo, ["update-ref", "refs/heads/feat/f1", A, Bs]);
+    deny(fx.repo, ["update-ref", "-d", "refs/heads/integ", A]);
+    deny(fx.repo, ["update-ref", "--stdin"]);
+    deny(fx.repo, ["update-ref", "refs/heads/integ", Z, A]);
+  });
+  test("tag 只许附注 tag 与删除允许的名字；worktree 只许在缓存目录 add --detach / remove；clone 必须 --shared 且目标在缓存", () => {
+    allow(fx.repo, ["tag", "-a", "v1.2", "-m", "说明", A]);
+    allow(fx.repo, ["tag", "-d", "v1.2"]);
+    deny(fx.repo, ["tag", "-f", "-a", "v1.2", "-m", "x", A]);
+    deny(fx.repo, ["tag", "-a", "v9", "-m", "x", A]);
+    deny(fx.repo, ["tag", "v1.2", A]);
+    allow(fx.repo, ["worktree", "add", "--detach", "-q", join(fx.cache, "worktrees", "x"), A]);
+    deny(fx.repo, ["worktree", "add", "--detach", join(fx.root, "elsewhere"), A]);
+    deny(fx.repo, ["worktree", "add", "-b", "x", join(fx.cache, "w2"), A]);
+    deny(fx.repo, ["worktree", "remove", join(fx.repo, ".claude", "worktrees", "user")]);
+    deny(fx.repo, ["worktree", "prune"]);
+    allow(fx.cache, ["clone", "--mirror", "--shared", "-q", fx.repo, join(fx.cache, "rehearsal", "c.git")]);
+    deny(fx.cache, ["clone", "--mirror", fx.repo, join(fx.cache, "rehearsal", "c2.git")]);
+    deny(fx.cache, ["clone", "--shared", "https://example.com/x.git", join(fx.cache, "c3")]);
+    deny(fx.cache, ["clone", "--shared", fx.repo, join(fx.root, "outside")]);
+  });
+  test("拒绝也写审计日志；执行前先写一行", async () => {
+    const log = join(fx.root, "audit-test.log");
+    await expect(runGitWrite(fx.repo, ["push", "origin", "integ"], { reason: "测试", auditLog: log, cacheRoot: fx.cache })).rejects.toThrow(GitForbiddenError);
+    await expect(runGitWrite(fx.repo, ["fetch"], { reason: "测试", auditLog: log, cacheRoot: fx.cache })).rejects.toThrow(GitForbiddenError);
+    const text = readFileSync(log, "utf8");
+    expect(text.split("\n").filter((l) => l.includes("\t拒绝\t")).length).toBe(2);
+    expect(text).toContain("git push origin integ");
+  });
+});
+
+describe("union：两边都保留、新日期在前", () => {
+  test("日期识别", () => {
+    expect(entryDate("- 2026-10-22 新功能")).toBe(20261022);
+    expect(entryDate("| 2026.9.3 | x |")).toBe(20260903);
+    expect(entryDate("2026年10月5日 记录；20261101 补")).toBe(20261101);
+    expect(entryDate("没有日期")).toBeNull();
+  });
+  test("块内按日期排序；缺日期时保持 union 原序；可关闭", () => {
+    expect(combineHunk(["- 2026-10-20 A"], ["- 2026-10-22 U"], true).lines).toEqual(["- 2026-10-22 U", "- 2026-10-20 A"]);
+    expect(combineHunk(["- 2026-10-20 A"], ["- 2026-10-22 U"], false).lines).toEqual(["- 2026-10-20 A", "- 2026-10-22 U"]);
+    expect(combineHunk(["- A 无日期"], ["- 2026-10-22 U"], true).lines).toEqual(["- A 无日期", "- 2026-10-22 U"]);
+    expect(combineHunk(["段落 2026-10-01", "第二行"], ["段落 2026-10-05"], true).lines).toEqual(["段落 2026-10-05", "", "段落 2026-10-01", "第二行"]);
+    expect(combineHunk(["- 2026-10-20 A"], ["- 2026-10-20 A", "- 2026-10-21 B"], true).lines).toEqual(["- 2026-10-21 B", "- 2026-10-20 A"]);
+  });
+  test("解析 merge-file 标记输出（含 diff3 基线段）", () => {
+    const M = (c: string) => c.repeat(32);
+    const text = `头\n${M("<")} HELIU-集成\n- 2026-10-20 A\n${M("|")} HELIU-基\n${M("=")}\n- 2026-10-22 U\n${M(">")} HELIU-合入\n尾\n`;
+    const r = unionFromMarkers(text, { sortByDate: true });
+    expect(r.text).toBe("头\n- 2026-10-22 U\n- 2026-10-20 A\n尾\n");
+    expect(r.hunks).toBe(1);
+    expect(r.sorted).toBe(1);
+  });
+});
+
+describe("解冲突器调用约定", () => {
+  test("参数固定：opus、acceptEdits、工具白名单、预算 2、json；桩优先", () => {
+    const a = resolverArgs();
+    expect(a.slice(0, 5)).toEqual(["-p", "--model", "opus", "--permission-mode", "acceptEdits"]);
+    for (const t of ["Read", "Edit", "Write", "Bash(git diff *)", "Bash(git add *)", "Bash(git status *)", "Bash(git checkout --theirs *)", "Bash(git checkout --ours *)"]) expect(a).toContain(t);
+    expect(a.join(" ")).toContain("--max-budget-usd 2 --output-format json");
+    expect(resolverBinary({ HELIU_RESOLVER_STUB: "/x/stub.sh", HELIU_CLAUDE_BIN: "/y/claude" }).stub).toBe(true);
+    expect(resolverBinary({ HELIU_CLAUDE_BIN: "/y/claude" }).cmd).toEqual(["/y/claude"]);
+  });
+  test("提示词含两侧功能与规则；解析 JSON 输出", () => {
+    const p = buildResolverPrompt({
+/**
+ * M4 CLI：heliu release preview|run|rehearse|rollback|set，以及中文别名
+ *   heliu 合并 <版本> --预演   = release preview
+ *   heliu 合并 <版本>          = release run（可加 --dry-run / --yes / --to-main）
+ *   heliu 演练 <版本>          = release rehearse
+ *   heliu 回滚 <版本>          = release rollback
+ * 执行类命令无 --yes 时先打印执行前摘要，再要求输入 yes（直接回车 = 取消；需要终端）；
+ * 输出边执行边写（同步写 stdout），--json 时进度写 stderr、结果写 stdout。
+ * 只在 src/cli/index.ts 里 import 并调用 registerReleaseCommands(program)。
+ */
+import type { Command } from "commander";
+import { writeSync } from "node:fs";
+import { heliuPaths } from "../core/paths.ts";
+import { resolveProject, type ProjectConfig } from "../core/project.ts";
+import { previewRelease, setPlanDecision } from "../core/release.ts";
+import { isYes, rollbackRelease, runRelease, type ConfirmFn } from "../core/release-run.ts";
+import { rehearseRelease } from "../core/rehearse.ts";
+import { SCHEMA_VERSION } from "../types.ts";
+import { renderPreview, renderRehearsal, renderRollback, renderRunReport, renderSetDecision } from "./render-release.ts";
+
+interface G {
+  project?: string;
+  cwd?: string;
+  json?: boolean;
+  timeout?: string;
+}
+
+function writeAll(fd: number, text: string): void {
+  const buf = Buffer.from(text.endsWith("\n") ? text : `${text}\n`, "utf8");
+  let off = 0;
+  while (off < buf.length) {
+    try {
+      off += writeSync(fd, buf, off, buf.length - off);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "EAGAIN") {
+        Bun.sleepSync(2);
+        continue;
+      }
+      return;
+    }
+  }
+}
+
+function project(g: G): Promise<ProjectConfig> {
+  return resolveProject(heliuPaths(), g.project, g.cwd ?? process.cwd());
+}
+
+function emitJson(command: string, p: ProjectConfig, data: unknown): void {
+  writeAll(1, JSON.stringify({ schemaVersion: SCHEMA_VERSION, command, generatedAt: new Date().toISOString(), project: { name: p.name, source: p.source }, data }, null, 2));
+}
+
+/** 终端确认：只有输入 yes 才执行，直接回车 / 其他输入 = 取消；非终端返回 undefined（执行类命令会要求 --yes） */
+function terminalConfirm(): ConfirmFn | undefined {
+  if (!process.stdin.isTTY) return undefined;
+  const ask = (globalThis as { prompt?: (m?: string) => string | null }).prompt;
+  if (!ask) return undefined;
+  return async (q) => {
+    const ok = isYes(ask(`${q}\n>`));
+    if (!ok) writeAll(2, "  已取消（只有输入 yes 才会执行）");
+    return ok;
+  };
+}
+
+const progress = (g: G) => (line: string) => writeAll(g.json ? 2 : 1, line);
+const budgetOf = (v?: string) => (v !== undefined && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined);
+
+async function previewAction(ms: string, g: G): Promise<void> {
+  const p = await project(g);
+  const r = await previewRelease(p, heliuPaths(), ms, { timeoutMs: g.timeout ? Number(g.timeout) : undefined });
+  if (g.json) emitJson("release.preview", p, { file: r.file, kept: r.kept, plan: r.plan });
+  else writeAll(1, renderPreview(r, p));
+}
+
+interface RunOpts {
+  dryRun?: boolean;
+  yes?: boolean;
+  toMain?: boolean;
+  allowCheckedOut?: boolean;
+  budget?: string;
+}
+async function runAction(ms: string, o: RunOpts, g: G): Promise<void> {
+  const p = await project(g);
+  const r = await runRelease(p, ms, {
+    dryRun: !!o.dryRun,
+    yes: !!o.yes,
+    toMain: !!o.toMain,
+    allowCheckedOut: !!o.allowCheckedOut,
+    confirm: terminalConfirm(),
+    log: progress(g),
+    resolverBudgetUsd: budgetOf(o.budget),
+  });
+  if (g.json) emitJson("release.run", p, r);
+  else writeAll(1, renderRunReport(r, p));
+  if (r.aborted.length || r.failed.length || r.cancelled) process.exitCode = 1;
+}
+
+async function rehearseAction(ms: string, o: { report?: string; budget?: string }, g: G): Promise<void> {
+  const p = await project(g);
+  const r = await rehearseRelease(p, heliuPaths(), ms, { log: progress(g), reportFile: o.report, resolverBudgetUsd: budgetOf(o.budget) });
+  if (g.json) emitJson("release.rehearse", p, r);
+  else writeAll(1, renderRehearsal(r));
+  if (!r.zeroWrite || r.run.aborted.length) process.exitCode = 1;
+}
+
+async function rollbackAction(ms: string, o: { yes?: boolean; allowCheckedOut?: boolean }, g: G): Promise<void> {
+  const p = await project(g);
+  const r = await rollbackRelease(p, ms, { yes: !!o.yes, confirm: terminalConfirm(), log: progress(g), allowCheckedOut: !!o.allowCheckedOut });
+  if (g.json) emitJson("release.rollback", p, r);
+  else writeAll(1, renderRollback(r, p));
+  if (!r.complete) process.exitCode = 1;
+}
+
+const globals = (cmd: Command): G => cmd.optsWithGlobals() as G;
+
+function runOptions(c: Command): Command {
+  return c
+    .option("--dry-run", "只演示每一项会怎么处理，不移动任何引用")
+    .option("--yes", "不再确认，按合并单执行（不加时：先看摘要，输入 yes 才执行）")
+    .option("--to-main", "发布后若主线能快进到集成分支，就快进主线（否则列出来问你）")
+    .option("--allow-checked-out", "集成分支/主线在某个 worktree 里检出时仍继续（那个目录需你自己同步）")
+    .option("--budget <美元>", "本次解冲突器总预算（默认 10；每次调用另有 --max-budget-usd 2）");
+}
+
+export function registerReleaseCommands(program: Command): void {
+  const rel = program.command("release").description("按里程碑合并：preview 合并单 → run 执行 → rollback 回滚；rehearse 在克隆上演练（唯一会写被管理仓库的命令组）");
+  rel
+    .command("preview <版本>")
+    .description("生成/刷新合并单草稿（只读仓库：试合在临时对象区）；保留你改过的决定")
+    .action(async (ms: string, _o, cmd: Command) => previewAction(ms, globals(cmd)));
+  runOptions(rel.command("run <版本>").description("按合并单合入集成分支 → tag → 顺延 → 发布说明；绝不 push")).action(async (ms: string, o: RunOpts, cmd: Command) =>
+    runAction(ms, o, globals(cmd)),
+  );
+  rel
+    .command("rehearse <版本>")
+    .description("把主仓库 clone --mirror --shared 到 ~/.cache/heliu/rehearsal/，在克隆上完整跑 preview + run --yes，并对真仓库做零写入比对")
+    .option("--report <文件>", "演练报告另存一份到这个文件")
+    .option("--budget <美元>", "解冲突器总预算（默认 10）")
+    .action(async (ms: string, o: { report?: string; budget?: string }, cmd: Command) => rehearseAction(ms, o, globals(cmd)));
+  rel
+    .command("rollback <版本>")
+    .description("按合并单 refs_moved 逆序把引用指回旧值（只回退 heliu 自己移动过的），删 heliu 打的 tag，恢复功能卡")
+    .option("--yes", "不再确认")
+    .option("--allow-checked-out", "引用在某个 worktree 里检出时仍继续")
+    .action(async (ms: string, o: { yes?: boolean; allowCheckedOut?: boolean }, cmd: Command) => rollbackAction(ms, o, globals(cmd)));
+  rel
+    .command("set <版本> <项> <决定>")
+    .description("改合并单里某项的决定：<项> = 卡号（F-0003）或 #序号；<决定> = 并入 / 顺延 / 等它 / 不并")
+    .option("--repo <id>", "卡片绑了多个分支时只改这个仓库的")
+    .option("--branch <分支>", "只改这个分支")
+    .action(async (ms: string, target: string, decision: string, o: { repo?: string; branch?: string }, cmd: Command) => {
+      const g = globals(cmd);
+      const p = await project(g);
+      const r = setPlanDecision(p, ms, target, decision, o);
+      if (g.json) emitJson("release.set", p, { file: r.plan.file, changed: r.changed });
+      else writeAll(1, renderSetDecision(r, p));
+    });
+
+  runOptions(
+    program
+      .command("合并 <版本>")
+      .description("= release run；加 --预演 = release preview（生成合并单）")
+      .option("--预演", "只生成/刷新合并单（= release preview）"),
+  ).action(async (ms: string, o: RunOpts & { 预演?: boolean }, cmd: Command) => {
+    const g = globals(cmd);
+    if (o.预演) return previewAction(ms, g);
+    return runAction(ms, o, g);
+  });
+  program
+    .command("演练 <版本>")
+    .description("= release rehearse：在主仓库克隆上完整演练一遍合并")
+    .option("--report <文件>", "演练报告另存一份到这个文件")
+    .option("--budget <美元>", "解冲突器总预算（默认 10）")
+    .action(async (ms: string, o: { report?: string; budget?: string }, cmd: Command) => rehearseAction(ms, o, globals(cmd)));
+  program
+    .command("回滚 <版本>")
+    .description("= release rollback")
+    .option("--yes", "不再确认")
+    .option("--allow-checked-out", "引用在某个 worktree 里检出时仍继续")
+    .action(async (ms: string, o: { yes?: boolean; allowCheckedOut?: boolean }, cmd: Command) => rollbackAction(ms, o, globals(cmd)));
+}
+
+exec
+/bin/zsh -lc "command -v bun; cat bin/heliu; cat src/core/paths.ts; sed -n '75,140p' docs/04-验收记录/M4-演练报告.md; ls -ld node_modules; git rev-parse --short HEAD; rg --files -g AGENTS.md -g '"'!node_modules*'"' .." in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ exited 1 in 0ms:
+/Users/linxiansheng/.bun/bin/bun
+#!/bin/sh
+':' //; # 合流（heliu）CLI 入口。本文件既是 POSIX sh 脚本，也是 bun 能直接跑的 JS 模块：
+':' //; #  - 直接执行（./bin/heliu、plugin 的 .mcp.json、PATH 上的 heliu）：sh 自己找 bun 再 exec 到 src/cli/main.ts，不依赖 PATH 里有 bun；
+':' //; #  - bun run bin/heliu（验收提示词与旧文档的用法）：bun 当 JS 读，每行开头的 ':' 是无害的字符串语句、// 之后是注释，最后一行 import 入口。
+':' //; # 找 bun 的顺序：command -v bun → ~/.bun/bin/bun → /opt/homebrew/bin/bun → /usr/local/bin/bun → $BUN_BIN；找不到打印一行中文错误、退出 1。
+':' //; SELF=$0
+':' //; while [ -L "$SELF" ]; do L=$(readlink "$SELF"); case $L in /*) SELF=$L ;; *) SELF=$(dirname "$SELF")/$L ;; esac; done
+':' //; ROOT=$(cd "$(dirname "$SELF")/.." && pwd)
+':' //; BUN=
+':' //; for c in "$(command -v bun 2>/dev/null)" "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun "$BUN_BIN"; do if [ -n "$c" ] && [ -x "$c" ]; then BUN=$c; break; fi; done
+':' //; if [ -z "$BUN" ]; then echo "heliu：找不到 bun（已找过 PATH、~/.bun/bin、/opt/homebrew/bin、/usr/local/bin、BUN_BIN）。请安装 bun（https://bun.sh），或设置环境变量 BUN_BIN=<bun 的路径>" >&2; exit 1; fi
+':' //; exec "$BUN" "$ROOT/src/cli/main.ts" "$@"
+import "../src/cli/main.ts";
+/**
+ * 本机数据位置（ADR-3）。全部可用环境变量覆盖，测试用它指向 fixture。
+ * - HELIU_HOME：heliu 注册表与缓存根目录
+ * - HELIU_CLAUDE_APP_DIR：Claude 桌面应用数据目录（会话 JSON、git-worktrees.json）
+ * - HELIU_CLAUDE_HOME：~/.claude（运行中会话 sessions/<pid>.json）
+ */
+import { existsSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
+export interface HeliuPaths {
+  heliuHome: string;
+  projectsDir: string;
+  claudeAppDir: string;
+  desktopSessionsDir: string;
+  gitWorktreesJson: string;
+  claudeHome: string;
+  runningSessionsDir: string;
+}
+
+export function heliuPaths(env: NodeJS.ProcessEnv = process.env): HeliuPaths {
+  const home = homedir();
+  const heliuHome = env.HELIU_HOME || join(home, "Library", "Application Support", "heliu");
+  const claudeAppDir = env.HELIU_CLAUDE_APP_DIR || join(home, "Library", "Application Support", "Claude");
+  const claudeHome = env.HELIU_CLAUDE_HOME || join(home, ".claude");
+  return {
+    heliuHome,
+    projectsDir: join(heliuHome, "projects"),
+    claudeAppDir,
+    desktopSessionsDir: join(claudeAppDir, "claude-code-sessions"),
+    gitWorktreesJson: join(claudeAppDir, "git-worktrees.json"),
+    claudeHome,
+    runningSessionsDir: join(claudeHome, "sessions"),
+  };
+}
+
+/** 是否位于 iCloud Drive（按路径判断） */
+export function looksLikeICloud(p: string): boolean {
+  return p.includes("/Library/Mobile Documents/");
+}
+
+const realCache = new Map<string, string>();
+/**
+ * 规范化路径用于比较：realpath（不存在则 resolve）+ Unicode NFC。
+ * realpath 只 stat 不读内容，不会触发 iCloud 下载。
+ */
+export function canonicalPath(p: string): string {
+  const cached = realCache.get(p);
+  if (cached !== undefined) return cached;
+  let out: string;
+  try {
+    out = existsSync(p) ? realpathSync(p) : resolve(p);
+  } catch {
+    out = resolve(p);
+  }
+  out = out.normalize("NFC").replace(/\/+$/, "");
+  realCache.set(p, out);
+  return out;
+}
+
+/** child 是否等于 parent 或位于其下 */
+export function isUnder(child: string, parent: string): boolean {
+  return child === parent || child.startsWith(parent + "/");
+}
+
+/**
+ * M4 合并执行的临时目录根（非 iCloud）：~/.cache/heliu（HELIU_CACHE_DIR 可覆盖，测试用）。
+ * 下设 worktrees/<项目>/<里程碑>/<仓库>（解冲突用的临时 worktree）、rehearsal/<项目>/<时间>/（演练克隆）、tmp/。
+ * 写模式 git 只允许在这里做 checkout / merge / reset 等会动工作区的操作。
+ */
+export function heliuCacheDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.HELIU_CACHE_DIR || join(homedir(), ".cache", "heliu");
+}
+| 58 | 顺延 | F-0044 voice_cloud: 对话服务商 chat_provider 与思维链深度 chat_effort | firmware `feat/chat-provider-effort` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 需解冲突：components/common/system_ui/src/home_ops.c | 不合 |
+| 59 | 顺延 | F-0059 merge baked config and direct Bailian ASR fallback into app 0.7.0 | app `claude/app-0.7.0` | 无法合并（仓库未配置集成分支（project.yaml integration）） | — | 不合 |
+| 60 | 顺延 | F-0060 app: 对话模型可选 OpenAI / DeepSeek 与思维链深度 | app `feat/api-key-model-select` | 无法合并（仓库未配置集成分支（project.yaml integration）） | — | 不合 |
+| 61 | 顺延 | F-0061 app: app_state 拆成八个控制器，协议层补 2.0 操作与 hello.ops 协商 | app `feat/aios-app` | 无法合并（仓库未配置集成分支（project.yaml integration）） | — | 不合 |
+
+## 冲突怎么解的
+- F-0018：union（两边内容都保留、新日期在前）嵌入式/README.md
+- F-0011：union（两边内容都保留、新日期在前）README.md
+- F-0015：union（两边内容都保留、新日期在前）README.md
+- F-0024：union（两边内容都保留、新日期在前）README.md、嵌入式/README.md
+- F-0025：union（两边内容都保留、新日期在前）README.md、嵌入式/README.md
+- F-0036：union（两边内容都保留、新日期在前）README.md
+- F-0022：union（两边内容都保留、新日期在前）README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md
+- F-0027：union（两边内容都保留、新日期在前）README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md
+- F-0033：union（两边内容都保留、新日期在前）README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md
+
+## 顺延
+- F-0001 HTML交互页面原型 → vNext2（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」））
+- F-0002 场景挖掘 → vNext2（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」））
+- F-0003 POC市场调研与可视化分析 → vNext2（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」））
+- F-0004 底座需求文档梳理 → vNext2（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」））
+- F-0006 AI背夹洞察同步 → vNext2（会话等你回答：confirm: push to GitHub remote? merge V2 branch? git init on USB folder? share a）
+- F-0007 磁吸背夹 HTML 原型构建 → vNext2（会话等你回答：Do you want the AI canvas definition in the PRD (§4.2) updated to match "voice →）
+- F-0012 竖版背夹卸载功能UI (fork) → vNext2（会话等你回答：确认是否推送 feat/portrait-uninstall-drag 到 janauto/esp_claw）
+- F-0013 磁吸背夹竖版触屏焦点错误 → vNext2（会话等你回答：确认在 janauto 账号下建私有 GitHub 仓库并推送项目文档）
+- F-0014 Live2D 交互角色可行性评估 → vNext2（会话等你回答：确认：是否配置远端并合并 claude/live2d-interactive-character-98f128 到 main；以及“兼容MUSE”是要真接入Mu）
+- F-0017 磁吸背夹 CLI 监听功能评估 → vNext2（会话等你回答：让另一个任务释放背夹，并用手机把背夹配到 esp-claw-D07132 的 2.4G 网络，然后告诉我）
+- F-0020 主题系统架构设计 → vNext2（会话等你回答：选要做哪几件：1 刷 c38a2762 语音固件；2 推送小家外壳；3 推送语音固件到公开仓库）
+- F-0041 AI电话助手来电路由与语气定制 → vNext2（会话等你回答：对6项拍板（可直接回“默认”采用推荐值）；另定方案文档推不推送到私有仓库）
+
+## 真仓库零写入（stat 快照比对）
+| 仓库 | 快照项 | 新增 | 删除 | 变化 | 原始快照（相对演练目录） |
+|---|---|---|---|---|---|
+| 文档仓 | 898 | 0 | 0 | 0 | `snapshots/before-docs.tsv` → `snapshots/after-docs.tsv` |
+| 固件仓 | 676 | 0 | 0 | 0 | `snapshots/before-firmware.tsv` → `snapshots/after-firmware.tsv` |
+| App 仓 | 416 | 0 | 0 | 0 | `snapshots/before-app.tsv` → `snapshots/after-app.tsv` |
+- 每行「相对路径<TAB>mtime毫秒|大小」，可直接 `diff` 两个文件复核；演练目录：`/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107`。
+
+## 未演练
+- 只克隆主仓库（文档仓）；固件仓、App 仓 的项标「未演练」，台账副本里不改它们。
+
+## 位置
+- 克隆：`/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107/docs.git`
+- 台账副本（合并单 / 审计日志 / 改过的功能卡）：`/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107/ledger`
+- 可直接删除整个演练目录：`rm -rf "/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107"`
+
+---
+
+## 人工核查（Opus，演练后只读复核，2026-10-26 05:42）
+
+> 以上为命令自动生成；本节是演练后用 heliu 只读运行器（沙箱 deny 真仓库与克隆）复核的事实。
+> 同样的演练在 04:58、05:01 各跑过一次（合入 18 · 顺延 12 · 失败 0 · 真仓库快照一致）；本次 05:41 为 Codex 第 1 轮修复后重跑（报告新增原始快照文件与沙箱状态），旧演练目录已删除。
+
+**真仓库零写入（三道证据）**
+1. stat 快照：文档仓 898 项、固件仓 676 项、App 仓 416 项（原始文件 `snapshots/before-*.tsv` / `after-*.tsv`，逐对 `diff` 无差异）（`.git` 的 HEAD/index/config/packed-refs、refs、logs、objects/pack、objects/info、objects/xx 条目数与最新 mtime、worktrees/*，以及仓库根与顶层条目），前后完全一致。
+2. 引用：真仓库集成分支 `claude/merge-features-refactor-143693` 仍是 `4329a38`（= 合并单 base_sha）；真仓库没有 `refs/tags/vNext`；克隆 94 个引用 = 真仓库 93 个 + 新 tag。
+3. 台账：真台账 `~/Library/Application Support/heliu/projects/磁吸背夹/ledger` 没有 `releases/` 目录，vNext 仍是「规划中」；审计日志（109 行，全部「执行」、全部带沙箱，0 条 push/fetch）只在副本 `…/20261026-054107/ledger/releases/vNext.log`。
+
+**克隆上的结果**
+- 集成分支 first-parent 新增 18 个合并提交，附注 tag `vNext` 指向顶端 `329b066`；临时 worktree 已删（克隆 worktree 列表只剩自身）。
+- 三个 union 索引文件：残留冲突标记 0。合并后「集成分支原有、现已消失」的行每个文件 1 行，逐条追到都是 F-0027「ASR语音功能集成」分支自己改写的那一行（P1 端侧语音创作 / P1 语音链路），属正常合并结果，不是 union 丢内容；重复行（表格分隔行、代码块围栏）在集成分支里本来就重复。
+- 预演时 F-0018 试合无冲突，执行时在 `嵌入式/README.md` 冲突：前面已合入的分支改动了集成分支，执行时按实时集成分支重算，走了 union。逐项预检只是参考，执行以实时结果为准。
+
+**为什么没有「普通冲突交 Opus」的记录**
+- 文档仓本次可合的 18 项，冲突全部落在三个 union 索引文件（与 10-22 集成方案、M1 预检结论一致），没有需要解冲突器的文件，所以花费 $0、轮次 0。
+- 需要解冲突器的普通冲突只出现在固件仓：F-0042（7 个文件，主要是 ui_squareline 的 .c/.h）、F-0044（home_ops.c），两者都是「开发中」默认顺延，且固件仓不在本次演练范围。
+lrwxr-xr-x  1 linxiansheng  staff  103 Oct 26 05:45 node_modules -> /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/项目管理工具/node_modules.nosync
+0d7dedb
+
+codex
+说明中的顺延和回滚流程很清楚；需要保留的证据边界是：普通冲突目前只有桩验证，真实演练只覆盖文档仓。我会实走命令确认这些结果，并重点查看确认提示和“未推送”提醒。
+
+exec
+/bin/zsh -lc "bun -e 'import {buildReleaseFixture} from \"./tests/helpers/release-fixture.ts\"; import {writeFileSync} from \"node:fs\"; const fx=buildReleaseFixture(); writeFileSync(\"/tmp/heliu-m4-r2-fixture.json\",JSON.stringify(fx,null,2)); console.log(fx.root);'" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 492ms:
+/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5
+
+exec
+/bin/zsh -lc "cat '/Users/linxiansheng/Library/Application Support/heliu/projects/磁吸背夹/project.yaml'; sed -n '1,150p' src/core/snapshot.ts; sed -n '1,160p' src/cli/render-release.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 0ms:
+# heliu 项目注册表：磁吸背夹（三仓库）
+# 正本位置：~/Library/Application Support/heliu/projects/磁吸背夹/project.yaml
+# 主线/集成分支均于 2026-10-26 只读核实（symbolic-ref、branch --list、merge-base）。
+name: 磁吸背夹
+# 台账（功能卡 + 里程碑）放在 heliu 自己的数据目录：M2 起不往磁吸背夹三个仓库写任何文件。
+# 缺省是 <主仓库>/.heliu/（主仓库 = primary 或第一个仓库）。
+ledger: ~/Library/Application Support/heliu/projects/磁吸背夹/ledger
+# M4：合并时按 union 处理的索引文件（两边都保留、新日期在前；10-22 集成方案里三处冲突都在这三个文件）。
+# 路径相对仓库根，对项目内所有仓库生效（固件仓 README.md 若冲突也按 union 处理）。union_sort_by_date: false 可关闭排序。
+union_files:
+  - README.md
+  - 嵌入式/README.md
+  - 业务/AI-Coding业务与进度.md
+# M4：合并后在临时 worktree 里跑的检查（可空）。文档仓没有测试，暂不配置。
+# checks: []
+repos:
+  - id: docs
+    label: 文档仓
+    path: /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹
+    main: main
+    integration: claude/merge-features-refactor-143693
+    remote: github
+    icloud: true
+  - id: firmware
+    label: 固件仓
+    path: /Users/linxiansheng/.cache/backclip-web/esp_claw
+    # 产品主线是 release/backclip-1.1（本地 main 是上游 ESP-Claw 的 main）；1.1 是 feat/aios-entry 的祖先（0/100）
+    main: release/backclip-1.1
+    integration: feat/aios-entry
+    # github=janauto（release/backclip-1.0 的上游所在），origin=公司 GitLab；1.1 目前两边都没有
+    remote: github
+    icloud: false
+  - id: app
+    label: App 仓
+    path: /Users/linxiansheng/.cache/backclip-app-gitlab-20261015
+    # HEAD 与唯一的发布分支；上游 github/release/backclip-1.0
+    main: release/backclip-1.0
+    remote: github
+    icloud: false
+/**
+ * 真仓库零写入证据：对仓库 .git 元数据与工作目录顶层做 stat 快照（只 stat / readdir，不读文件内容，不触发 iCloud 下载）。
+ * 沿用 M1/M2 的方法：HEAD/index/config/packed-refs、logs、refs、objects/pack、objects/info、objects/xx（目录 mtime + 条目数 + 最新 mtime）、
+ * worktrees/*（各 worktree 的 HEAD/index 等）、仓库根目录与顶层条目。
+ */
+import { existsSync, lstatSync, readdirSync, statSync, type Dirent } from "node:fs";
+import { join } from "node:path";
+
+export type Snapshot = Map<string, string>;
+
+function st(p: string): string | null {
+  try {
+    const s = lstatSync(p);
+    return `${s.mtimeMs}|${s.size}`;
+  } catch {
+    return null;
+  }
+}
+
+function walk(dir: string, rel: string, out: Snapshot, depth = 0): void {
+  if (depth > 12 || !existsSync(dir)) return;
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    const p = join(dir, e.name);
+    const r = `${rel}/${e.name}`;
+    if (e.isDirectory()) {
+      out.set(`${r}/`, st(p) ?? "missing");
+      walk(p, r, out, depth + 1);
+    } else out.set(r, st(p) ?? "missing");
+  }
+}
+
+/** 一个仓库的快照；commonDir 缺省 <root>/.git */
+export function snapshotRepo(root: string, commonDir = join(root, ".git")): Snapshot {
+  const out: Snapshot = new Map();
+  const g = commonDir;
+  out.set("<root>/", st(root) ?? "missing");
+  try {
+    for (const e of readdirSync(root)) out.set(`<root>/${e}`, st(join(root, e)) ?? "missing");
+  } catch {
+    /* 不可读就只记根目录 */
+  }
+  for (const f of ["HEAD", "index", "config", "packed-refs", "FETCH_HEAD", "ORIG_HEAD", "MERGE_HEAD", "shallow", "description", "COMMIT_EDITMSG"]) {
+    out.set(f, st(join(g, f)) ?? "missing");
+  }
+  walk(join(g, "refs"), "refs", out);
+  walk(join(g, "logs"), "logs", out);
+  walk(join(g, "objects", "pack"), "objects/pack", out);
+  walk(join(g, "objects", "info"), "objects/info", out);
+  walk(join(g, "worktrees"), "worktrees", out, 10);
+  // 松散对象：每个 xx 目录记 mtime、条目数、最新 mtime
+  const od = join(g, "objects");
+  try {
+    for (const d of readdirSync(od)) {
+      if (!/^[0-9a-f]{2}$/.test(d)) continue;
+      const p = join(od, d);
+      let n = 0;
+      let newest = 0;
+      for (const f of readdirSync(p)) {
+        n++;
+        try {
+          newest = Math.max(newest, statSync(join(p, f)).mtimeMs);
+        } catch {
+          /* 并发删除 */
+        }
+      }
+      out.set(`objects/${d}/`, `${st(p)}|n=${n}|newest=${newest}`);
+    }
+  } catch {
+    /* 没有 objects 目录 */
+  }
+  return out;
+}
+
+export interface SnapshotDiff {
+  added: string[];
+  removed: string[];
+  changed: string[];
+}
+
+export function diffSnapshots(a: Snapshot, b: Snapshot): SnapshotDiff {
+  const added: string[] = [];
+  const removed: string[] = [];
+  const changed: string[] = [];
+  for (const [k, v] of b) {
+    if (!a.has(k)) added.push(k);
+    else if (a.get(k) !== v) changed.push(k);
+  }
+  for (const k of a.keys()) if (!b.has(k)) removed.push(k);
+  return { added, removed, changed };
+}
+
+export function diffCount(d: SnapshotDiff): number {
+  return d.added.length + d.removed.length + d.changed.length;
+}
+/**
+ * M4 合并单 / 执行 / 回滚 / 演练的中文终端渲染（事实与建议分开写）。
+ */
+import type { ProjectConfig } from "../core/project.ts";
+import type { PreviewResult, SetDecisionResult } from "../core/release.ts";
+import { ACTION_TEXT, conflictText, planCountsLine, resultText, type PlanItem, type ReleasePlan } from "../core/release-plan.ts";
+import type { RollbackReport, RunReport } from "../core/release-run.ts";
+import { sec, type RehearseResult } from "../core/rehearse.ts";
+
+const short = (s: string | null | undefined) => (s ? s.slice(0, 7) : "—");
+
+function labelMap(plan: ReleasePlan): Map<string, string> {
+  return new Map(plan.repos.map((r) => [r.repo, r.label]));
+}
+
+export function renderItemLine(i: PlanItem, k: number, labels: Map<string, string>): string {
+  const box = i.decision === "并入" ? "[x]" : "[ ]";
+  const changed = i.decision !== i.default_decision ? "（你改的）" : "";
+  const where = i.repo && i.branch ? ` · ${labels.get(i.repo) ?? i.repo} ${i.branch}` : "";
+  const state = i.state === "已进集成" ? "已进集成（跳过）" : `${i.state} → ${ACTION_TEXT[i.state]}`;
+  const extra = [i.precheck?.conflicts.length ? conflictText(i) : null, i.detail, i.behind ? `落后集成 ${i.behind}` : null].filter(Boolean).join(" · ");
+  const res = resultText(i);
+  return `  #${String(k + 1).padEnd(3)} ${box} ${i.decision}${changed}  ${i.feature} ${i.title}${where} · ${state}${extra ? ` · ${extra}` : ""}${res ? `  ⇒ ${res}` : ""}`;
+}
+
+export function renderPlan(plan: ReleasePlan, project: ProjectConfig): string {
+  const labels = labelMap(plan);
+  const L: string[] = [];
+  L.push(`合流 · ${project.name} · 合并单 ${plan.milestone}（${plan.status}）`);
+  for (const r of plan.repos) L.push(`  ${r.label}：集成分支 ${r.integration_branch ?? "（未配置）"}${r.base_sha ? ` @${short(r.base_sha)}` : ""}`);
+  const groups: Array<[string, PlanItem[]]> = [];
+  for (const it of plan.items) {
+    const key = it.state;
+    const g = groups.find((x) => x[0] === key);
+    if (g) g[1].push(it);
+    else groups.push([key, [it]]);
+  }
+  let k = 0;
+  for (const [state, items] of groups) {
+    L.push("", `${state}（${items.length}）`);
+    for (const it of items) L.push(renderItemLine(it, k++, labels));
+  }
+  L.push("", `合计 ${plan.items.length} 项：${planCountsLine(plan)}`);
+  return L.join("\n");
+}
+
+export function renderPreview(r: PreviewResult, project: ProjectConfig): string {
+  const L = [renderPlan(r.plan, project), ""];
+  L.push(`合并单：${r.file}`);
+  if (r.kept) L.push(`保留了你改过的决定 ${r.kept} 项。`);
+  if (r.boardDraft) {
+    L.push(`原文件是看板生成的草稿，已备份到 ${r.boardDraft.backup}；它的决定没有导入${r.boardDraft.differing.length ? `，与本次默认不同的 ${r.boardDraft.differing.length} 项：${r.boardDraft.differing.map((d) => `${d.feature} 看板「${d.board}」/ 现在「${d.now}」`).join("；")}` : "（与本次默认一致）"}`);
+  }
+  const failed = r.plan.items.filter((i) => i.state === "未能试合");
+  if (failed.length) L.push(`未能试合 ${failed.length} 项（没有得到试合结果，不等于有冲突）：默认「待定」，执行时跳过、留在本版；建议重新试合（heliu doctor 看沙箱是否可用）或人工确认后 heliu release set ${r.milestone.id} <卡号> 并入|顺延。`);
+  L.push(`下一步（建议）：核对决定（改：heliu release set ${r.milestone.id} <卡号|#序号> 并入|顺延|等它|不并）→ heliu 合并 ${r.milestone.id} --dry-run → heliu 合并 ${r.milestone.id}`);
+  return L.join("\n");
+}
+
+export function renderSetDecision(r: SetDecisionResult, project: ProjectConfig): string {
+  const labels = labelMap(r.plan);
+  const L = [r.changed.length ? `已改 ${r.changed.length} 项：` : "没有需要改的项（已是该决定，或已进集成/已合入）"];
+  for (const it of r.changed) L.push(renderItemLine(it, r.plan.items.indexOf(it), labels));
+  L.push(`合并单：${r.plan.file}`);
+  void project;
+  return L.join("\n");
+}
+
+export function renderRunReport(r: RunReport, project: ProjectConfig): string {
+  const L: string[] = [];
+  const labels = labelMap(r.plan);
+  if (r.aborted.length) {
+    L.push(`合流 · ${project.name} · 合并 ${r.milestone}：已中止，没有写任何东西`);
+    for (const a of r.aborted) L.push(`  ✗ ${a}`);
+    for (const w of r.warnings) L.push(`  ! ${w}`);
+    return L.join("\n");
+  }
+  if (r.cancelled) {
+    L.push(`合流 · ${project.name} · 合并 ${r.milestone}：已取消（没有输入 yes），没有写任何东西`);
+    return L.join("\n");
+  }
+  if (r.dryRun) {
+    L.push(`合流 · ${project.name} · 合并 ${r.milestone}（--dry-run，只演示不执行）`);
+    for (const l of r.summaryLines) L.push(`  ${l}`);
+    L.push("  逐项：");
+    for (const l of r.dryRunLines) L.push(`  ${l}`);
+    for (const w of r.warnings) L.push(`  ! ${w}`);
+    return L.join("\n");
+  }
+  L.push(`合流 · ${project.name} · 合并 ${r.milestone}：${r.finalized ? "已发布" : "未收尾（待续）"} · 用时 ${(r.elapsedMs / 1000).toFixed(1)}s`);
+  L.push(`  合入 ${r.merged.length} · 已在集成 ${r.alreadyIn.length} · 失败·待处理 ${r.failed.length} · 顺延 ${r.rolled.length} · 等它/未执行 ${r.waiting.length} · 待定跳过 ${r.pending.length}${r.unrehearsed.length ? ` · 未演练 ${r.unrehearsed.length}` : ""}`);
+  for (const i of r.merged) L.push(`  ✓ ${i.feature} ${i.title}（${labels.get(i.repo ?? "") ?? i.repo} ${i.branch}）→ ${short(i.new_sha)}${i.union_resolved?.length ? ` · union（两边内容都保留、新日期在前）${i.union_resolved.join("、")}` : ""}${i.resolver ? ` · 解冲突器 ${i.resolver.rounds} 轮 $${i.resolver.cost_usd.toFixed(2)}` : ""}`);
+  for (const i of r.failed) L.push(`  ✗ ${i.feature} ${i.title}：${i.result_detail ?? ""}`);
+  for (const x of r.rolled) L.push(`  → 顺延 ${x.feature} ${x.title} → ${x.to}（${x.reason}）`);
+  for (const i of r.waiting) L.push(`  … ${i.feature} ${i.title}：${i.decision === "等它" ? "等它" : "未执行"}`);
+  if (r.pending.length) {
+    L.push(`  跳过的待定项 ${r.pending.length} 个（不并入、不顺延，留在本版；本版因此先不收尾）：`);
+    for (const i of r.pending) L.push(`    ? ${i.feature} ${i.title}${i.state === "未能试合" ? " · 未能试合 → 重新试合或人工确认" : ""}`);
+    L.push(`    处理后：heliu 合并 ${r.milestone} --预演（重新试合）或 heliu release set ${r.milestone} <卡号> 并入|顺延，再执行`);
+  }
+  for (const t of r.tags) L.push(`  tag ${t.label} ${t.tag} → ${short(t.target)}`);
+  for (const t of r.tagErrors) L.push(`  ✗ ${t}`);
+  for (const mm of r.mainMoved) L.push(`  主线 ${mm.label}：${short(mm.from)} → ${short(mm.to)}（快进）`);
+  for (const s of r.mainSkipped) L.push(`  主线未动 ${s.label}：${s.reason}`);
+  if (r.costUsd > 0) L.push(`  解冲突器花费 $${r.costUsd.toFixed(2)}`);
+  for (const w of r.warnings) L.push(`  ! ${w}`);
+  L.push(`  合并单与发布说明：${r.plan.file}`);
+  if (r.unpushed.length) {
+    L.push("");
+    L.push(`未推送：${r.unpushed.join("；")}（按仓库规矩，推送由你决定）`);
+    L.push(`需要撤回：heliu 回滚 ${r.milestone}`);
+  }
+  return L.join("\n");
+}
+
+export function renderRollback(r: RollbackReport, project: ProjectConfig): string {
+  if (r.nothing) return `合流 · ${project.name} · 回滚 ${r.milestone}：合并单里没有 heliu 移动过的引用，无需回滚`;
+  const L = [`合流 · ${project.name} · 回滚 ${r.milestone}：${r.complete ? "完成" : "未完成"}`];
+  for (const x of r.reverted) L.push(`  ✓ ${x.repo} ${x.ref}：${x.action}${x.to ? ` ${short(x.to)}` : ""}`);
+  for (const x of r.skipped) L.push(`  - ${x.repo} ${x.ref}：${x.reason}`);
+  for (const c of r.conflicts) L.push(`  ✗ ${c}`);
+  if (r.ledgerRestored.length) L.push(`  台账恢复：${r.ledgerRestored.join("、")}`);
+  for (const s of r.ledgerSkipped) L.push(`  ! ${s}`);
+  if (r.milestoneStatus) L.push(`  里程碑状态恢复为「${r.milestoneStatus}」`);
+  return L.join("\n");
+}
+
+export function renderRehearsal(r: RehearseResult): string {
+  const L = [
+    `演练完成：${r.milestone} · 合入 ${r.run.merged.length} · 失败 ${r.run.failed.length} · 顺延 ${r.run.rolled.length} · tag ${r.run.tags.length ? "已打" : "未打"} · 解冲突器 $${r.run.costUsd.toFixed(2)}`,
+    `耗时：克隆 ${sec(r.cloneMs)} · 预演 ${sec(r.previewMs)} · 执行 ${sec(r.runMs)} · 合计 ${sec(r.totalMs)}`,
+    `真仓库零写入：${r.zeroWrite ? "一致" : "有差异（见报告）"}（${r.snapshots.map((s) => `${s.label} ${s.items} 项`).join("、")}）`,
+  ];
+  if (r.run.aborted.length) L.push(`中止：${r.run.aborted.join("；")}`);
+  L.push(`报告：${r.reportFiles.join("、")}`);
+  return L.join("\n");
+}
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import json,pathlib
+fx=json.loads(pathlib.Path('/tmp/heliu-m4-r2-fixture.json').read_text())
+cli=str(pathlib.Path('bin/heliu').resolve())
+p=pathlib.Path('/tmp/heliu-m4-fixture-cli.py')
+p.write_text('import os,json,subprocess,sys\\nfrom pathlib import Path\\nf=json.loads(Path(\"/tmp/heliu-m4-r2-fixture.json\").read_text())\\nenv=dict(os.environ,**f[\"env\"])\\nsys.exit(subprocess.call(['+repr(cli)+',*sys.argv[1:],\"--project\",\"演示\"],env=env))\\n')
+print(fx['root'])
+PY
+python3 /tmp/heliu-m4-fixture-cli.py release preview v1.2" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 1329ms:
+/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5
+合流 · 演示 · 合并单 v1.2（草稿）
+  文档仓：集成分支 integ @4a9b749
+
+已进集成（1）
+  #1   [x] 并入  F-0007 已进集成 I · 文档仓 feat/fi · 已进集成（跳过）
+
+未能试合（5）
+  #2   [ ] 待定  F-0001 功能一 · 文档仓 feat/f1 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+  #3   [ ] 待定  F-0002 功能二 · 文档仓 feat/f2 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+  #4   [ ] 待定  F-0003 功能三 · 文档仓 feat/f3 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+  #5   [ ] 待定  F-0004 进度更新 U · 文档仓 feat/fu · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+  #6   [ ] 待定  F-0005 冲突功能 C · 文档仓 feat/fc · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+
+未完成（1）
+  #7   [ ] 顺延  F-0006 还没做完的 B · 文档仓 feat/fb · 未完成 → 顺延 · 会话等你回答：确认要不要做 B · 落后集成 4
+
+合计 7 项：新增待合 0 · 已在集成 1 · 有冲突 0 · 未能试合 5 · 未检查 0 · 顺延 1
+
+合并单：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5/台账/releases/v1.2.md
+未能试合 5 项（没有得到试合结果，不等于有冲突）：默认「待定」，执行时跳过、留在本版；建议重新试合（heliu doctor 看沙箱是否可用）或人工确认后 heliu release set v1.2 <卡号> 并入|顺延。
+下一步（建议）：核对决定（改：heliu release set v1.2 <卡号|#序号> 并入|顺延|等它|不并）→ heliu 合并 v1.2 --dry-run → heliu 合并 v1.2
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import json,pathlib,subprocess
+f=json.loads(pathlib.Path('/tmp/heliu-m4-r2-fixture.json').read_text())
+r=pathlib.Path(f['root'])
+print((pathlib.Path(f['ledger'])/'releases/v1.2.md').read_text())
+(r/'refs-before.txt').write_bytes(subprocess.check_output(['git','-C',f['repo'],'for-each-ref','--format=%(refname) %(objectname)']))
+PY
+python3 /tmp/heliu-m4-fixture-cli.py release run v1.2 --dry-run" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 70ms:
+---
+heliu: release-plan
+schema: 2
+milestone: v1.2
+project: 演示
+status: 草稿
+created: 2026-10-26 05:45
+updated: 2026-10-26 05:45
+executed_at: null
+finalized_at: null
+rolled_back_at: null
+integration_branch: integ
+base_sha: 4a9b749f0ae0efdd08aaf89a9aaf8cc6a872bff2
+milestone_status_before: null
+resolver_cost_usd: 0
+repos:
+  - repo: docs
+    label: 文档仓
+    integration_branch: integ
+    base_sha: 4a9b749f0ae0efdd08aaf89a9aaf8cc6a872bff2
+    main: main
+    main_sha: be582185d04db42619dae86bf0d6b3ea1eec3c0f
+items:
+  - feature: F-0007
+    title: 已进集成 I
+    decision: 并入
+    default_decision: 并入
+    state: 已进集成
+    tier: in_integration
+    action: 跳过（已在集成分支）
+    detail: null
+    repo: docs
+    branch: feat/fi
+    branch_sha: afe79682da331710d4b8a2e4698cbf813d8051b1
+    behind: null
+    precheck: null
+    precheck_state: null
+  - feature: F-0001
+    title: 功能一
+    decision: 待定
+    default_decision: 待定
+    state: 未能试合
+    tier: precheck_failed
+    action: 重新试合或人工确认
+    detail: 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延）
+    repo: docs
+    branch: feat/f1
+    branch_sha: 87be3957e7a56e454187ed4808577659b13e7d23
+    behind: 4
+    precheck: null
+    precheck_state: failed
+  - feature: F-0002
+    title: 功能二
+    decision: 待定
+    default_decision: 待定
+    state: 未能试合
+    tier: precheck_failed
+    action: 重新试合或人工确认
+    detail: 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延）
+    repo: docs
+    branch: feat/f2
+    branch_sha: 41b7fc935a59aab685ef798a4c821816a42dab2a
+    behind: 4
+    precheck: null
+    precheck_state: failed
+  - feature: F-0003
+    title: 功能三
+    decision: 待定
+    default_decision: 待定
+    state: 未能试合
+    tier: precheck_failed
+    action: 重新试合或人工确认
+    detail: 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延）
+    repo: docs
+    branch: feat/f3
+    branch_sha: c0b74b9fa356c8d3282f9acbdc3a8ea135d45564
+    behind: 4
+    precheck: null
+    precheck_state: failed
+  - feature: F-0004
+    title: 进度更新 U
+    decision: 待定
+    default_decision: 待定
+    state: 未能试合
+    tier: precheck_failed
+    action: 重新试合或人工确认
+    detail: 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延）
+    repo: docs
+    branch: feat/fu
+    branch_sha: ac04d333b59823e9cba25808a599cad5bb129b11
+    behind: 4
+    precheck: null
+    precheck_state: failed
+  - feature: F-0005
+    title: 冲突功能 C
+    decision: 待定
+    default_decision: 待定
+    state: 未能试合
+    tier: precheck_failed
+    action: 重新试合或人工确认
+    detail: 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延）
+    repo: docs
+    branch: feat/fc
+    branch_sha: b53a4211e961b1e68eebf3ab2c57e860be34eb09
+    behind: 4
+    precheck: null
+    precheck_state: failed
+  - feature: F-0006
+    title: 还没做完的 B
+    decision: 顺延
+    default_decision: 顺延
+    state: 未完成
+    tier: unfinished
+    action: 顺延
+    detail: 会话等你回答：确认要不要做 B
+    repo: docs
+    branch: feat/fb
+    branch_sha: bb5dad4b7f9f3b8f97a47e8ebbe046fd3f0b6fe5
+    behind: 4
+    precheck: null
+    precheck_state: failed
+refs_moved: []
+ledger_changes: []
+---
+
+# 合并单 v1.2 · 演示
+
+> 以文件顶部 frontmatter 为准。改某项的 `decision`（并入 / 顺延 / 等它 / 不并）后：
+> `heliu 合并 v1.2 --预演` 刷新（保留你改过的决定）→ `heliu 合并 v1.2` 执行；也可 `heliu release set v1.2 <卡号> <决定>`。
+> 下表每次预演重新生成，直接改表格不生效。
+
+- 集成分支（预演时）：文档仓 integ@4a9b749
+- 状态：草稿 · 生成 2026-10-26 05:45
+- 共 7 项：新增待合 0 · 已在集成 1 · 有冲突 0 · 未能试合 5 · 未检查 0 · 顺延 1
+
+## 勾选表
+
+| # | 决定 | 功能 | 仓库 · 分支 | 状态 | 试合冲突 | 说明 / 结果 |
+|---|---|---|---|---|---|---|
+| 1 | [x] 并入 | F-0007 已进集成 I | 文档仓 · `feat/fi` | 已进集成（跳过） | — | — |
+| 2 | [ ] 待定 | F-0001 功能一 | 文档仓 · `feat/f1` | 未能试合 → 重新试合或人工确认 | 未能试合 | 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4 |
+| 3 | [ ] 待定 | F-0002 功能二 | 文档仓 · `feat/f2` | 未能试合 → 重新试合或人工确认 | 未能试合 | 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4 |
+| 4 | [ ] 待定 | F-0003 功能三 | 文档仓 · `feat/f3` | 未能试合 → 重新试合或人工确认 | 未能试合 | 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4 |
+| 5 | [ ] 待定 | F-0004 进度更新 U | 文档仓 · `feat/fu` | 未能试合 → 重新试合或人工确认 | 未能试合 | 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4 |
+| 6 | [ ] 待定 | F-0005 冲突功能 C | 文档仓 · `feat/fc` | 未能试合 → 重新试合或人工确认 | 未能试合 | 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4 |
+| 7 | [ ] 顺延 | F-0006 还没做完的 B | 文档仓 · `feat/fb` | 未完成 → 顺延 | — | 会话等你回答：确认要不要做 B · 落后集成 4 |
+
+图例：顺序 = 已进集成（跳过）→ 无冲突 → 有冲突（union 文件优先）→ 未能试合 → 未完成 → 无法合并。「未能试合」= 没有得到试合结果（沙箱建不起来 / 超时 / 出错），不等于有冲突，也不等于无冲突。
+决定：并入 = 本次合入；顺延 = 不合，功能卡改到下一版并记 rolled_from；等它 = 本次不合也不顺延，本版先不收尾（不打 tag），等它好了重新预演再执行；不并 = 不合、改为未预约；待定 = 还没决定（「未能试合」的默认），执行时跳过、不并入也不顺延、留在本版，本版先不收尾。
+
+合流 · 演示 · 合并 v1.2（--dry-run，只演示不执行）
+  执行前摘要 · v1.2（新增待合 0 · 已在集成 1 · 有冲突 0 · 未能试合 5 · 未检查 0 · 顺延 1）
+  新增合入 0 项：
+  已在集成分支 1 项（跳过）：F-0007
+  不在本次合入 6 项（按原因）：
+    - 未能试合 · 待定（跳过，不并入不顺延，留在本版）（5）：F-0001、F-0002、F-0003、F-0004、F-0005
+    - 顺延到 v1.3 · 等你回答（1）：F-0006
+  逐项：
+  文档仓：集成分支 integ @4a9b749 = 合并单 base_sha ✓
+  #1 F-0007「已进集成 I」 · 文档仓 feat/fi：跳过（已在集成分支）
+  #2 F-0001「功能一」 · 文档仓 feat/f1：跳过（待定：未能试合，重新试合或人工确认），不并入、不顺延，留在本版
+  #3 F-0002「功能二」 · 文档仓 feat/f2：跳过（待定：未能试合，重新试合或人工确认），不并入、不顺延，留在本版
+  #4 F-0003「功能三」 · 文档仓 feat/f3：跳过（待定：未能试合，重新试合或人工确认），不并入、不顺延，留在本版
+  #5 F-0004「进度更新 U」 · 文档仓 feat/fu：跳过（待定：未能试合，重新试合或人工确认），不并入、不顺延，留在本版
+  #6 F-0005「冲突功能 C」 · 文档仓 feat/fc：跳过（待定：未能试合，重新试合或人工确认），不并入、不顺延，留在本版
+  #7 F-0006「还没做完的 B」 · 文档仓 feat/fb：不合，顺延到 v1.3（会话等你回答：确认要不要做 B）
+  收尾：有「等它」或「待定」的项，本次不打 tag、不顺延、不改「已发布」（合并单记为待续）
+  （--dry-run：以上都没有执行，没有移动任何引用）
+  ! sandbox-exec 不可用：写操作只靠白名单约束（无操作系统级写保护）
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+import hashlib,subprocess
+r=Path('/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107')
+for repo in ['docs','firmware','app']:
+ a=(r/f'snapshots/before-{repo}.tsv').read_bytes(); b=(r/f'snapshots/after-{repo}.tsv').read_bytes()
+ print(repo,'rows',len(a.splitlines()),len(b.splitlines()),'identical',a==b,'sha256',hashlib.sha256(a).hexdigest())
+p=r/'ledger/releases/vNext.log'
+lines=p.read_text().splitlines()
+print('audit',len(lines),'sandbox',sum('sandbox' in l for l in lines),'push/fetch',[l for l in lines if 'git push' in l or 'git fetch' in l])
+print('audit sample',lines[0])
+for args in [['rev-parse','refs/heads/claude/merge-features-refactor-143693','refs/tags/vNext"'^{}'"'],['cat-file','-t','refs/tags/vNext'],['worktree','list','--porcelain']]:
+ print(subprocess.check_output(['git','-C',str(r/'docs.git'),*args],text=True))
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 0ms:
+docs rows 898 898 identical True sha256 7c15a2b997723fa36746e7ca41387d5a841191073785394f710a27eca5ffdaa6
+firmware rows 676 676 identical True sha256 c127f9f9a139aa6c82cd2653f2ebe40f12a94947b7d64e4f7597920c9eed32f2
+app rows 416 416 identical True sha256 d3e33879c6aecec83582672344d5ff4e72bf173fc0b541e0e4cae268b3354aaf
+audit 109 sandbox 0 push/fetch []
+audit sample 2026-10-25T21:41:07.621Z	执行	演练克隆（只读引用真实对象库）	/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107	git clone --mirror --shared -q /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹 /Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107/docs.git
+329b0662197a812289c45d454e84fad80b937d0e
+329b0662197a812289c45d454e84fad80b937d0e
+
+tag
+
+worktree /Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107/docs.git
+bare
+
+
+
+codex
+当前验收环境无法启用 `sandbox-exec`，预演把 5 条待合项明确列为“未能试合／待定”，没有误报成冲突。为继续验证合并和回滚，我会按界面提供的流程，仅将已知内容的 fixture 项人工确认成“并入”；真实项目仍只读。已有演练报告的三组原始快照已逐字比对一致。
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import json,pathlib,subprocess
+f=json.loads(pathlib.Path('/tmp/heliu-m4-r2-fixture.json').read_text()); r=pathlib.Path(f['root'])
+now=subprocess.check_output(['git','-C',f['repo'],'for-each-ref','--format=%(refname) %(objectname)'])
+print('dry-run refs unchanged:',now==(r/'refs-before.txt').read_bytes())
+print('dry-run audit absent:',not (pathlib.Path(f['ledger'])/'releases/v1.2.log').exists())
+for n in range(1,6):
+ p=subprocess.run(['python3','/tmp/heliu-m4-fixture-cli.py','release','set','v1.2',f'F-{n:04d}','并入'],capture_output=True,text=True)
+ print(p.stdout.strip()); assert p.returncode==0,p.stderr
+PY
+python3 /tmp/heliu-m4-fixture-cli.py release run v1.2 --dry-run" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 556ms:
+dry-run refs unchanged: True
+dry-run audit absent: True
+已改 1 项：
+  #2   [x] 并入（你改的）  F-0001 功能一 · 文档仓 feat/f1 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+合并单：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5/台账/releases/v1.2.md
+已改 1 项：
+  #3   [x] 并入（你改的）  F-0002 功能二 · 文档仓 feat/f2 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+合并单：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5/台账/releases/v1.2.md
+已改 1 项：
+  #4   [x] 并入（你改的）  F-0003 功能三 · 文档仓 feat/f3 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+合并单：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5/台账/releases/v1.2.md
+已改 1 项：
+  #5   [x] 并入（你改的）  F-0004 进度更新 U · 文档仓 feat/fu · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+合并单：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5/台账/releases/v1.2.md
+已改 1 项：
+  #6   [x] 并入（你改的）  F-0005 冲突功能 C · 文档仓 feat/fc · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+合并单：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5/台账/releases/v1.2.md
+合流 · 演示 · 合并 v1.2（--dry-run，只演示不执行）
+  执行前摘要 · v1.2（新增待合 5 · 已在集成 1 · 有冲突 0 · 未能试合 5 · 未检查 0 · 顺延 1）
+  新增合入 5 项：
+    + F-0001 功能一（文档仓 feat/f1） · 未能试合，你改为并入（执行时重新试合）
+    + F-0002 功能二（文档仓 feat/f2） · 未能试合，你改为并入（执行时重新试合）
+    + F-0003 功能三（文档仓 feat/f3） · 未能试合，你改为并入（执行时重新试合）
+    + F-0004 进度更新 U（文档仓 feat/fu） · 未能试合，你改为并入（执行时重新试合）
+    + F-0005 冲突功能 C（文档仓 feat/fc） · 未能试合，你改为并入（执行时重新试合）
+  已在集成分支 1 项（跳过）：F-0007
+  不在本次合入 1 项（按原因）：
+    - 顺延到 v1.3 · 等你回答（1）：F-0006
+  逐项：
+  文档仓：集成分支 integ @4a9b749 = 合并单 base_sha ✓
+  #1 F-0007「已进集成 I」 · 文档仓 feat/fi：跳过（已在集成分支）
+  #2 F-0001「功能一」 · 文档仓 feat/f1：临时 worktree 合并：执行时重新计算冲突
+  #3 F-0002「功能二」 · 文档仓 feat/f2：临时 worktree 合并：执行时重新计算冲突
+  #4 F-0003「功能三」 · 文档仓 feat/f3：临时 worktree 合并：执行时重新计算冲突
+  #5 F-0004「进度更新 U」 · 文档仓 feat/fu：临时 worktree 合并：执行时重新计算冲突
+  #6 F-0005「冲突功能 C」 · 文档仓 feat/fc：临时 worktree 合并：执行时重新计算冲突
+  #7 F-0006「还没做完的 B」 · 文档仓 feat/fb：不合，顺延到 v1.3（会话等你回答：确认要不要做 B）
+  收尾：文档仓 tag -a v1.2
+  里程碑 v1.2 → 已发布；顺延的功能卡 → v1.3（rolled_from 记 v1.2）
+  （--dry-run：以上都没有执行，没有移动任何引用）
+  ! sandbox-exec 不可用：写操作只靠白名单约束（无操作系统级写保护）
+
+exec
+/bin/zsh -lc 'python3 /tmp/heliu-m4-fixture-cli.py release run v1.2' in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ exited 1 in 3689ms:
+执行前摘要 · v1.2（新增待合 5 · 已在集成 1 · 有冲突 0 · 未能试合 5 · 未检查 0 · 顺延 1）
+新增合入 5 项：
+  + F-0001 功能一（文档仓 feat/f1） · 未能试合，你改为并入（执行时重新试合）
+  + F-0002 功能二（文档仓 feat/f2） · 未能试合，你改为并入（执行时重新试合）
+  + F-0003 功能三（文档仓 feat/f3） · 未能试合，你改为并入（执行时重新试合）
+  + F-0004 进度更新 U（文档仓 feat/fu） · 未能试合，你改为并入（执行时重新试合）
+  + F-0005 冲突功能 C（文档仓 feat/fc） · 未能试合，你改为并入（执行时重新试合）
+已在集成分支 1 项（跳过）：F-0007
+不在本次合入 1 项（按原因）：
+  - 顺延到 v1.3 · 等你回答（1）：F-0006
+按上面的摘要执行 v1.2？输入 yes 执行，直接回车 = 取消
+> 
+  已取消（只有输入 yes 才会执行）
+合流 · 演示 · 合并 v1.2：已取消（没有输入 yes），没有写任何东西
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import json,pathlib,subprocess
+f=json.loads(pathlib.Path('/tmp/heliu-m4-r2-fixture.json').read_text());r=pathlib.Path(f['root'])
+now=subprocess.check_output(['git','-C',f['repo'],'for-each-ref','--format=%(refname) %(objectname)'])
+print('cancel refs unchanged:',now==(r/'refs-before.txt').read_bytes())
+print('cancel audit absent:',not (pathlib.Path(f['ledger'])/'releases/v1.2.log').exists())
+PY
+python3 /tmp/heliu-m4-fixture-cli.py release run v1.2 --yes" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 613ms:
+cancel refs unchanged: True
+cancel audit absent: True
+#2 F-0001「功能一」· 文档仓 feat/f1（未能试合）
+  无冲突：纯对象库合并
+  ✓ 已合入 → c27da16
+#3 F-0002「功能二」· 文档仓 feat/f2（未能试合）
+  无冲突：纯对象库合并
+  ✓ 已合入 → 2e24bcc
+#4 F-0003「功能三」· 文档仓 feat/f3（未能试合）
+  无冲突：纯对象库合并
+  ✓ 已合入 → 0bc972e
+#5 F-0004「进度更新 U」· 文档仓 feat/fu（未能试合）
+  有冲突（README.md）：在临时 worktree 里合并
+  建临时 worktree：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5/cache/worktrees/演示/v1.2/docs
+  union：README.md（1 处按新日期在前排序）
+  ✓ 已合入 → a0f7159
+#6 F-0005「冲突功能 C」· 文档仓 feat/fc（未能试合）
+  有冲突（src.txt）：在临时 worktree 里合并
+  解冲突器第 1 轮：src.txt
+    完成 · $0.12 · 3 步
+  ✓ 已合入 → 619a697
+合流 · 演示 · 合并 v1.2：已发布 · 用时 0.6s
+  合入 5 · 已在集成 1 · 失败·待处理 0 · 顺延 1 · 等它/未执行 0 · 待定跳过 0
+  ✓ F-0001 功能一（文档仓 feat/f1）→ c27da16
+  ✓ F-0002 功能二（文档仓 feat/f2）→ 2e24bcc
+  ✓ F-0003 功能三（文档仓 feat/f3）→ 0bc972e
+  ✓ F-0004 进度更新 U（文档仓 feat/fu）→ a0f7159 · union（两边内容都保留、新日期在前）README.md
+  ✓ F-0005 冲突功能 C（文档仓 feat/fc）→ 619a697 · 解冲突器 1 轮 $0.12
+  → 顺延 F-0006 还没做完的 B → v1.3（会话等你回答：确认要不要做 B）
+  tag 文档仓 v1.2 → 619a697
+  解冲突器花费 $0.12
+  ! sandbox-exec 不可用：写操作只靠白名单约束（无操作系统级写保护）
+  合并单与发布说明：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5/台账/releases/v1.2.md
+
+未推送：文档仓：refs/heads/integ 与 refs/tags/v1.2（按仓库规矩，推送由你决定）
+需要撤回：heliu 回滚 v1.2
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import pathlib,json,subprocess,shutil
+f=json.loads(pathlib.Path('/tmp/heliu-m4-r2-fixture.json').read_text());r=pathlib.Path(f['root']);repo=f['repo']
+def git(*args): return subprocess.check_output(['git','-C',repo,*args],text=True).strip()
+for branch in ['f1','f2','f3','fu','fc','fi','fb']:
+ print('included',branch,subprocess.run(['git','-C',repo,'merge-base','--is-ancestor','feat/'+branch,'integ']).returncode==0)
+print('tag type',git('cat-file','-t','v1.2'),'tag target equals integ',git('rev-parse','v1.2"'^{}'"')==git('rev-parse','integ'))
+print('README after merge:\\n'+git('show','integ:README.md'))
+print('src after stub:\\n'+git('show','integ:src.txt'))
+ledger=pathlib.Path(f['ledger'])
+for p in (ledger/'features').glob('F-0006*'): print(p.read_text())
+plan=ledger/'releases/v1.2.md';shutil.copy2(plan,r/'published-plan.md')
+s=plan.read_text();print(s[s.find('## 发布说明'):])
+print('worktrees',git('worktree','list','--porcelain'))
+refs=git('for-each-ref','--format=%(refname) %(objectname)');old=dict(l.split() for l in (r/'refs-before.txt').read_text().splitlines());new=dict(l.split() for l in refs.splitlines())
+print('changed refs',[k for k in new if old.get(k)"'!=new[k]])
+print('"'audit push/fetch', [l for l in (ledger/'releases/v1.2.log').read_text().splitlines() if 'git push' in l or 'git fetch' in l])
+PY
+python3 /tmp/heliu-m4-fixture-cli.py release rollback v1.2 --yes
+python3 - <<'PY'
+import pathlib,json,subprocess
+f=json.loads(pathlib.Path('/tmp/heliu-m4-r2-fixture.json').read_text());r=pathlib.Path(f['root'])
+now=subprocess.check_output(['git','-C',f['repo'],'for-each-ref','--format=%(refname) %(objectname)'])
+print('rollback ALL refs equal original:',now==(r/'refs-before.txt').read_bytes())
+for p in (pathlib.Path(f['ledger'])/'features').glob('F-0006*'): print(p.read_text())
+print((pathlib.Path(f['ledger'])/'milestones.yaml').read_text())
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 307ms:
+included f1 True
+included f2 True
+included f3 True
+included fu True
+included fc True
+included fi True
+included fb False
+tag type tag tag target equals integ True
+README after merge:
+# 项目
+
+## 进度
+- 2026-10-01 建仓
+- 2026-10-22 新功能 U
+- 2026-10-20 集成：合入 A
+
+## 其他
+说明
+src after stub:
+line1
+line2 集成版
+line3
+---
+id: F-0006
+title: 还没做完的 B
+status: 待合并
+milestone: v1.3
+acceptance: 未
+bindings:
+  - repo: docs
+    branch: feat/fb
+rolled_from:
+  - v1.2
+source: cli
+created: 2026-10-26
+updated: 2026-10-26
+---
+
+还没做完的 B
+
+<!-- 备注、验收证据链接写在这里；领先/落后/冲突等由 heliu 实时对账，不必手填 -->
+
+## 变更记录
+- 2026-10-26 release v1.2：顺延到 v1.3（会话等你回答：确认要不要做 B）
+
+## 发布说明
+- 版本 v1.2 · 2026-10-26 05:46 · tag：文档仓 v1.2 → 619a697（未推送）
+- 已合入（5）：
+  - F-0001 功能一（文档仓 `feat/f1` → c27da16）
+  - F-0002 功能二（文档仓 `feat/f2` → 2e24bcc）
+  - F-0003 功能三（文档仓 `feat/f3` → 0bc972e）
+  - F-0004 进度更新 U（文档仓 `feat/fu` → a0f7159）
+  - F-0005 冲突功能 C（文档仓 `feat/fc` → 619a697）
+- 已在集成分支（1）：
+  - F-0007 已进集成 I（文档仓 `feat/fi`）
+- 顺延（1）：
+  - F-0006 还没做完的 B → v1.3（会话等你回答：确认要不要做 B）
+- 冲突处理（2）：
+  - F-0004：union（两边内容都保留、新日期在前）README.md
+  - F-0005：解冲突器 src.txt（1 轮，$0.12）：src.txt：保留集成分支一侧（桩）
+- 旧引用（可回滚：heliu 回滚 v1.2）：
+  - 文档仓 refs/heads/integ：4a9b749 → c27da16（合入 F-0001）
+  - 文档仓 refs/heads/integ：c27da16 → 2e24bcc（合入 F-0002）
+  - 文档仓 refs/heads/integ：2e24bcc → 0bc972e（合入 F-0003）
+  - 文档仓 refs/heads/integ：0bc972e → a0f7159（合入 F-0004（解冲突））
+  - 文档仓 refs/heads/integ：a0f7159 → 619a697（合入 F-0005（解冲突））
+  - 文档仓 refs/tags/v1.2：（新建） → 88aee44（打 tag（指向 619a697））
+- 未推送：文档仓 refs/heads/integ 与 refs/tags/v1.2（按仓库规矩，推送由你决定）
+
+worktrees worktree /private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-4wE1y5/仓 库
+HEAD be582185d04db42619dae86bf0d6b3ea1eec3c0f
+branch refs/heads/main
+changed refs ['refs/heads/integ', 'refs/tags/v1.2']
+audit push/fetch []
+  ✓ 文档仓 删除 refs/tags/v1.2
+  ✓ 文档仓 refs/heads/integ 619a697 → a0f7159
+  ✓ 文档仓 refs/heads/integ a0f7159 → 0bc972e
+  ✓ 文档仓 refs/heads/integ 0bc972e → 2e24bcc
+  ✓ 文档仓 refs/heads/integ 2e24bcc → c27da16
+  ✓ 文档仓 refs/heads/integ c27da16 → 4a9b749
+合流 · 演示 · 回滚 v1.2：完成
+  ✓ docs refs/tags/v1.2：删除 tag
+  ✓ docs refs/heads/integ：指回旧值 a0f7159
+  ✓ docs refs/heads/integ：指回旧值 0bc972e
+  ✓ docs refs/heads/integ：指回旧值 2e24bcc
+  ✓ docs refs/heads/integ：指回旧值 c27da16
+  ✓ docs refs/heads/integ：指回旧值 4a9b749
+  台账恢复：F-0006、F-0005、F-0004、F-0003、F-0002、F-0001、F-0007
+  里程碑状态恢复为「冻结」
+rollback ALL refs equal original: True
+---
+id: F-0006
+title: 还没做完的 B
+status: 待合并
+milestone: v1.2
+acceptance: 未
+bindings:
+  - repo: docs
+    branch: feat/fb
+rolled_from: []
+source: cli
+created: 2026-10-26
+updated: 2026-10-26
+---
+
+还没做完的 B
+
+<!-- 备注、验收证据链接写在这里；领先/落后/冲突等由 heliu 实时对账，不必手填 -->
+
+## 变更记录
+- 2026-10-26 release v1.2：顺延到 v1.3（会话等你回答：确认要不要做 B）
+- 2026-10-26 rollback v1.2：恢复为 预约 v1.2 · 状态 待合并
+
+# heliu 里程碑（状态：规划中 | 冻结 | 合并中 | 已发布）。顺序即排期顺序；「下一版」= 第一个「规划中」。可手工编辑。
+milestones:
+  - id: v1.2
+    title: ""
+    status: 冻结
+    target_date: null
+    integration_branch: null
+    notes: ""
+  - id: v1.3
+    title: ""
+    status: 规划中
+    target_date: null
+    integration_branch: null
+    notes: ""
+
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+import json
+base=str(Path.cwd())
+script='''import {cpSync,mkdtempSync,mkdirSync,readFileSync,writeFileSync} from \"node:fs\";
+import {tmpdir} from \"node:os\";
+import {snapshotRepo,diffSnapshots} from BASE_SNAPSHOT;
+const root=mkdtempSync(tmpdir()+\"/heliu-real-preview-\");
+const original=\"/Users/linxiansheng/Library/Application Support/heliu/projects/磁吸背夹\";
+const dest=root+\"/home/projects/磁吸背夹\";
+mkdirSync(dest,{recursive:true});
+cpSync(original+\"/ledger\",dest+\"/ledger\",{recursive:true});
+writeFileSync(dest+\"/project.yaml\",readFileSync(original+\"/project.yaml\",\"utf8\").replace(/"'^ledger:.*$/m,"ledger: "+JSON.stringify(dest+"/ledger")));
+const repos=["/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹","/Users/linxiansheng/.cache/backclip-web/esp_claw","/Users/linxiansheng/.cache/backclip-app-gitlab-20261015"];
+const before=repos.map(p=>snapshotRepo(p));
+const proc=Bun.spawnSync({cmd:[BASE_BIN,"release","preview","vNext","--project","磁吸背夹"],env:{...process.env,HELIU_HOME:root+"/home",HELIU_CACHE_DIR:root+"/cache"},stdout:"pipe",stderr:"pipe"});
+writeFileSync(root+"/preview.txt",proc.stdout);writeFileSync(root+"/stderr.txt",proc.stderr);
+console.log("evidence",root,"exit",proc.exitCode); console.log(proc.stdout.toString()); console.log(proc.stderr.toString());
+const diffs=repos.map((p,i)=>({repo:p,items:before[i].size,...diffSnapshots(before[i],snapshotRepo(p))}));
+writeFileSync(root+"/snapshot-diff.json",JSON.stringify(diffs,null,2));console.log(JSON.stringify(diffs,null,2));
+writeFileSync("/tmp/heliu-m4-real-preview-path.txt",root);
+'"'''.replace('BASE_SNAPSHOT',json.dumps(base+'/src/core/snapshot.ts')).replace('BASE_BIN',json.dumps(base+'/bin/heliu'))
+Path('/tmp/heliu-m4-real-preview.ts').write_text(script)
+PY
+bun /tmp/heliu-m4-real-preview.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 631ms:
+evidence /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-real-preview-vPcFQo exit 0
+合流 · 磁吸背夹 · 合并单 vNext（草稿）
+  文档仓：集成分支 claude/merge-features-refactor-143693 @4329a38
+  固件仓：集成分支 feat/aios-entry @a349aa5
+  App 仓：集成分支 （未配置）
+
+已进集成（25）
+  #1   [x] 并入  F-0019 语音对话应用思维框架 · 文档仓 claude/voice-dialogue-framework-499d60 · 已进集成（跳过）
+  #2   [x] 并入  F-0023 推送卡片同步到背夹 · 文档仓 claude/push-card-sync-backclip-4c3877 · 已进集成（跳过）
+  #3   [x] 并入  F-0026 首页设计与交互原型 · 文档仓 claude/homepage-design-prototype-619d11 · 已进集成（跳过）
+  #4   [x] 并入  F-0028 AI应用生成质量优化 · 文档仓 claude/ai-app-generation-quality-3c1c8b · 已进集成（跳过）
+  #5   [x] 并入  F-0029 AI应用优化与功能迭代 · 文档仓 claude/ai-app-optimization-90536f · 已进集成（跳过）
+  #6   [x] 并入  F-0030 语音链路和背夹扬声器播放 · 文档仓 claude/voice-link-speaker-playback-a74fdb · 已进集成（跳过）
+  #7   [x] 并入  F-0031 固件1.0版本集成与烧录 · 文档仓 claude/firmware-1-0-integration-b5f991 · 已进集成（跳过）
+  #8   [x] 并入  F-0032 评估系统首页落地路线：原生 C 重写 vs 主题外壳 · 文档仓 claude/elegant-gauss-1552b1 · 已进集成（跳过）
+  #9   [x] 并入  F-0034 合并语音应用三档模式分支到 release/backclip-1.0 · 文档仓 claude/funny-goldwasser-b9ae93 · 已进集成（跳过）
+  #10  [x] 并入  F-0035 语音链路端到端闭环测试 · 文档仓 claude/voice-e2e-loop-testing-dee94b · 已进集成（跳过）
+  #11  [x] 并入  F-0037 同步本地 main 与 GitHub main（解决三份总览冲突） · 文档仓 claude/sync-main-github-20261019 · 已进集成（跳过）
+  #12  [x] 并入  F-0045 aios: 分类器长按带起手坐标；静默窗口内按下的整次不算长按 · 固件仓 feat/aios-theme-ops · 已进集成（跳过）
+  #13  [x] 并入  F-0046 companion: 精灵包 HVC1 生成/回读与参数包校验工具 · 固件仓 feat/aios-companion-assets · 已进集成（跳过）
+  #14  [x] 并入  F-0047 stage: 参数包装载接受 palette.outline（line 的别名）与 mouth，内置默认对齐 A4 的 SYSTEM 包 · 固件仓 feat/aios-stage · 已进集成（跳过）
+  #15  [x] 并入  F-0048 aios: 阶段 2 实机场景——戳公仔、按住说话、公仔上慢滑、四种外观与主题联动 · 固件仓 feat/aios-core · 已进集成（跳过）
+  #16  [x] 并入  F-0049 aios: 开机后预热图标包，抽屉首次打开不卡；触摸注入抬起前补终点按下采样 · 固件仓 feat/aios-vswap · 已进集成（跳过）
+  #17  [x] 并入  F-0050 companion: 参数包加墨点变体 ink 与白纸主题 paper · 固件仓 feat/aios-ink-companion · 已进集成（跳过）
+  #18  [x] 并入  F-0051 aios-cards: 卡片流模型——48 张 upsert、淘汰、过期、排序与 backclip.card/1 校验，宿主测试 test_cards · 固件仓 feat/aios-cards · 已进集成（跳过）
+  #19  [x] 并入  F-0052 drawer: 应用标签模块 hv_tags——9 类、规则兜底、user > phone-ai > rule 合并、tags.json 读写 · 固件仓 feat/aios-drawer · 已进集成（跳过）
+  #20  [x] 并入  F-0053 timeline: 时间线日志核心与左拨面板（替换阶段 3 桩） · 固件仓 feat/aios-timeline · 已进集成（跳过）
+  #21  [x] 并入  F-0054 call_agent: 电话秘书对话像人、不重复问——已问清单、上两轮注入、话术轮换 · 固件仓 feat/callsec-humanize · 已进集成（跳过）
+  #22  [x] 并入  F-0055 speak: 首页回复朗读改流式合成 + 播放环形缓冲预攒，Wi-Fi 接收窗口放大 · 固件仓 feat/aios-stream-tts · 已进集成（跳过）
+  #23  [x] 并入  F-0056 callsec: 通话卡 id 与时间线 ref 改用 Flash 纪要编号 call:<seq> · 固件仓 feat/aios-fw-followups · 已进集成（跳过）
+  #24  [x] 并入  F-0057 cards: 打开卡片流焦点回到第一张；按着卡片时推迟 30 s 同步引起的重建 · 固件仓 feat/aios-cards-fixes · 已进集成（跳过）
+  #25  [x] 并入  F-0058 timeline: 时间线 v2 数据层——每条事件带 lane（项目分支）与标签，加 journal_lanes · 固件仓 feat/aios-timeline-lanes · 已进集成（跳过）
+
+未能试合（25）
+  #26  [ ] 待定  F-0001 HTML交互页面原型 · 文档仓 claude/html-interactive-prototype-f39588 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 188
+  #27  [ ] 待定  F-0002 场景挖掘 · 文档仓 claude/scenario-discovery-d9fcb4 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 187
+  #28  [ ] 待定  F-0003 POC市场调研与可视化分析 · 文档仓 claude/poc-market-research-analysis-587415 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 176
+  #29  [ ] 待定  F-0004 底座需求文档梳理 · 文档仓 claude/base-requirements-doc-dd2357 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 176
+  #30  [ ] 待定  F-0005 原型功能补全与迭代 · 文档仓 claude/prototype-completion-iteration-8cf1b2 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 145
+  #31  [ ] 待定  F-0008 嵌入式端HTML显示可行性 · 文档仓 claude/embedded-html-display-feasibility-157de3 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 143
+  #32  [ ] 待定  F-0009 Meta Muse 开放生态调研 · 文档仓 claude/meta-muse-ecosystem-research-f429b3 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 141
+  #33  [ ] 待定  F-0010 背夹底座标识图 · 文档仓 claude/ai-clip-base-diagrams-bc15f6 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 134
+  #34  [ ] 待定  F-0011 Micropixel Lua framework compatibility · 文档仓 claude/micropixel-lua-compatibility-49359f · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 122
+  #35  [ ] 待定  F-0015 背夹使用场景穷举 · 文档仓 claude/back-clip-use-cases-21d4e9 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 116
+  #36  [ ] 待定  F-0016 竖版背夹卸载功能UI · 文档仓 claude/vertical-case-uninstall-ui-eb0832 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 117
+  #37  [ ] 待定  F-0018 固件同步到 GitHub · 文档仓 claude/firmware-sync-github-776584 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 111
+  #38  [ ] 待定  F-0021 Apple Aqara 与磁吸背夹对比 · 文档仓 claude/apple-aqara-vs-magnetic-clip-a056ed · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 109
+  #39  [ ] 待定  F-0022 AI应用优化与边界探索 · 文档仓 claude/ai-app-optimization-boundaries-0a2a80 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 111
+  #40  [ ] 待定  F-0024 涂鸦云开发 PoC：背夹控制并显示涂鸦设备状态 · 文档仓 claude/bold-mahavira-252937 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 109
+  #41  [ ] 待定  F-0025 小组件标准规范评估 · 文档仓 claude/widget-standards-evaluation-eda7b5 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 104
+  #42  [ ] 待定  F-0027 ASR语音功能集成 · 文档仓 claude/asr-voice-integration-e8596e · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 113
+  #43  [ ] 待定  F-0033 实现 EPP 网关 v0（代调 MCP / CLI） · 文档仓 claude/bold-shaw-093e51 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 111
+  #44  [ ] 待定  F-0036 起草小组件规范 v0.2：统一原生首页与 EPP 数据格式 · 文档仓 claude/objective-morse-e42064 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 104
+  #45  [ ] 待定  F-0038 磁吸背夹项目文件归档 · 文档仓 claude/promo-package-20261019 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 104
+  #46  [ ] 待定  F-0039 AI原生操作系统调研 · 文档仓 claude/ai-native-os-research-867221 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 102
+  #47  [ ] 待定  F-0040 API key model selection configuration · 文档仓 claude/api-key-model-selection-7f08ac · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 102
+  #48  [ ] 待定  F-0042 ui_squareline: drag the centre icon to a trash to uninstall it · 固件仓 feat/portrait-uninstall-drag · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 209
+  #49  [ ] 待定  F-0043 ble: tear down by what actually came up when bridge start fails · 固件仓 fix/ble-stop-teardown · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 155
+  #50  [ ] 待定  F-0044 voice_cloud: 对话服务商 chat_provider 与思维链深度 chat_effort · 固件仓 feat/chat-provider-effort · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 100
+
+未完成（8）
+  #51  [ ] 顺延  F-0006 AI背夹洞察同步 · 文档仓 claude/ai-backclip-insights-sync-52d9cf · 未完成 → 顺延 · 会话等你回答：confirm: push to GitHub remote? merge V2 branch? git init on USB folder? share a · 落后集成 145
+  #52  [ ] 顺延  F-0007 磁吸背夹 HTML 原型构建 · 文档仓 claude/magnetic-clip-html-prototype-1642f0 · 未完成 → 顺延 · 会话等你回答：Do you want the AI canvas definition in the PRD (§4.2) updated to match "voice → · 落后集成 143
+  #53  [ ] 顺延  F-0012 竖版背夹卸载功能UI (fork) · 文档仓 claude/quirky-villani-bb2ba2 · 未完成 → 顺延 · 会话等你回答：确认是否推送 feat/portrait-uninstall-drag 到 janauto/esp_claw · 落后集成 117
+  #54  [ ] 顺延  F-0013 磁吸背夹竖版触屏焦点错误 · 文档仓 claude/magnetic-clip-portrait-touch-focus-8bbfc2 · 未完成 → 顺延 · 会话等你回答：确认在 janauto 账号下建私有 GitHub 仓库并推送项目文档 · 落后集成 116
+  #55  [ ] 顺延  F-0014 Live2D 交互角色可行性评估 · 文档仓 claude/live2d-interactive-character-98f128 · 未完成 → 顺延 · 会话等你回答：确认：是否配置远端并合并 claude/live2d-interactive-character-98f128 到 main；以及“兼容MUSE”是要真接入Mu · 落后集成 116
+  #56  [ ] 顺延  F-0017 磁吸背夹 CLI 监听功能评估 · 文档仓 claude/magnetic-clip-cli-monitoring-577a21 · 未完成 → 顺延 · 会话等你回答：让另一个任务释放背夹，并用手机把背夹配到 esp-claw-D07132 的 2.4G 网络，然后告诉我 · 落后集成 116
+  #57  [ ] 顺延  F-0020 主题系统架构设计 · 文档仓 claude/theme-system-architecture-1cbb25 · 未完成 → 顺延 · 会话等你回答：选要做哪几件：1 刷 c38a2762 语音固件；2 推送小家外壳；3 推送语音固件到公开仓库 · 落后集成 116
+  #58  [ ] 顺延  F-0041 AI电话助手来电路由与语气定制 · 文档仓 claude/ai-phone-assistant-routing-a16f5a · 未完成 → 顺延 · 会话等你回答：对6项拍板（可直接回“默认”采用推荐值）；另定方案文档推不推送到私有仓库 · 落后集成 102
+
+无法合并（3）
+  #59  [ ] 顺延  F-0059 merge baked config and direct Bailian ASR fallback into app 0.7.0 · App 仓 claude/app-0.7.0 · 无法合并 → 先补分支/配置（默认顺延） · 仓库未配置集成分支（project.yaml integration）
+  #60  [ ] 顺延  F-0060 app: 对话模型可选 OpenAI / DeepSeek 与思维链深度 · App 仓 feat/api-key-model-select · 无法合并 → 先补分支/配置（默认顺延） · 仓库未配置集成分支（project.yaml integration）
+  #61  [ ] 顺延  F-0061 app: app_state 拆成八个控制器，协议层补 2.0 操作与 hello.ops 协商 · App 仓 feat/aios-app · 无法合并 → 先补分支/配置（默认顺延） · 仓库未配置集成分支（project.yaml integration）
+
+合计 61 项：新增待合 0 · 已在集成 25 · 有冲突 0 · 未能试合 25 · 未检查 0 · 顺延 11
+
+合并单：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-real-preview-vPcFQo/home/projects/磁吸背夹/ledger/releases/vNext.md
+未能试合 25 项（没有得到试合结果，不等于有冲突）：默认「待定」，执行时跳过、留在本版；建议重新试合（heliu doctor 看沙箱是否可用）或人工确认后 heliu release set vNext <卡号> 并入|顺延。
+下一步（建议）：核对决定（改：heliu release set vNext <卡号|#序号> 并入|顺延|等它|不并）→ heliu 合并 vNext --dry-run → heliu 合并 vNext
+
+
+[
+  {
+    "repo": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹",
+    "items": 898,
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  {
+    "repo": "/Users/linxiansheng/.cache/backclip-web/esp_claw",
+    "items": 676,
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  {
+    "repo": "/Users/linxiansheng/.cache/backclip-app-gitlab-20261015",
+    "items": 416,
+    "added": [],
+    "removed": [],
+    "changed": []
+  }
+]
+
+codex
+fixture 已完成合入 5 项、显式顺延 1 项到 v1.3、记录 `rolled_from`、打 tag 和生成发布说明；回滚后所有引用恢复原值，功能卡预约和里程碑状态也恢复了。终端确认要求输入 `yes`，直接回车确实取消，执行结束的“未推送”提醒也明确。真实项目预演完成，三仓库前后快照一致；受当前沙箱环境限制，本次无法重验冲突文件清单，只能核对已有演练证据。
+
+exec
+/bin/zsh -lc "sed -n '37,66p' docs/04-验收记录/M4-演练报告.md; rg -n 'sandbox|沙箱' src/core/git.ts src/core/rehearse.ts; git status --short; test "'! -d '"'/Users/linxiansheng/Library/Application Support/heliu/projects/磁吸背夹/ledger/releases' && echo 'real ledger releases absent'; git -C '/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹' rev-parse refs/heads/claude/merge-features-refactor-143693; git -C '/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹' tag --list vNext" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 0ms:
+| 20 | 并入 | F-0053 timeline: 时间线日志核心与左拨面板（替换阶段 3 桩） | firmware `feat/aios-timeline` | 已进集成 | — | 未演练 |
+| 21 | 并入 | F-0054 call_agent: 电话秘书对话像人、不重复问——已问清单、上两轮注入、话术轮换 | firmware `feat/callsec-humanize` | 已进集成 | — | 未演练 |
+| 22 | 并入 | F-0055 speak: 首页回复朗读改流式合成 + 播放环形缓冲预攒，Wi-Fi 接收窗口放大 | firmware `feat/aios-stream-tts` | 已进集成 | — | 未演练 |
+| 23 | 并入 | F-0056 callsec: 通话卡 id 与时间线 ref 改用 Flash 纪要编号 call:<seq> | firmware `feat/aios-fw-followups` | 已进集成 | — | 未演练 |
+| 24 | 并入 | F-0057 cards: 打开卡片流焦点回到第一张；按着卡片时推迟 30 s 同步引起的重建 | firmware `feat/aios-cards-fixes` | 已进集成 | — | 未演练 |
+| 25 | 并入 | F-0058 timeline: 时间线 v2 数据层——每条事件带 lane（项目分支）与标签，加 journal_lanes | firmware `feat/aios-timeline-lanes` | 已进集成 | — | 未演练 |
+| 26 | 并入 | F-0005 原型功能补全与迭代 | docs `claude/prototype-completion-iteration-8cf1b2` | 无冲突 | 无 | 已合入 · → 95a3603 |
+| 27 | 并入 | F-0008 嵌入式端HTML显示可行性 | docs `claude/embedded-html-display-feasibility-157de3` | 无冲突 | 无 | 已合入 · → b477e15 |
+| 28 | 并入 | F-0009 Meta Muse 开放生态调研 | docs `claude/meta-muse-ecosystem-research-f429b3` | 无冲突 | 无 | 已合入 · → 28d2abb |
+| 29 | 并入 | F-0010 背夹底座标识图 | docs `claude/ai-clip-base-diagrams-bc15f6` | 无冲突 | 无 | 已合入 · → 1cecfed |
+| 30 | 并入 | F-0016 竖版背夹卸载功能UI | docs `claude/vertical-case-uninstall-ui-eb0832` | 无冲突 | 无 | 已合入 · → 9e7f8e9 |
+| 31 | 并入 | F-0018 固件同步到 GitHub | docs `claude/firmware-sync-github-776584` | 无冲突 | 无 | 已合入 · → f153420 · union 1 个 |
+| 32 | 并入 | F-0021 Apple Aqara 与磁吸背夹对比 | docs `claude/apple-aqara-vs-magnetic-clip-a056ed` | 无冲突 | 无 | 已合入 · → 6ea02ea |
+| 33 | 并入 | F-0038 磁吸背夹项目文件归档 | docs `claude/promo-package-20261019` | 无冲突 | 无 | 已合入 · → 2913d5c |
+| 34 | 并入 | F-0039 AI原生操作系统调研 | docs `claude/ai-native-os-research-867221` | 无冲突 | 无 | 已合入 · → b5f4dee |
+| 35 | 并入 | F-0040 API key model selection configuration | docs `claude/api-key-model-selection-7f08ac` | 无冲突 | 无 | 已合入 · → 22e42cf |
+| 36 | 并入 | F-0011 Micropixel Lua framework compatibility | docs `claude/micropixel-lua-compatibility-49359f` | 有冲突 | union（两边内容都保留、新日期在前）：README.md | 已合入 · → 5687999 · union 1 个 |
+| 37 | 并入 | F-0015 背夹使用场景穷举 | docs `claude/back-clip-use-cases-21d4e9` | 有冲突 | union（两边内容都保留、新日期在前）：README.md | 已合入 · → 2214076 · union 1 个 |
+| 38 | 并入 | F-0024 涂鸦云开发 PoC：背夹控制并显示涂鸦设备状态 | docs `claude/bold-mahavira-252937` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、嵌入式/README.md | 已合入 · → 685646f · union 2 个 |
+| 39 | 并入 | F-0025 小组件标准规范评估 | docs `claude/widget-standards-evaluation-eda7b5` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、嵌入式/README.md | 已合入 · → 664061f · union 2 个 |
+| 40 | 并入 | F-0036 起草小组件规范 v0.2：统一原生首页与 EPP 数据格式 | docs `claude/objective-morse-e42064` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、嵌入式/README.md | 已合入 · → a338e03 · union 1 个 |
+| 41 | 并入 | F-0022 AI应用优化与边界探索 | docs `claude/ai-app-optimization-boundaries-0a2a80` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md | 已合入 · → 82d8299 · union 3 个 |
+| 42 | 并入 | F-0027 ASR语音功能集成 | docs `claude/asr-voice-integration-e8596e` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md | 已合入 · → 86f72dd · union 3 个 |
+| 43 | 并入 | F-0033 实现 EPP 网关 v0（代调 MCP / CLI） | docs `claude/bold-shaw-093e51` | 有冲突 | union（两边内容都保留、新日期在前）：README.md、业务/AI-Coding业务与进度.md、嵌入式/README.md | 已合入 · → 329b066 · union 3 个 |
+| 44 | 顺延 | F-0001 HTML交互页面原型 | docs `claude/html-interactive-prototype-f39588` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 无 | 不合 |
+| 45 | 顺延 | F-0002 场景挖掘 | docs `claude/scenario-discovery-d9fcb4` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 无 | 不合 |
+| 46 | 顺延 | F-0003 POC市场调研与可视化分析 | docs `claude/poc-market-research-analysis-587415` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 无 | 不合 |
+| 47 | 顺延 | F-0004 底座需求文档梳理 | docs `claude/base-requirements-doc-dd2357` | 未完成（功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）） | 无 | 不合 |
+| 48 | 顺延 | F-0006 AI背夹洞察同步 | docs `claude/ai-backclip-insights-sync-52d9cf` | 未完成（会话等你回答：confirm: push to GitHub remote? merge V2 branch? git init on USB folder? share a） | 无 | 不合 |
+| 49 | 顺延 | F-0007 磁吸背夹 HTML 原型构建 | docs `claude/magnetic-clip-html-prototype-1642f0` | 未完成（会话等你回答：Do you want the AI canvas definition in the PRD (§4.2) updated to match "voice →） | 无 | 不合 |
+src/core/git.ts:10: * - macOS 上每条 git 命令都包在 sandbox-exec 里，对被管理仓库路径 deny file-write*：
+src/core/git.ts:40:  /** 沙箱内禁止写入的路径（默认 cwd）；被管理仓库根、common dir、外置 worktree 都应列入 */
+src/core/git.ts:187:const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
+src/core/git.ts:188:let sandboxProbe: boolean | null = null;
+src/core/git.ts:190:/** sandbox-exec 是否可用（只探测一次；非 macOS 或已处于不允许嵌套的沙箱时为 false） */
+src/core/git.ts:191:export function sandboxAvailable(): boolean {
+src/core/git.ts:192:  if (sandboxProbe === null) {
+src/core/git.ts:193:    sandboxProbe = false;
+src/core/git.ts:197:        sandboxProbe = r.exitCode === 0;
+src/core/git.ts:199:        sandboxProbe = false;
+src/core/git.ts:203:  return sandboxProbe;
+src/core/git.ts:206:/** 生成 deny file-write* 的沙箱配置；同时写入 realpath、NFC、NFD 三种形式，避免 Unicode 规范化不一致漏防 */
+src/core/git.ts:207:export function sandboxProfile(paths: readonly string[]): string {
+src/core/git.ts:288:  const sandboxed = sandboxAvailable() && protect.length > 0;
+src/core/git.ts:289:  if (args[0] === "merge-tree" && !sandboxed) {
+src/core/git.ts:291:    return { ok: false, code: null, stdout: "", stderr: "无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检", timedOut: false, durationMs: 0 };
+src/core/git.ts:294:  const cmd = sandboxed ? [SANDBOX_EXEC, "-p", sandboxProfile(protect), ...gitCmd] : gitCmd;
+src/core/git.ts:436:/** 写模式沙箱：先 deny 再 allow（SBPL 后写的规则优先，实测确认） */
+src/core/git.ts:454:  /** 没有沙箱时拒绝执行（演练必须：否则 git 会刷新真实对象库里已有对象的 mtime） */
+src/core/git.ts:631:/** 先 deny 再 allow 的写模式沙箱配置 */
+src/core/git.ts:632:export function sandboxWriteProfile(policy: WritePolicy): string {
+src/core/git.ts:638:/** 把任意命令包进写模式沙箱（解冲突子代理、checks 也用它）；沙箱不可用或无 deny 时原样返回 */
+src/core/git.ts:639:export function wrapInSandbox(cmd: readonly string[], policy: WritePolicy | undefined): { cmd: string[]; sandboxed: boolean } {
+src/core/git.ts:640:  if (!policy || !policy.deny.length || !sandboxAvailable()) return { cmd: [...cmd], sandboxed: false };
+src/core/git.ts:641:  return { cmd: [SANDBOX_EXEC, "-p", sandboxWriteProfile(policy), ...cmd], sandboxed: true };
+src/core/git.ts:663: * - macOS 上包进 sandbox-exec：deny 被管理仓库根、allow 目标 common dir 与 heliu 缓存目录。
+src/core/git.ts:673:  const sandboxed = !!opts.policy?.deny.length && sandboxAvailable();
+src/core/git.ts:674:  if (opts.requireSandbox && !sandboxed) {
+src/core/git.ts:675:    appendAudit(opts.auditLog, `${stamp()}\t未执行\t${opts.reason}\t${repo}\tgit ${args.map(auditArg).join(" ")}\t沙箱不可用`);
+src/core/git.ts:676:    return { ok: false, code: null, stdout: "", stderr: "无法建立写保护沙箱（sandbox-exec 不可用），按规则不执行", timedOut: false, durationMs: 0 };
+src/core/git.ts:678:  appendAudit(opts.auditLog, `${stamp()}\t执行\t${opts.reason}\t${repo}\tgit ${args.map(auditArg).join(" ")}${sandboxed ? "" : "\t（无沙箱）"}`);
+src/core/git.ts:682:  const { cmd } = wrapInSandbox(gitCmd, sandboxed ? opts.policy : undefined);
+src/core/rehearse.ts:4: * 1. 写保护沙箱必须可用（否则拒绝：克隆用 alternates 引用真实对象库，git 写已存在的对象时会去刷新真实 pack 的 mtime——实测）。
+src/core/rehearse.ts:7: * 4. git clone --mirror --shared <主仓库> …/<仓库>.git：只复制引用、对象库只读引用；沙箱 deny 全部真实仓库。
+src/core/rehearse.ts:15:import { lines, runGit, runGitWrite, sandboxAvailable } from "./git.ts";
+src/core/rehearse.ts:46:  /** 演练全程是否在写保护沙箱里（演练要求必须是；记录在报告里） */
+src/core/rehearse.ts:47:  sandboxed: boolean;
+src/core/rehearse.ts:61:  if (!sandboxAvailable()) throw new ReleaseError("演练必须在写保护沙箱（sandbox-exec）里进行，当前不可用，已拒绝");
+src/core/rehearse.ts:70:  // 真实仓库路径（沙箱 deny）+ 快照（前）
+src/core/rehearse.ts:147:    sandboxed: sandboxAvailable(),
+src/core/rehearse.ts:176:  L.push(`- 写保护沙箱：${r.sandboxed ? "**已启用**（sandbox-exec；克隆、试合、合并、解冲突器、checks 全部 deny 真实仓库的根目录与 .git）" : "**未启用**（不应出现：演练在沙箱不可用时会拒绝执行）"}`);
+real ledger releases absent
+4329a384f567f57a44dda7cb2778d06f700510d4
+
+exec
+/bin/zsh -lc "bun -e 'import {readFileSync,readdirSync} from \"node:fs\"; import {parsePlan} from \"./src/core/release-plan.ts\"; import {Ledger} from \"./src/core/ledger.ts\"; const root=\"/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107\";const p=parsePlan(readFileSync(root+\"/ledger/releases/vNext.md\",\"utf8\")); console.log(JSON.stringify({status:p.status,results:p.items.reduce((a,i)=>(a[i.result??\"none\"]=(a[i.result??\"none\"]??0)+1,a),{}),refs:p.refs_moved.length,ledgerChanges:p.ledger_changes.length},null,2));let rolled=0; for(const f of readdirSync(root+\"/ledger/features\")){const s=readFileSync(root+\"/ledger/features/\"+f,\"utf8\");if(s.includes(\"milestone: vNext2\")&&/rolled_from:\\s*\\n\\s*- vNext/.test(s))rolled++;} console.log(\"rolled to vNext2 and provenance vNext:\",rolled); let count=0;for(const i of p.items.filter(i=>i.result===\"已合入\")){const r=Bun.spawnSync({cmd:[\"git\",\"-C\",root+\"/docs.git\",\"merge-base\",\"--is-ancestor\",i.branch_sha"'!,"refs/tags/vNext''^{}"]});if(r.exitCode===0)count++;}console.log("merged branch ancestor checks:",count);'"'" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M4-r2-0d7dedb
+ succeeded in 163ms:
+{
+  "status": "已发布",
+  "results": {
+    "已在集成": 11,
+    "未演练": 14,
+    "已合入": 18,
+    "none": 18
+  },
+  "refs": 19,
+  "ledgerChanges": 41
+}
+rolled to vNext2 and provenance vNext: 12
+merged branch ancestor checks: 18
+
+codex
+{
+  "verdict": "有保留",
+  "summary": "fixture 实测合入5项、跳过已合入1项，未完成1项顺延到v1.3并记录 rolled_from；tag、发布说明齐全，回滚后全部引用和预约恢复。能看懂合哪些、为何等待和顺延，输入 yes 才执行、回车取消及“未推送”提醒均明确。真实项目仅用台账副本做只读预演，三仓库快照无变化，已有演练的原始快照也核对一致；但当前沙箱不可用，冲突清单未能重新验证，真实子代理解冲突仍缺闭环。",
+  "solved": {
+    "版本遗漏": "已解决",
+    "分支落后": "部分解决",
+    "大版本待办": "本里程碑不涉及"
+  },
+  "blocking_issues": [
+    {
+      "title": "普通冲突交子代理仍缺真实端到端验收",
+      "repro": "本次fixture普通冲突由stub保留集成侧解决；已有真实演练18项合入均未调用Opus，实现说明明确记录CLI认证问题。",
+      "impact": "可以确认流程能调用解冲突器，尚不能确认普通用户遇到代码冲突时能够自动解决且保留双方功能，因此不能无保留通过完整承诺。"
+    }
+  ],
+  "suggestions": [
+    "M5安装完成后直接展示沙箱、Claude登录和集成分支检查结果，并给出可执行的修复步骤。",
+    "补齐真实Claude普通冲突及多仓库克隆演练，明确区分桩验证、文档仓通过和其他仓库未验证。",
+    "预演顶部先显示本次新增合入、等待、顺延及目标版本，折叠已在集成的长列表。",
+    "明确提示冲突检查基于当前集成分支，前面的合入可能产生新冲突；已有演练F-0018就是实例。",
+    "M5提供可点击的决定编辑与终端执行入口，避免用户修改Markdown勾选表却不生效，并统一README与实际确认流程的描述。"
+  ]
+}
+tokens used
+86,351
+{
+  "verdict": "有保留",
+  "summary": "fixture 实测合入5项、跳过已合入1项，未完成1项顺延到v1.3并记录 rolled_from；tag、发布说明齐全，回滚后全部引用和预约恢复。能看懂合哪些、为何等待和顺延，输入 yes 才执行、回车取消及“未推送”提醒均明确。真实项目仅用台账副本做只读预演，三仓库快照无变化，已有演练的原始快照也核对一致；但当前沙箱不可用，冲突清单未能重新验证，真实子代理解冲突仍缺闭环。",
+  "solved": {
+    "版本遗漏": "已解决",
+    "分支落后": "部分解决",
+    "大版本待办": "本里程碑不涉及"
+  },
+  "blocking_issues": [
+    {
+      "title": "普通冲突交子代理仍缺真实端到端验收",
+      "repro": "本次fixture普通冲突由stub保留集成侧解决；已有真实演练18项合入均未调用Opus，实现说明明确记录CLI认证问题。",
+      "impact": "可以确认流程能调用解冲突器，尚不能确认普通用户遇到代码冲突时能够自动解决且保留双方功能，因此不能无保留通过完整承诺。"
+    }
+  ],
+  "suggestions": [
+    "M5安装完成后直接展示沙箱、Claude登录和集成分支检查结果，并给出可执行的修复步骤。",
+    "补齐真实Claude普通冲突及多仓库克隆演练，明确区分桩验证、文档仓通过和其他仓库未验证。",
+    "预演顶部先显示本次新增合入、等待、顺延及目标版本，折叠已在集成的长列表。",
+    "明确提示冲突检查基于当前集成分支，前面的合入可能产生新冲突；已有演练F-0018就是实例。",
+    "M5提供可点击的决定编辑与终端执行入口，避免用户修改Markdown勾选表却不生效，并统一README与实际确认流程的描述。"
+  ]
+}
