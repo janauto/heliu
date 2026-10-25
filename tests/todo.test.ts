@@ -4,6 +4,8 @@
  * 另有 Codex 第 1 轮反馈的回归：零提交分支不能被当成「已进主线」，台账状态决定是否计入待办。
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderTodo } from "../src/cli/render-ledger.ts";
 import { bindingKey } from "../src/core/owncommits.ts";
@@ -327,5 +329,96 @@ describe("回归：从主线新建 worktree、不提交就登记新点子", () =
     const it = j.data.groups.flatMap((g: { items: Array<{ id: string; note: string | null; group: string }> }) => g.items)[0];
     expect(it.id).toBe("F-0001");
     expect(it.note).toBeNull();
+  }, 60_000);
+});
+
+/* ───────────── Codex 第 2 轮：同点规则收紧与 sourceBranch 优先 ───────────── */
+
+describe("回归：提交后被快进合并的分支不是「尚无提交」；从集成分支开出的零提交分支是", () => {
+  let root: string;
+  let repo: string;
+  let env: Record<string, string>;
+  const wt = (name: string) => join(root, "wt", name);
+  const heliu = (args: string[], cwd: string) => {
+    const r = Bun.spawnSync({ cmd: [BIN, ...args], cwd, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
+    return { code: r.exitCode ?? -1, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+  };
+  type Item = { id: string; title: string; group: string; note: string | null; suggestion: string | null };
+  const items = (cwd: string, ms: string): Item[] => {
+    const j = JSON.parse(heliu(["待办", ms, "--json"], cwd).stdout);
+    return j.data.groups.flatMap((g: { items: Item[] }) => g.items);
+  };
+  const commitIn = (dir: string, file: string) => {
+    writeFileSync(join(dir, file), `${file}\n`);
+    gitW(dir, "add", file);
+    gitW(dir, "commit", "-q", "-m", `feat: ${file}`);
+  };
+
+  beforeAll(() => {
+    // Codex 的复现：从 main 建 integ（与 main 同点）
+    root = realpathSync(mkdtempSync(join(tmpdir(), "heliu-ff-")));
+    repo = join(root, "仓 库");
+    mkdirSync(repo);
+    for (const d of ["home", "app", "claude"]) mkdirSync(join(root, d));
+    env = { HELIU_HOME: join(root, "home"), HELIU_CLAUDE_APP_DIR: join(root, "app"), HELIU_CLAUDE_HOME: join(root, "claude") };
+    gitW(repo, "init", "-q", "-b", "main");
+    gitW(repo, "config", "commit.gpgsign", "false");
+    commitIn(repo, "README.md");
+    gitW(repo, "branch", "integ");
+    expect(heliu(["project", "add", repo, "--name", "闹钟", "--integration", "integ"], repo).code).toBe(0);
+  });
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  test("Codex 复现：feat/alarm 提交后被 integ 快进合并 → 可合并 · 已进集成分支，并建议标为已合入", () => {
+    gitW(repo, "worktree", "add", "-q", "-b", "feat/alarm", wt("alarm"), "main");
+    expect(heliu(["新点子", "让背夹支持闹钟"], wt("alarm")).code).toBe(0);
+    expect(heliu(["预约", "F-0001", "v1.2"], wt("alarm")).code).toBe(0);
+    commitIn(wt("alarm"), "alarm.txt");
+    gitW(repo, "checkout", "-q", "integ");
+    gitW(repo, "merge", "-q", "--ff-only", "feat/alarm");
+    const it = items(wt("alarm"), "v1.2").find((i) => i.id === "F-0001")!;
+    expect(it.group).toBe("mergeable");
+    expect(it.note).toBe("已进集成分支");
+    expect(it.suggestion).toContain("是否把 F-0001 标为已合入");
+    const text = heliu(["待办", "v1.2"], wt("alarm")).stdout;
+    expect(text).toContain("可合并 · 已进集成分支（1）");
+    expect(text).toContain("是否标为已合入");
+    expect(text).not.toContain("尚无提交");
+  }, 60_000);
+
+  test("从集成分支 tip 开出的零提交分支 → 开发中 · 尚无提交（tip == 集成 tip 且相对主线领先 >0，靠 reflog 判定）", () => {
+    gitW(repo, "worktree", "add", "-q", "-b", "feat/from-integ", wt("from-integ"), "integ");
+    expect(heliu(["新点子", "从集成分支开出的功能"], wt("from-integ")).code).toBe(0);
+    const it = items(wt("from-integ"), "下一版").find((i) => i.title === "从集成分支开出的功能")!;
+    expect(it.group).toBe("active");
+    expect(it.note).toBe("尚无提交");
+  }, 60_000);
+
+  test("reflog 缺失时，git-worktrees.json 的 sourceBranch 作主判据：integ..分支 == 0 → 尚无提交", () => {
+    gitW(repo, "worktree", "add", "-q", "-b", "feat/no-reflog", wt("no-reflog"), "integ");
+    expect(heliu(["新点子", "没有 reflog 的功能"], wt("no-reflog")).code).toBe(0);
+    rmSync(join(repo, ".git", "logs", "refs", "heads", "feat", "no-reflog"));
+    // 没有来源分支、也没有 reflog：结构兜底（tip == 集成 tip、主线..分支 >0）→ 判为已进集成分支
+    const before = items(wt("no-reflog"), "下一版").find((i) => i.title === "没有 reflog 的功能")!;
+    expect(before.note).toBe("已进集成分支");
+    writeFileSync(
+      join(root, "app", "git-worktrees.json"),
+      JSON.stringify({ worktrees: { "no-reflog": { name: "no-reflog", path: wt("no-reflog"), branch: "feat/no-reflog", sourceBranch: "integ", baseRepo: repo } } }),
+    );
+    const after = items(wt("no-reflog"), "下一版").find((i) => i.title === "没有 reflog 的功能")!;
+    expect(after.group).toBe("active");
+    expect(after.note).toBe("尚无提交");
+  }, 60_000);
+
+  test("提交后被主线快进合并（tip == 主线 tip）→ 可合并 · 已进主线，不是尚无提交", () => {
+    gitW(repo, "checkout", "-q", "main");
+    gitW(repo, "worktree", "add", "-q", "-b", "feat/ff-main", wt("ff-main"), "main");
+    expect(heliu(["新点子", "快进进主线的功能"], wt("ff-main")).code).toBe(0);
+    commitIn(wt("ff-main"), "ff.txt");
+    gitW(repo, "merge", "-q", "--ff-only", "feat/ff-main");
+    const it = items(wt("ff-main"), "下一版").find((i) => i.title === "快进进主线的功能")!;
+    expect(it.group).toBe("mergeable");
+    expect(it.note).toBe("已进主线");
+    expect(it.suggestion).toContain("标为已进主线");
   }, 60_000);
 });

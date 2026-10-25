@@ -9,7 +9,7 @@ import type { HeliuPaths } from "../core/paths.ts";
 import { loadProject, resolveProject, type ProjectConfig } from "../core/project.ts";
 import { reconcile } from "../core/reconcile.ts";
 import { syncLedger, type SyncResult } from "../core/sync.ts";
-import { zeroCommitBranches } from "../core/owncommits.ts";
+import { sourceBranchIndex, zeroCommitBranches } from "../core/owncommits.ts";
 import { countsTowardTodo, groupTodo, todoFeatures } from "../core/todo.ts";
 import { whereami } from "../core/whereami.ts";
 import { renderFeatureLine, renderFeatureTable, renderMilestones, renderSync, renderTodo, renderWhereami, type RenderOpts } from "../cli/render-ledger.ts";
@@ -234,8 +234,12 @@ export async function opMilestoneTodo(ctx: OpContext, requested: string, opts: {
   const milestones = ledger.listMilestones();
   const features = todoFeatures(ledger.load().features, m.id, (f) => ledger.effectiveMilestone(f, milestones));
   const rec = await reconcile(p, ctx.paths, { precheck: !!opts.precheck, dirty: false, timeoutMs: 8000 });
-  // 「尚无独有提交」：同点或 reflog 显示从未移动（零提交分支的 tip 恒为主线祖先，不能据此当成已合入）
-  const zeroCommit = await zeroCommitBranches(rec.report, features.flatMap((f) => f.bindings.map((b) => ({ repo: b.repo, branch: b.branch }))));
+  // 「尚无独有提交」：来源分支 → reflog 提交类条目 → 结构兜底（零提交分支的 tip 恒为主线/集成祖先，不能据此当成已合入）
+  const zeroCommit = await zeroCommitBranches(
+    rec.report,
+    features.flatMap((f) => f.bindings.map((b) => ({ repo: b.repo, branch: b.branch }))),
+    { sourceOf: sourceBranchIndex(ctx.paths, rec.report) },
+  );
   const next = milestones.find((x) => x.status === "规划中") ?? null;
   let stops: ReturnType<Cache["stops"]> = [];
   try {

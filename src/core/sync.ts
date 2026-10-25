@@ -13,7 +13,7 @@
 import type { FeatureBinding, FeatureStatus, FeatureView, LedgerFeature, SessionLink } from "../types.ts";
 import { humanizeBranch } from "./labels.ts";
 import { Ledger } from "./ledger.ts";
-import { bindingKey, zeroCommitBranches } from "./owncommits.ts";
+import { bindingKey, sourceBranchIndex, zeroCommitBranches } from "./owncommits.ts";
 import type { HeliuPaths } from "./paths.ts";
 import type { ProjectConfig } from "./project.ts";
 import { reconcile, type ReconcileResult } from "./reconcile.ts";
@@ -130,7 +130,7 @@ export async function syncLedger(project: ProjectConfig, paths: HeliuPaths, opts
   const candidates = rec.report.repos.flatMap((r) =>
     r.reachable ? r.branches.filter((b) => b.role === "feature" && b.mergedState !== "unmerged" && b.worktree && !b.worktree.isMain).map((b) => ({ repo: r.id, branch: b.branch })) : [],
   );
-  const zero = await zeroCommitBranches(rec.report, candidates);
+  const zero = await zeroCommitBranches(rec.report, candidates, { sourceOf: sourceBranchIndex(paths, rec.report) });
   const { drafts, skipped } = collectDrafts(project, rec, existing, zero);
   const next = ledger.resolveMilestone("next", { create: false });
   const result: SyncResult = {
