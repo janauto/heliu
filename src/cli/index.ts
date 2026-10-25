@@ -11,7 +11,17 @@ import { heliuPaths } from "../core/paths.ts";
 import { addRepoToProject, listProjectNames, loadProject, ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
 import { reconcile } from "../core/reconcile.ts";
 import { SCHEMA_VERSION, type JsonEnvelope, type MergedState, type ProjectRef, type ScanOptions } from "../types.ts";
-import { renderBranchTable, renderDoctor, renderHeader, renderHygiene, renderSessions, renderStatus, repoTitle } from "./render.ts";
+import {
+  LEGEND,
+  renderBranchTable,
+  renderDoctor,
+  renderHeader,
+  renderHygiene,
+  renderSessions,
+  renderStatusFull,
+  renderStatusSummary,
+  repoTitle,
+} from "./render.ts";
 
 interface GlobalOpts {
   project?: string;
@@ -66,13 +76,15 @@ const globals = (cmd: Command): GlobalOpts => cmd.optsWithGlobals() as GlobalOpt
 
 program
   .command("status")
-  .description("健康条 + 每个仓库的分支对账表")
-  .action(async (_o, cmd: Command) => {
+  .description("健康条 + 行动摘要（等你处理 / 独立未合并 / 已进集成待回主线 / 落后需同步）")
+  .option("--full", "改为显示每个仓库的全部分支长表")
+  .action(async (o: { full?: boolean }, cmd: Command) => {
     const g = globals(cmd);
     const p = await project(g);
-    const { report } = await reconcile(p, heliuPaths(), scanOptions(g));
+    const { report, sessions } = await reconcile(p, heliuPaths(), scanOptions(g));
     if (g.json) printJson(envelope("status", report.project, report));
-    else out(renderStatus(report, { wide: g.wide }));
+    else if (o.full) out(renderStatusFull(report, { wide: g.wide }));
+    else out(renderStatusSummary(report, { wide: g.wide, sessions }));
   });
 
 program
@@ -95,7 +107,7 @@ program
       );
       return;
     }
-    const parts = [renderHeader(report)];
+    const parts = [renderHeader(report), LEGEND];
     for (const r of repos) {
       parts.push("", repoTitle(r));
       if (!r.reachable) parts.push(`  ✗ ${r.error ?? "不可达"}，已跳过`);
@@ -106,8 +118,8 @@ program
 
 program
   .command("sessions")
-  .description("本项目的桌面会话（标题、分支、状态、等你处理、PR）")
-  .option("--all", "包含已归档会话")
+  .description("本项目的桌面会话：默认只列「等你处理」与「运行中」，完整显示待办文案")
+  .option("--all", "再列出其余会话（待验收 / 已完成 / 已归档）")
   .action(async (o: { all?: boolean }, cmd: Command) => {
     const g = globals(cmd);
     const p = await project(g);

@@ -97,7 +97,10 @@ export interface FeatureView {
   /** 相对集成分支；未配置集成分支或集成分支自身为 null */
   vsIntegration: AheadBehind | null;
   upstream: string | null;
-  /** 远端（refs/remotes/*）存在同名分支或上游存在 */
+  /**
+   * 本地有远端引用：refs/remotes/* 下存在同名分支，或配置的上游引用存在。
+   * 只看本地已有引用（heliu 从不 fetch），false 表示「本地无远端引用」，不等于远端一定没有。
+   */
   pushed: boolean;
   worktree: WorktreeRef | null;
   /** 关联会话，按关联强度、最后活动倒序；第一个为主会话 */
@@ -153,6 +156,7 @@ export interface RepoCounts {
   inIntegration: number;
   /** 独立未合并（不含集成分支自身） */
   independent: number;
+  /** 本地无远端引用的分支数（字段名沿用 v1；仅基于本地已有 refs/remotes，未 fetch，不代表远端真实状态） */
   neverPushed: number;
 }
 

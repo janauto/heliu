@@ -70,3 +70,46 @@ export function renderTable(columns: Column[], rows: string[][], opts: { wide?: 
   for (const r of cells) out.push(line(r));
   return out.join("\n");
 }
+
+/**
+ * 按显示宽度折行：中文逐字可断，英文优先在空格处断；保留原文换行，丢弃空行。
+ * 不截断任何内容。
+ */
+export function wrapText(text: string, maxWidth: number): string[] {
+  const limit = Math.max(10, maxWidth);
+  const out: string[] = [];
+  for (const raw of text.replace(/\r/g, "").split("\n")) {
+    const para = raw.replace(/\t/g, " ").replace(/\s+$/, "");
+    if (!para.trim()) continue;
+    let line = "";
+    for (const ch of para) {
+      if (width(line) + width(ch) > limit) {
+        const sp = line.lastIndexOf(" ");
+        // 英文单词中间：退回到最近的空格（只在空格不太靠前时，避免整行过短）
+        if (/[\x21-\x7e]/.test(ch) && sp > 0 && width(line.slice(0, sp)) > limit / 2) {
+          out.push(line.slice(0, sp));
+          line = line.slice(sp + 1);
+        } else {
+          out.push(line);
+          line = "";
+        }
+        if (ch === " " && line === "") continue;
+      }
+      line += ch;
+    }
+    if (line) out.push(line);
+  }
+  return out.length ? out : [""];
+}
+
+/** 带前缀的悬挂缩进：首行「前缀+正文」，后续行与正文对齐 */
+export function hangingWrap(prefix: string, text: string, totalWidth: number): string[] {
+  const indent = " ".repeat(width(prefix));
+  return wrapText(text, totalWidth - width(prefix)).map((l, i) => (i === 0 ? prefix : indent) + l);
+}
+
+/** 输出宽度：COLUMNS 环境变量 > 终端列数 > 100，夹在 60~160 */
+export function outputWidth(): number {
+  const c = Number(process.env.COLUMNS) || process.stdout.columns || 100;
+  return Math.max(60, Math.min(160, c));
+}

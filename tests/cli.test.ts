@@ -62,8 +62,18 @@ describe("CLI", () => {
     expect(JSON.parse(r.stdout).project.name).toBe("演示");
   });
 
-  test("status 中文表格按显示宽度对齐", () => {
+  test("status 默认是行动摘要，--full 才是长表", () => {
     const r = heliu(["status", "--project", "演示"]);
+    expect(r.code).toBe(0);
+    for (const k of ["① 等你处理", "② 独立未合并", "③ 已进集成分支待回主线", "④ 落后需同步", "本地无远端引用", "未 fetch", "--full"]) {
+      expect(r.stdout).toContain(k);
+    }
+    expect(r.stdout).not.toContain("会话（状态·标题）");
+    expect(r.stdout).toContain("实现 EPP 网关 v0"); // 独立未合并里有随机名分支的标签
+  });
+
+  test("status --full 中文表格按显示宽度对齐", () => {
+    const r = heliu(["status", "--project", "演示", "--full"]);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("健康条");
     const lines = r.stdout.split("\n");
