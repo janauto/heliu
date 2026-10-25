@@ -1,0 +1,17 @@
+# macOS / iCloud
+.DS_Store
+*.icloud
+# 运行期数据与密钥
+.env
+.env.*
+*.db
+*.sqlite*
+# 依赖与构建
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+# Claude 本地状态
+.claude/settings.local.json
+.claude/worktrees/
