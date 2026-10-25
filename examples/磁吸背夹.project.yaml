@@ -5,6 +5,14 @@ name: 磁吸背夹
 # 台账（功能卡 + 里程碑）放在 heliu 自己的数据目录：M2 起不往磁吸背夹三个仓库写任何文件。
 # 缺省是 <主仓库>/.heliu/（主仓库 = primary 或第一个仓库）。
 ledger: ~/Library/Application Support/heliu/projects/磁吸背夹/ledger
+# M4：合并时按 union 处理的索引文件（两边都保留、新日期在前；10-22 集成方案里三处冲突都在这三个文件）。
+# 路径相对仓库根，对项目内所有仓库生效（固件仓 README.md 若冲突也按 union 处理）。union_sort_by_date: false 可关闭排序。
+union_files:
+  - README.md
+  - 嵌入式/README.md
+  - 业务/AI-Coding业务与进度.md
+# M4：合并后在临时 worktree 里跑的检查（可空）。文档仓没有测试，暂不配置。
+# checks: []
 repos:
   - id: docs
     label: 文档仓

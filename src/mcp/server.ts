@@ -28,6 +28,7 @@ import { renderHygiene, renderSessions, renderStatusSummary } from "../cli/rende
 import { heliuPaths } from "../core/paths.ts";
 import { reconcile } from "../core/reconcile.ts";
 import { ACCEPTANCE_LEVELS, FEATURE_STATUSES } from "../types.ts";
+import { RELEASE_TOOL_NAMES, registerReleaseTools } from "./release-tools.ts";
 
 export const MCP_TOOL_NAMES = [
   "heliu_whereami",
@@ -41,6 +42,7 @@ export const MCP_TOOL_NAMES = [
   "heliu_milestone_todo",
   "heliu_milestone_list",
   "heliu_sync",
+  ...RELEASE_TOOL_NAMES,
 ] as const;
 
 /** MCP 渲染宽度：模型读文本，不受终端宽度限制，但保持表格可读 */
@@ -258,6 +260,8 @@ export function buildServer(): McpServer {
     },
     async (a) => run("heliu sync --dry-run", () => opSync(ctxOf(a), { dryRun: !!a.dry_run })),
   );
+
+  registerReleaseTools(server, { ctxOf, run, common });
 
   return server;
 }

@@ -62,3 +62,12 @@ export function canonicalPath(p: string): string {
 export function isUnder(child: string, parent: string): boolean {
   return child === parent || child.startsWith(parent + "/");
 }
+
+/**
+ * M4 合并执行的临时目录根（非 iCloud）：~/.cache/heliu（HELIU_CACHE_DIR 可覆盖，测试用）。
+ * 下设 worktrees/<项目>/<里程碑>/<仓库>（解冲突用的临时 worktree）、rehearsal/<项目>/<时间>/（演练克隆）、tmp/。
+ * 写模式 git 只允许在这里做 checkout / merge / reset 等会动工作区的操作。
+ */
+export function heliuCacheDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.HELIU_CACHE_DIR || join(homedir(), ".cache", "heliu");
+}

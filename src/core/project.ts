@@ -30,6 +30,8 @@ export const ProjectConfigSchema = z.object({
   ledger: z.string().nullish(),
   /** M4 用：合并时按 union 策略处理的文件（M2 只解析不使用） */
   union_files: z.array(z.string()).nullish(),
+  /** M4：union 合并后是否按「新日期在前」排序冲突段落（默认 true；false = 保持 merge-file --union 原样） */
+  union_sort_by_date: z.boolean().nullish(),
   /** M4 用：合并后要跑的检查命令（M2 只解析不使用） */
   checks: z.array(z.string()).nullish(),
 });
@@ -57,6 +59,8 @@ export interface ProjectConfig {
   unionFiles?: string[];
   /** M4 用，M2 只解析 */
   checks?: string[];
+  /** M4：union 冲突段落按新日期在前排序（缺省 true） */
+  unionSortByDate?: boolean;
 }
 
 /** 展开 ~ 与相对路径（相对 project.yaml 所在目录） */
@@ -119,6 +123,7 @@ export function parseProjectYaml(text: string, source: string): ProjectConfig {
     ledger: d.ledger ? expandPath(d.ledger, baseDir) : null,
     unionFiles: d.union_files ?? [],
     checks: d.checks ?? [],
+    unionSortByDate: d.union_sort_by_date ?? true,
   };
 }
 
@@ -225,6 +230,7 @@ export interface ProjectExtras {
   primary?: string | null;
   ledger?: string | null;
   union_files?: string[] | null;
+  union_sort_by_date?: boolean | null;
   checks?: string[] | null;
 }
 
@@ -243,6 +249,7 @@ export function stringifyProject(name: string, repos: RepoConfig[], extras: Proj
   if (extras.primary) doc.primary = extras.primary;
   if (extras.ledger) doc.ledger = extras.ledger;
   if (extras.union_files?.length) doc.union_files = extras.union_files;
+  if (typeof extras.union_sort_by_date === "boolean") doc.union_sort_by_date = extras.union_sort_by_date;
   if (extras.checks?.length) doc.checks = extras.checks;
   return `# heliu 项目注册表（由 heliu project add 生成/更新；可手工编辑）\n${YAML.stringify(doc)}`;
 }
@@ -312,7 +319,7 @@ export async function addRepoToProject(paths: HeliuPaths, input: AddRepoInput): 
   if (existingText !== null) {
     try {
       const raw = YAML.parse(existingText) as Record<string, unknown>;
-      extras = { primary: raw.primary as string, ledger: raw.ledger as string, union_files: raw.union_files as string[], checks: raw.checks as string[] };
+      extras = { primary: raw.primary as string, ledger: raw.ledger as string, union_files: raw.union_files as string[], union_sort_by_date: raw.union_sort_by_date as boolean, checks: raw.checks as string[] };
     } catch {
       /* 上面已校验过，不会到这里 */
     }
