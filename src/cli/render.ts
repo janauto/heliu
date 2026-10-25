@@ -276,10 +276,10 @@ export function topActions(report: ReconcileReport, waitingCount: number): strin
   if (integ.length === 1) {
     const r = integ[0]!;
     const i = r.health!.integration!;
-    out.push(`${r.label}集成分支领先主线 ${i.aheadOfMain ?? "?"} 提交、${i.unmergedDays} 天未并回 → 检查集成分支是否可并回主线（heliu 合并 <版本> --预演 可预检）`);
+    out.push(`${r.label}集成分支领先主线 ${i.aheadOfMain ?? "?"} 提交、${i.unmergedDays} 天未并回 → 检查集成分支是否可并回主线（可先预演）`);
   } else if (integ.length > 1) {
     const parts = integ.map((r) => `${r.label}（领先 ${r.health!.integration!.aheadOfMain ?? "?"}、${r.health!.integration!.unmergedDays} 天）`);
-    out.push(`集成分支未并回主线：${parts.join("、")} → 检查集成分支是否可并回主线（heliu 合并 <版本> --预演 可预检）`);
+    out.push(`集成分支未并回主线：${parts.join("、")} → 检查集成分支是否可并回主线（可先预演）`);
   }
   if (waitingCount > 0) out.push(`${waitingCount} 个会话在等你拍板（见 ①，全部：heliu sessions）`);
   const indep = repos.map((r) => ({ r, n: independentOf(r).length })).filter((x) => x.n > 0);

@@ -148,7 +148,7 @@ function NextLine({ ov, pc, onCheck }: { ov: OverviewData | null; pc: { state: "
         )}
         {pc.error ? <span class="err small"> {pc.error}</span> : null}
       </span>
-      <span class="muted">· 顺延：在终端执行 heliu 合并 <版本> 时处理（看板只预演）</span>
+      <span class="muted">· 顺延：在终端执行「heliu 合并 某版本」时处理（看板只预演）</span>
     </div>
   );
 }

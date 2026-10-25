@@ -141,7 +141,7 @@ describe("status 默认：一屏行动摘要", () => {
       .map((x) => x.replace(/\s+/g, "")); // 折行处可能吞掉一个空格，比较时忽略空白
     expect(acts.length).toBe(3);
     expect(section("现在最该做的", "①").join("")).not.toContain("…");
-    expect(acts[0]).toContain("文档仓集成分支领先主线 102 提交、3 天未并回 → 检查集成分支是否可并回主线（M4 提供预检）".replace(/\s+/g, ""));
+    expect(acts[0]).toContain("文档仓集成分支领先主线 102 提交、3 天未并回 → 检查集成分支是否可并回主线（可先预演）".replace(/\s+/g, ""));
     expect(acts[1]).toContain("12 个会话在等你拍板".replace(/\s+/g, ""));
     expect(acts[2]).toContain("19 条独立分支未被主线或集成分支包含（文档仓 11 / App 仓 8；M2 起可预约版本）".replace(/\s+/g, ""));
     expect(text).not.toContain("先把它");

@@ -108,8 +108,8 @@ describe("project add 向导：写入", () => {
 });
 
 describe("安装 / 卸载脚本（只跑 --dry-run）", () => {
-  test("install.sh --dry-run：打印 bun install、user 级 MCP、本地 marketplace 与插件安装命令", () => {
-    const r = Bun.spawnSync({ cmd: ["bash", join(ROOT, "scripts", "install.sh"), "--dry-run"], stdout: "pipe", stderr: "pipe" });
+  test("install.sh --dry-run --with-mcp：打印 bun install、user 级 MCP、本地 marketplace 与插件安装命令", () => {
+    const r = Bun.spawnSync({ cmd: ["bash", join(ROOT, "scripts", "install.sh"), "--dry-run", "--with-mcp"], stdout: "pipe", stderr: "pipe" });
     const out = r.stdout.toString();
     expect(r.exitCode).toBe(0);
     expect(out).toContain("演练模式（--dry-run）");
