@@ -75,18 +75,19 @@ export function healthLine(r: RepoReport): string {
   const h = r.health;
   const parts: string[] = [];
   parts.push(`分支 ${c.branches}`);
-  parts.push(`worktree ${c.worktrees}`);
+  parts.push(`已进主线 ${c.mergedIntoMain}`);
   const unmergedDetail = r.integration
     ? `（进集成 ${c.inIntegration} / 独立 ${c.independent}${h.integration?.exists && !h.integration.mergedIntoMain ? " / 集成分支 1" : ""}）`
     : "";
   parts.push(`未进主线 ${c.unmergedIntoMain}${unmergedDetail}`);
+  parts.push(`worktree ${c.worktrees}`);
   if (h.mainVsRemote) {
     const m = h.mainVsRemote;
+    const ref = m.remoteRef.replace(/^refs\/remotes\//, "");
     if (m.ahead !== null && m.behind !== null) {
-      const ref = m.remoteRef.replace(/^refs\/remotes\//, "");
       const rel = m.ahead === 0 && m.behind === 0 ? "一致" : `↑${m.ahead} ↓${m.behind}${m.ahead > 0 && m.behind > 0 ? "（分叉）" : ""}`;
       parts.push(`主线 vs ${ref} ${rel}`);
-    } else parts.push(`主线 vs 远端：${m.note ?? "未知"}`);
+    } else parts.push(ref ? `主线 vs ${ref}：本地无此引用` : "主线未配置远端");
   }
   if (h.integration) {
     const i = h.integration;
@@ -100,13 +101,12 @@ export function healthLine(r: RepoReport): string {
   parts.push(`本地无远端引用 ${c.neverPushed}`);
   const d = h.worktreeDirty;
   const dirtyParts = [
-    d.clean ? `干净 ${d.clean}` : "",
-    d.dirty ? `脏 ${d.dirty}` : "",
+    d.clean ? `已跟踪文件干净 ${d.clean}` : "",
+    d.dirty ? `有改动 ${d.dirty}` : "",
     d.unknown ? `未知 ${d.unknown}` : "",
     d.skipped ? `未检查 ${d.skipped}` : "",
   ].filter(Boolean);
   parts.push(`工作区 ${dirtyParts.join(" / ") || "—"}`);
-  parts.push(`卫生 ${h.hygieneWarnings} 警告 / ${h.hygieneInfos} 提示`);
   if (r.gitTimeouts) parts.push(`git 超时 ${r.gitTimeouts} 次`);
   return parts.join(" · ");
 }
@@ -255,17 +255,17 @@ export function topActions(report: ReconcileReport, waitingCount: number): strin
   if (integ.length === 1) {
     const r = integ[0]!;
     const i = r.health!.integration!;
-    out.push(`${r.label}集成分支领先主线 ${i.aheadOfMain ?? "?"} 提交、${i.unmergedDays} 天未并回 → 先把它并回 ${r.main}`);
+    out.push(`${r.label}集成分支领先主线 ${i.aheadOfMain ?? "?"} 提交、${i.unmergedDays} 天未并回 → 检查集成分支是否可并回主线（M4 提供预检）`);
   } else if (integ.length > 1) {
     const parts = integ.map((r) => `${r.label}（领先 ${r.health!.integration!.aheadOfMain ?? "?"}、${r.health!.integration!.unmergedDays} 天）`);
-    out.push(`集成分支未并回主线：${parts.join("、")} → 先把它们并回主线`);
+    out.push(`集成分支未并回主线：${parts.join("、")} → 检查集成分支是否可并回主线（M4 提供预检）`);
   }
   if (waitingCount > 0) out.push(`${waitingCount} 个会话在等你拍板（见 ①，全部：heliu sessions）`);
   const indep = repos.map((r) => ({ r, n: independentOf(r).length })).filter((x) => x.n > 0);
   const indepTotal = indep.reduce((a, x) => a + x.n, 0);
   if (indepTotal > 0) {
-    const detail = repos.length > 1 ? `（${indep.map((x) => `${x.r.label} ${x.n}`).join(" / ")}）` : "";
-    out.push(`${indepTotal} 条独立分支未进任何版本${detail}，M2 起可预约`);
+    const detail = repos.length > 1 ? `${indep.map((x) => `${x.r.label} ${x.n}`).join(" / ")}；` : "";
+    out.push(`${indepTotal} 条独立分支未被主线或集成分支包含（${detail}M2 起可预约版本）`);
   }
   for (const r of repos) {
     const m = r.health!.mainVsRemote;
@@ -277,7 +277,7 @@ export function topActions(report: ReconcileReport, waitingCount: number): strin
     const orphans = r.hygiene.filter((h) => h.kind === "orphan_admin_dir" || h.kind === "prunable_worktree").length;
     const locks = r.hygiene.filter((h) => h.kind === "index_lock").length;
     if (orphans || locks) {
-      const what = [orphans ? `${orphans} 个孤儿 worktree 条目` : "", locks ? `${locks} 个残留 index.lock` : ""].filter(Boolean).join("、");
+      const what = [orphans ? `${orphans} 个孤儿 worktree 条目` : "", locks ? `${locks} 个 index.lock（是否残留待确认）` : ""].filter(Boolean).join("、");
       out.push(`${r.label}有 ${what}（heliu hygiene 查看，人工确认后清理）`);
     }
   }
@@ -302,7 +302,8 @@ export function renderStatusSummary(report: ReconcileReport, opts: SummaryOption
   const actions = topActions(report, waiting.length);
   if (actions.length) {
     out.push("现在最该做的");
-    actions.forEach((a, i) => out.push(opts.wide ? `  ${i + 1}）${a}` : truncate(`  ${i + 1}）${a}`, W)));
+    // 结论句不截断：放不下就悬挂缩进折行
+    actions.forEach((a, i) => out.push(...(opts.wide ? [`  ${i + 1}）${a}`] : hangingWrap(`  ${i + 1}）`, a, W))));
   }
 
   // ① 等你处理：全来自同一仓库时不逐条打仓库标记（省宽度、少折行），在标题里说明
@@ -371,7 +372,7 @@ export function renderStatusSummary(report: ReconcileReport, opts: SummaryOption
     const who = multi ? r.label : "";
     if (behind.length === ind.length) {
       const min = Math.min(...behind.map((b) => behindBase(r, b)));
-      behindLines.push(`  ${who}${who ? " " : ""}${ind.length} 条独立分支全部落后${base}（最少 ↓${min}），合并前需同步基线`);
+      behindLines.push(`  ${who}${who ? " " : ""}${ind.length} 条独立分支全部落后${base}（最少 ↓${min}），合并前请评估是否需同步基线`);
     } else {
       behindLines.push(`  ${who}${who ? " " : ""}${behind.length} 条落后${base}${behind.length > BEHIND_LIMIT ? `，落后最多的 ${BEHIND_LIMIT} 条` : ""}：`);
       for (const b of behind.slice(0, BEHIND_LIMIT)) behindLines.push(fitLine("    - ", b.label, `${b.branch} · ↓${behindBase(r, b)}`, W, opts.wide));
@@ -391,7 +392,7 @@ const HYGIENE_TITLE: Record<HygieneKind, string> = {
   dir_branch_mismatch: "目录名 ≠ 分支名",
   orphan_admin_dir: "孤儿 .git/worktrees 条目",
   prunable_worktree: "worktree 目录已不存在",
-  index_lock: "残留 index.lock",
+  index_lock: "检测到 index.lock（是否残留待确认）",
   merged_worktree_remains: "分支已进主线但 worktree 仍在",
   worktree_no_commits: "worktree 相对主线 0 提交",
   detached_worktree: "worktree 分离 HEAD",
@@ -428,7 +429,9 @@ export function renderHygiene(report: ReconcileReport): string {
       const g = groups.get(k);
       if (!g) continue;
       const sev = g.some((x) => x.severity === "warn") ? "警告" : "提示";
-      out.push(`  [${sev}] ${HYGIENE_TITLE[k]}（${g.length}）`);
+      const title = HYGIENE_TITLE[k];
+      // 标题本身以括注结尾时把计数并进括注，避免「（…）（1）」
+      out.push(`  [${sev}] ${title.endsWith("）") ? `${title.slice(0, -1)}；共 ${g.length}）` : `${title}（${g.length}）`}`);
       for (const h of g) out.push(`    - ${h.message}`);
     }
   }
@@ -452,8 +455,8 @@ function sessionBlock(s: SessionView, W: number, wide?: boolean): string[] {
 }
 
 /**
- * heliu sessions：默认只列「等你处理」（最多 8 条）与全部「运行中」并完整显示文案；
- * --all 列出全部等你，并追加其余会话（待验收/已完成/已归档等）的表格。
+ * heliu sessions：默认列出全部「等你处理」与全部「运行中」并完整显示文案；
+ * --all 再追加其余会话（待验收/已完成/已归档等）的表格。
  */
 export function renderSessions(projectName: string, sessions: SessionView[], opts: { all?: boolean; wide?: boolean; width?: number } = {}): string {
   const W = opts.width ?? outputWidth();
@@ -471,11 +474,7 @@ export function renderSessions(projectName: string, sessions: SessionView[], opt
     `合流 · ${projectName} · 会话 ${sessions.length} 条：等你 ${waiting.length} · 运行中 ${running.length}${restParts.length ? `；另有 ${restParts.join(" · ")}` : ""}`,
   ];
   out.push("", `■ 等你处理（${waiting.length}）${waiting.length ? "" : "：无"}`);
-  // 默认最多 8 条（按最后活动倒序）；--all 全列
-  const shownWaiting = opts.all ? waiting : waiting.slice(0, SUMMARY_LIMIT);
-  for (const s of shownWaiting) out.push(...sessionBlock(s, W, opts.wide));
-  const moreWaiting = waiting.length - shownWaiting.length;
-  if (moreWaiting > 0) out.push(`  …还有 ${moreWaiting} 条等你，\`heliu sessions --all\` 查看`);
+  for (const s of waiting) out.push(...sessionBlock(s, W, opts.wide));
   out.push("", `■ 运行中（${running.length}，含在线空闲）${running.length ? "" : "：无"}`);
   for (const s of running) out.push(...sessionBlock(s, W, opts.wide));
 
@@ -503,7 +502,7 @@ export function renderSessions(projectName: string, sessions: SessionView[], opt
       out.push(renderTable(columns, rows, { wide: opts.wide, indent: "  " }));
     }
   } else if (rest.length) {
-    out.push("", `提示：heliu sessions --all 显示其余 ${rest.length} 条（${restParts.join(" · ")}）${moreWaiting > 0 ? `，以及另外 ${moreWaiting} 条等你` : ""}`);
+    out.push("", `提示：heliu sessions --all 显示其余 ${rest.length} 条（${restParts.join(" · ")}）`);
   }
   return out.join("\n");
 }

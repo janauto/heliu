@@ -118,7 +118,7 @@ program
 
 program
   .command("sessions")
-  .description("本项目的桌面会话：默认只列「等你处理」与「运行中」，完整显示待办文案")
+  .description("本项目的桌面会话：默认列出全部「等你处理」与「运行中」，完整显示待办文案")
   .option("--all", "再列出其余会话（待验收 / 已完成 / 已归档）")
   .action(async (o: { all?: boolean }, cmd: Command) => {
     const g = globals(cmd);

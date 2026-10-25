@@ -124,21 +124,35 @@ describe("status 默认：一屏行动摘要", () => {
     expect(text).toContain(`  ${REMOTE_NOTE}`);
     expect(text).toContain("本地无远端引用 7");
     expect(text).not.toContain("从未推送");
+    // 健康条：已进主线计数、已跟踪文件口径，不再带卫生计数；远端括注只出现一次
+    expect(text).toContain("分支 0 · 已进主线 1 · 未进主线 0");
+    expect(text).toContain("工作区 已跟踪文件干净 3");
+    expect(text).not.toMatch(/卫生 \d+ 警告/);
+    expect(text.split(REMOTE_NOTE).length - 1).toBe(1);
     expect(text).toContain("✗ 路径不存在");
     expect(lines[lines.length - 1]).toBe(FULL_HINT);
   });
 
   test("现在最该做的：按严重度取前 3 句", () => {
-    const acts = section("现在最该做的", "①");
+    // 结论句不截断（窄屏时折行），按编号拼回整句再断言
+    const acts = section("现在最该做的", "①")
+      .join("\n")
+      .split(/\n(?=  \d）)/)
+      .map((x) => x.replace(/\s+/g, "")); // 折行处可能吞掉一个空格，比较时忽略空白
     expect(acts.length).toBe(3);
-    expect(acts[0]).toContain("文档仓集成分支领先主线 102 提交、3 天未并回 → 先把它并回 main");
-    expect(acts[1]).toContain("12 个会话在等你拍板");
-    expect(acts[2]).toContain("19 条独立分支未进任何版本（文档仓 11 / App 仓 8），M2 起可预约");
+    expect(section("现在最该做的", "①").join("")).not.toContain("…");
+    expect(acts[0]).toContain("文档仓集成分支领先主线 102 提交、3 天未并回 → 检查集成分支是否可并回主线（M4 提供预检）".replace(/\s+/g, ""));
+    expect(acts[1]).toContain("12 个会话在等你拍板".replace(/\s+/g, ""));
+    expect(acts[2]).toContain("19 条独立分支未被主线或集成分支包含（文档仓 11 / App 仓 8；M2 起可预约版本）".replace(/\s+/g, ""));
+    expect(text).not.toContain("先把它");
+    expect(text).not.toContain("未进任何版本");
     expect(text).not.toContain("孤儿"); // 第 5 条规则被前 3 条挤掉
     const quiet = repo({ branches: [], hygiene: docs.hygiene });
     quiet.health = { ...quiet.health!, integration: null };
     const t = topActions(report([quiet]), 0);
     expect(t).toEqual(["文档仓主线与 origin/main 分叉（↑7 ↓5）→ 先对齐远端", "文档仓有 1 个孤儿 worktree 条目（heliu hygiene 查看，人工确认后清理）"]);
+    quiet.hygiene = [...quiet.hygiene, { kind: "index_lock", severity: "warn", message: "x", path: "/l", branch: null, count: null }];
+    expect(topActions(report([quiet]), 0)[1]).toContain("1 个 index.lock（是否残留待确认）");
   });
 
   test("四组按顺序出现", () => {
@@ -178,7 +192,7 @@ describe("status 默认：一屏行动摘要", () => {
 
   test("④ 全部落后时只给一句话；否则最多 5 条", () => {
     const block = section("④ 落后需同步", "提示：");
-    expect(block[0]).toBe("  文档仓 11 条独立分支全部落后集成分支（最少 ↓3），合并前需同步基线");
+    expect(block[0]).toBe("  文档仓 11 条独立分支全部落后集成分支（最少 ↓3），合并前请评估是否需同步基线");
     expect(block[1]).toBe("  App 仓 6 条落后主线，落后最多的 5 条：");
     const items = block.slice(2);
     expect(items.length).toBe(5);
@@ -234,15 +248,15 @@ describe("sessions 默认只列等你 + 运行中", () => {
     for (const l of t.split("\n")) expect(width(l)).toBeLessThanOrEqual(WIDTH);
   });
 
-  test("默认最多 8 条等你，其余提示 --all；--all 全列", () => {
+  test("默认列出全部等你（不限条数）+ 全部运行中；其余提示 --all", () => {
     const many = Array.from({ length: 11 }, (_, i) => mk(`w${i}`, "blocked", { needsAction: `事 ${i}` }));
-    const t = renderSessions("演示", [...many, mk("r", "running")], { width: WIDTH });
+    const t = renderSessions("演示", [...many, mk("r", "running"), mk("d", "completed")], { width: WIDTH });
     expect(t).toContain("■ 等你处理（11）");
-    expect(t.split("\n").filter((l) => l.startsWith("    需要你：")).length).toBe(8);
-    expect(t).toContain("…还有 3 条等你，`heliu sessions --all` 查看");
+    expect(t.split("\n").filter((l) => l.startsWith("    需要你：")).length).toBe(11);
+    expect(t).not.toContain("…还有");
     expect(t).toContain("■ 运行中（1，含在线空闲）");
-    const all = renderSessions("演示", many, { width: WIDTH, all: true });
-    expect(all.split("\n").filter((l) => l.startsWith("    需要你：")).length).toBe(11);
+    expect(t).not.toContain("会话 d");
+    expect(t).toContain("--all 显示其余 1 条（已完成 1）");
   });
 
   test("--all：追加其余会话表", () => {

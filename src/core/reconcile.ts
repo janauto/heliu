@@ -509,7 +509,7 @@ function buildHygiene(scan: RepoScan, branches: FeatureView[]): HygieneIssue[] {
       issue({ kind: "orphan_admin_dir", severity: "warn", message: `孤儿条目 .git/worktrees/${o.split("/").pop()}（缺 gitdir）`, path: o, branch: null });
     }
     for (const l of admin.locks) {
-      issue({ kind: "index_lock", severity: "warn", message: `残留锁文件 ${l.replace(scan.commonDir, ".git")}`, path: l, branch: null });
+      issue({ kind: "index_lock", severity: "warn", message: `检测到锁文件 ${l.replace(scan.commonDir, ".git")}（是否残留待确认：可能有 git 进程正在运行）`, path: l, branch: null });
     }
     if (admin.conflictCopies.length) {
       const sample = admin.conflictCopies.slice(0, 3).map((p) => p.replace(scan.commonDir, ".git")).join("、");

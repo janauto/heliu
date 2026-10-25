@@ -130,7 +130,7 @@ export type HygieneKind =
   | "dir_branch_mismatch" // 目录名 ≠ 分支名
   | "orphan_admin_dir" // .git/worktrees/* 缺 gitdir
   | "prunable_worktree" // worktree 目录已不存在
-  | "index_lock" // 残留 index.lock
+  | "index_lock" // 检测到 index.lock（可能残留，也可能有 git 进程正在运行）
   | "merged_worktree_remains" // 分支已进主线但 worktree 目录仍在
   | "worktree_no_commits" // worktree 停在主线顶端，相对主线 0 提交
   | "detached_worktree" // worktree 处于分离 HEAD
