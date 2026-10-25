@@ -332,3 +332,22 @@ describe("M1 遗留修复（M2 一并完成）", () => {
     expect(dirty).toContain("[警告] 主目录脏项（3 个）");
   });
 });
+
+describe("Codex M2 第 1 轮：零提交分支在 --full 表里标注", () => {
+  test("与主线顶端同点的功能分支：合并状态写「进主线（无独有提交）」，分支视角三档本身不变", () => {
+    const tip = "f".repeat(40);
+    const r = repo({
+      branches: [
+        fv({ branch: "main", role: "main", mergedState: "in_main", sha: tip, vsMain: null }),
+        fv({ branch: "feat/alarm", mergedState: "in_main", sha: tip, vsMain: { ahead: 0, behind: 0 } }),
+        fv({ branch: "claude/merged-123456", mergedState: "in_main", vsMain: { ahead: 0, behind: 4 } }),
+      ],
+    });
+    const full = renderStatusFull(report([r]), { wide: true });
+    const line = (b: string) => full.split("\n").find((l) => l.includes(b))!;
+    expect(line("feat/alarm")).toContain("进主线（无独有提交）");
+    expect(line("claude/merged-123456")).toContain("进主线");
+    expect(line("claude/merged-123456")).not.toContain("无独有提交");
+    expect(r.branches[1]!.mergedState).toBe("in_main");
+  });
+});

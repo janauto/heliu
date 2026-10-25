@@ -9,7 +9,8 @@ import type { HeliuPaths } from "../core/paths.ts";
 import { loadProject, resolveProject, type ProjectConfig } from "../core/project.ts";
 import { reconcile } from "../core/reconcile.ts";
 import { syncLedger, type SyncResult } from "../core/sync.ts";
-import { groupTodo } from "../core/todo.ts";
+import { zeroCommitBranches } from "../core/owncommits.ts";
+import { countsTowardTodo, groupTodo, todoFeatures } from "../core/todo.ts";
 import { whereami } from "../core/whereami.ts";
 import { renderFeatureLine, renderFeatureTable, renderMilestones, renderSync, renderTodo, renderWhereami, type RenderOpts } from "../cli/render-ledger.ts";
 
@@ -181,13 +182,23 @@ export async function opFeatureSet(ctx: OpContext, id: string, input: { status?:
 
 /* ───────────── 里程碑 ───────────── */
 
-export async function opMilestoneList(ctx: OpContext): Promise<OpResult<{ milestones: ReturnType<Ledger["listMilestones"]>; next: string | null }>> {
+export async function opMilestoneList(
+  ctx: OpContext,
+): Promise<OpResult<{ milestones: ReturnType<Ledger["listMilestones"]>; next: string | null; counts: Array<{ id: string; todo: number; total: number }> }>> {
   const p = await projectOf(ctx);
   const ledger = Ledger.of(p);
   const list = ledger.listMilestones();
   const features = ledger.load().features;
-  const text = renderMilestones(list, features, (f) => ledger.effectiveMilestone(f, list), ctx.render);
-  return { text, data: { milestones: list, next: list.find((m) => m.status === "规划中")?.id ?? null }, project: ref(p) };
+  const effective = (f: LedgerFeature) => ledger.effectiveMilestone(f, list);
+  // 待办数与 `heliu 待办` 用同一个函数（todoFeatures），保证两边一致
+  const counts = list.map((m) => ({
+    id: m.id,
+    todo: todoFeatures(features, m.id, effective).length,
+    total: features.filter((f) => effective(f) === m.id).length,
+  }));
+  const unreserved = features.filter((f) => !f.milestone && countsTowardTodo(f)).length;
+  const text = renderMilestones(list, counts, unreserved, ctx.render);
+  return { text, data: { milestones: list, next: list.find((m) => m.status === "规划中")?.id ?? null, counts }, project: ref(p) };
 }
 
 export async function opMilestoneAdd(ctx: OpContext, input: { id: string; title?: string; target?: string; integration?: string }): Promise<OpResult> {
@@ -221,8 +232,11 @@ export async function opMilestoneTodo(ctx: OpContext, requested: string, opts: {
     return { text, data: null, project: ref(p) };
   }
   const milestones = ledger.listMilestones();
-  const features = ledger.load().features.filter((f) => ledger.effectiveMilestone(f, milestones) === m.id);
+  const features = todoFeatures(ledger.load().features, m.id, (f) => ledger.effectiveMilestone(f, milestones));
   const rec = await reconcile(p, ctx.paths, { precheck: !!opts.precheck, dirty: false, timeoutMs: 8000 });
+  // 「尚无独有提交」：同点或 reflog 显示从未移动（零提交分支的 tip 恒为主线祖先，不能据此当成已合入）
+  const zeroCommit = await zeroCommitBranches(rec.report, features.flatMap((f) => f.bindings.map((b) => ({ repo: b.repo, branch: b.branch }))));
+  const next = milestones.find((x) => x.status === "规划中") ?? null;
   let stops: ReturnType<Cache["stops"]> = [];
   try {
     const c = Cache.open(ctx.paths, p.name, { readonly: true });
@@ -233,7 +247,17 @@ export async function opMilestoneTodo(ctx: OpContext, requested: string, opts: {
   } catch {
     /* 缓存可删可重建，读不到就当没有 */
   }
-  const todo = groupTodo({ milestone: m, requested: req, features, report: rec.report, sessions: rec.sessions, stops, now: ctx.now });
+  const todo = groupTodo({
+    milestone: m,
+    requested: req,
+    features,
+    report: rec.report,
+    sessions: rec.sessions,
+    stops,
+    zeroCommit,
+    nextMilestone: next ? { id: next.id, status: next.status } : null,
+    now: ctx.now,
+  });
   return { text: renderTodo(p.name, todo, { ...ctx.render, limitPerGroup: opts.limitPerGroup }), data: todo, project: ref(p) };
 }
 

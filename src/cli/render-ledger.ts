@@ -4,7 +4,6 @@
  */
 import type { LedgerFeature, LedgerMilestone, TodoBinding, TodoItem, TodoReport, WhereAmI } from "../types.ts";
 import type { SyncResult } from "../core/sync.ts";
-import { DONE_STATUSES } from "../core/ledger.ts";
 import { fmtShort, LINK_MARK } from "./render.ts";
 import { hangingWrap, outputWidth, renderTable, truncate, truncateMiddle, type Column } from "./table.ts";
 
@@ -91,7 +90,12 @@ export function renderFeatureTable(features: LedgerFeature[], opts: RenderOpts &
 
 /* ───────────── 里程碑 ───────────── */
 
-export function renderMilestones(list: LedgerMilestone[], features: LedgerFeature[], effective: (f: LedgerFeature) => string | null, opts: RenderOpts = {}): string {
+export function renderMilestones(
+  list: LedgerMilestone[],
+  counts: Array<{ id: string; todo: number; total: number }>,
+  unreserved: number,
+  opts: RenderOpts = {},
+): string {
   const next = list.find((m) => m.status === "规划中");
   const out = [`合流 · 里程碑 ${list.length} 个${next ? `（下一版 = ${next.id}）` : "（还没有「规划中」的版本；新点子会自动建 vNext）"}`];
   if (!list.length) {
@@ -106,14 +110,13 @@ export function renderMilestones(list: LedgerMilestone[], features: LedgerFeatur
       { header: "待办/全部", align: "right" },
     ];
     const rows = list.map((m) => {
-      const mine = features.filter((f) => effective(f) === m.id);
-      const open = mine.filter((f) => !DONE_STATUSES.has(f.status)).length;
-      return [`${m.id}${m === next ? " ←下一版" : ""}`, m.title || "—", m.status, m.target_date ?? "—", m.integration_branch ?? "（用项目配置）", `${open}/${mine.length}`];
+      const c = counts.find((x) => x.id === m.id) ?? { todo: 0, total: 0 };
+      return [`${m.id}${m === next ? " ←下一版" : ""}`, m.title || "—", m.status, m.target_date ?? "—", m.integration_branch ?? "（用项目配置）", `${c.todo}/${c.total}`];
     });
     out.push(renderTable(columns, rows, { wide: opts.wide, indent: "  " }));
   }
-  const unreserved = features.filter((f) => !f.milestone && !DONE_STATUSES.has(f.status)).length;
   if (unreserved) out.push(`  未预约的功能卡 ${unreserved} 张（heliu 预约 <卡号> <版本>）`);
+  out.push("  待办 = 预约到该版、状态为 想法/开发中/待合并 的卡（与 heliu 待办 同一口径）");
   out.push("  状态：规划中 → 冻结（不再接新预约）→ 合并中 → 已发布；合并时未兑现的功能自动顺延到下一版并标「从 vX 顺延」（M4）");
   return out.join("\n");
 }
@@ -122,6 +125,7 @@ export function renderMilestones(list: LedgerMilestone[], features: LedgerFeatur
 
 function bindingState(b: TodoBinding, precheck: boolean): string {
   if (!b.exists) return "分支已不存在";
+  if (b.noCommits) return "尚无提交（与主线同点或自创建后未提交）";
   if (b.mergedState === "in_main") return "已进主线";
   if (b.mergedState === "in_integration") return "已进集成分支";
   const parts: string[] = [];
@@ -133,6 +137,7 @@ function bindingState(b: TodoBinding, precheck: boolean): string {
 
 function todoItemLines(it: TodoItem, precheck: boolean, W: number, wide?: boolean): string[] {
   const tags: string[] = [it.status];
+  if (it.note && it.group !== "mergeable") tags.push(it.note);
   if (it.rolledFrom.length) tags.push(`从 ${it.rolledFrom[it.rolledFrom.length - 1]} 顺延`);
   if (it.group === "stale" && it.idleDays !== null) tags.push(`${it.idleDays} 天没动静`);
   const out = [fit(`  - ${it.id} ${it.title} · ${tags.join(" · ")}`, W, wide)];
@@ -151,6 +156,8 @@ export function renderTodo(projectName: string, t: TodoReport, opts: RenderOpts 
   const isNext = ["next", "下一版", "下个版本", "下一个版本", "下版"].includes(t.requested.trim().toLowerCase());
   const head = `合流 · ${projectName} · 待办 ${m.id}${m.title ? ` ${m.title}` : ""}（${isNext ? "下一版 · " : ""}${m.status}）· 未合入 ${t.total} 条`;
   const out = [fit(head, W, opts.wide)];
+  const nm = t.nextMilestone;
+  out.push(nm ? `下一版 = ${nm.id}（${nm.status}）` : "下一版 = （还没有「规划中」的版本；登记新点子时自动建 vNext）");
   const overview = t.groups.map((g) => `${g.title} ${g.count === null ? "未检查" : g.count}`).join(" > ");
   out.push(...hangingWrap("概览：", `${overview}（按优先级排，每张卡只进最靠前的一组）`, W));
   out.push(...hangingWrap("顺延：", "某版合并时没合完的功能自动挪到下一版，标「从 vX 顺延」排在组内最前（M4 执行，不会静默丢弃）", W));
@@ -164,21 +171,27 @@ export function renderTodo(projectName: string, t: TodoReport, opts: RenderOpts 
     }
     out.push(...hangingWrap("", `■ ${g.title}（${g.count}）· ${g.hint}`, W));
     const lim = opts.limitPerGroup ?? Infinity;
+    if (g.key === "mergeable") {
+      // 可合并细分：已进主线 / 已进集成分支 / 试合无冲突
+      for (const sub of ["已进主线", "已进集成分支", "试合无冲突"]) {
+        const list = g.items.filter((i) => (i.note ?? "试合无冲突") === sub);
+        if (!list.length) continue;
+        out.push(`  可合并 · ${sub}（${list.length}）`);
+        for (const it of list.slice(0, lim)) out.push(...todoItemLines(it, t.precheck, W, opts.wide));
+        if (list.length > lim) out.push(`  …还有 ${list.length - lim} 条（终端运行 heliu 待办 ${m.id} 查看全部）`);
+        const sug = list.filter((i) => i.suggestion);
+        if (sug.length) {
+          const what = sub === "已进主线" ? "已进主线" : "已合入";
+          out.push(...hangingWrap("  建议：", `以上 ${sug.length} 张卡的分支${sub === "已进主线" ? "已进主线" : "已被集成分支包含"}，是否标为${what}？（heliu feature status <卡号> ${what}；台账状态只由你改，heliu 不自动改）`, W));
+        }
+      }
+      continue;
+    }
     for (const it of g.items.slice(0, lim)) out.push(...todoItemLines(it, t.precheck, W, opts.wide));
     if (g.items.length > lim) out.push(`  …还有 ${g.items.length - lim} 条（终端运行 heliu 待办 ${m.id} 查看全部）`);
   }
   if (empty.length) out.push("", `（暂无：${empty.join("、")}）`);
-  if (t.doneByGit.length) {
-    out.push("");
-    out.push(
-      ...hangingWrap(
-        "",
-        `另有 ${t.doneByGit.length} 条的绑定分支已全部进主线、台账状态未更新（不计入待办）：${t.doneByGit.map((i) => i.id).join("、")} → heliu feature status <卡号> 已进主线`,
-        W,
-      ),
-    );
-  }
-  if (!t.total && !t.doneByGit.length) out.push("", `（${m.id} 还没有预约任何功能：heliu 新点子 "<一句话需求>" 会默认预约到下一版）`);
+  if (!t.total) out.push("", `（${m.id} 还没有预约任何功能：heliu 新点子 "<一句话需求>" 会默认预约到下一版）`);
   out.push("", "提示：heliu 预约 <卡号> <版本> 改预约 · heliu feature list 看全部卡 · --json 输出完整字段");
   return out.join("\n");
 }
@@ -197,7 +210,9 @@ export function renderSync(projectName: string, r: SyncResult, opts: RenderOpts 
   const ms = r.milestone ? `${r.milestone}（下一版）` : "vNext（下一版；还没有「规划中」的版本，写入时自动创建）";
   out.push(`${r.dryRun ? "将建" : "已建"}草稿卡 ${r.drafts.length} 张 → 预约 ${ms}`);
   const s = r.skipped;
-  out.push(`跳过：已有功能卡 ${s.hasCard} · 已进主线 ${s.inMain} · 没有独立 worktree ${s.noWorktree} · 主线/集成分支 ${s.notFeature}`);
+  out.push(`跳过：已有功能卡 ${s.hasCard} · 已进主线（有独有提交且已合入）${s.inMain} · 没有独立 worktree ${s.noWorktree} · 主线/集成分支 ${s.notFeature}`);
+  const zero = r.drafts.filter((d) => d.noCommits).length;
+  if (zero) out.push(`其中 ${zero} 张的分支尚无独有提交（与主线同点或自创建后未提交），按「开发中」登记`);
   out.push(`台账：${r.ledgerDir}`);
   const byRepo = new Map<string, typeof r.drafts>();
   for (const d of r.drafts) byRepo.set(d.repoLabel, [...(byRepo.get(d.repoLabel) ?? []), d]);
@@ -205,7 +220,7 @@ export function renderSync(projectName: string, r: SyncResult, opts: RenderOpts 
     out.push("", `■ ${label}（${list.length}）`);
     for (const d of list) {
       const id = d.id ? `${d.id} ` : "";
-      out.push(fit(`  - ${id}${d.title} · ${d.status}${d.titleSource === "label" ? " · 标题取自分支标签" : ""}`, W, opts.wide));
+      out.push(fit(`  - ${id}${d.title} · ${d.status}${d.noCommits ? " · 尚无提交" : ""}${d.titleSource === "label" ? " · 标题取自分支标签" : ""}`, W, opts.wide));
       const sess = d.session ? ` · 会话 ${shortSession(d.session)}（${LINK_MARK[d.sessionLink ?? "branch"]}）` : " · 无关联会话";
       const pr = d.pr !== null ? ` · PR #${d.pr}` : "";
       out.push("    " + fitMid(`${d.branch}${sess}${pr}`, W - 4, opts.wide));

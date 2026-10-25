@@ -353,6 +353,11 @@ export interface TodoBinding {
   sessionId: string | null;
   sessionStatus: SessionStatus | null;
   lastCommitAt: string | null;
+  /**
+   * 尚无独有提交（M2 第 2 轮）：分支与主线/集成分支顶端同点，或 reflog 显示自创建后从未移动。
+   * 这种分支 git 祖先判断恒为「已进主线」，但并没有任何工作被合入，分组时视为「开发中 · 尚无提交」。
+   */
+  noCommits?: boolean;
 }
 
 export interface TodoItem {
@@ -369,6 +374,10 @@ export interface TodoItem {
   lastActivityAt: string | null;
   idleDays: number | null;
   file: string;
+  /** 组内细分：可合并 → 已进主线 / 已进集成分支 / 试合无冲突；开发中 → 尚无提交（M2 第 2 轮追加） */
+  note?: string | null;
+  /** 只给建议、不自动改台账：如「该分支已被集成分支包含，是否把 F-0003 标为已合入？」 */
+  suggestion?: string | null;
 }
 
 export interface TodoGroup {
@@ -388,8 +397,13 @@ export interface TodoReport {
   /** 计入待办的条数 */
   total: number;
   groups: TodoGroup[];
-  /** 绑定分支已全部进主线、但台账状态未更新的卡（不计入待办） */
+  /**
+   * 兼容字段，M2 第 2 轮起恒为空：台账状态是承诺层事实，想法/开发中/待合并的卡永远计入待办，
+   * 不再因 git 状态移出；分支已进主线时改为在 suggestion 里建议改状态。
+   */
   doneByGit: TodoItem[];
+  /** 当前「下一版」（第一个规划中的里程碑），无则 null（M2 第 2 轮追加） */
+  nextMilestone?: { id: string; status: MilestoneStatus } | null;
 }
 
 /** whereami：当前目录 → 项目/仓库/分支/功能卡/里程碑/落后数/会话 */

@@ -1,10 +1,14 @@
 /**
- * milestone.todo 分组优先级：等你回答 > 有冲突（仅 --precheck）> 可合并 > 落后需同步 > 停滞 > 开发中 > 无绑定。
- * 用手工构造的对账结果，逐条钉住「同时满足多个条件时进哪一组」。
+ * milestone.todo 分组优先级：等你回答 > 有冲突（仅 --precheck）> 可合并 > 落后需同步 > 停滞 > 开发中 > 尚未关联开发分支。
+ * 用手工构造的对账结果，逐条钉住「同时满足多个条件时进哪一组」；
+ * 另有 Codex 第 1 轮反馈的回归：零提交分支不能被当成「已进主线」，台账状态决定是否计入待办。
  */
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { renderTodo } from "../src/cli/render-ledger.ts";
-import { groupTodo, TODO_GROUP_DEFS } from "../src/core/todo.ts";
+import { bindingKey } from "../src/core/owncommits.ts";
+import { countsTowardTodo, groupTodo, TODO_GROUP_DEFS } from "../src/core/todo.ts";
+import { buildFixture, gitW, type Fixture } from "./helpers/fixture.ts";
 import type { FeatureView, LedgerFeature, LedgerMilestone, PrecheckResult, ReconcileReport, RepoReport, SessionRef, SessionView, TodoGroupKey } from "../src/types.ts";
 
 const NOW = new Date("2026-10-26T12:00:00Z");
@@ -109,7 +113,11 @@ const sv = (id: string, statusDetail: string | null): SessionView => ({
 });
 
 // 每条分支都「同时满足」比它低的条件，用来钉住优先级
+const MAIN_SHA = "a".repeat(40);
 const docsBranches = [
+  fv("main", { role: "main", mergedState: "in_main", sha: MAIN_SHA, vsMain: null }),
+  // 刚从主线切出、还没提交：tip == 主线顶端，祖先判断恒为「已进主线」→ 必须算「尚无提交」
+  fv("b/zero", { mergedState: "in_main", sha: MAIN_SHA, vsMain: { ahead: 0, behind: 0 }, vsIntegration: { ahead: 0, behind: 3 }, lastCommitAt: daysAgo(30) }),
   // 等你 + 冲突 + 落后 + 停滞 → 等你回答
   fv("b/blocked", { vsIntegration: { ahead: 1, behind: 9 }, lastCommitAt: daysAgo(30), precheck: pc(2), sessions: [sref("s-blocked", "blocked", "确认是否推送", daysAgo(20))] }),
   // 冲突 + 落后 → 有冲突（仅 precheck）；不 precheck 时 → 落后需同步
@@ -142,6 +150,7 @@ const features = [
   card("分支没了", [["docs", "b/gone"]]),
   card("进主线了", [["docs", "b/in-main"]]),
   card("App 落后主线", [["app", "a/behind-main"]]),
+  card("零提交的新功能", [["docs", "b/zero"]]),
   card("已合入的不算", [["docs", "b/active"]], { status: "已合入" }),
   card("已放弃的不算", [], { status: "已放弃" }),
   card("顺延来的", [["docs", "b/behind"]], { rolled_from: ["v1.1"] }),
@@ -159,7 +168,7 @@ describe("待办分组优先级", () => {
 
   test("组的顺序固定", () => {
     expect(withPre.groups.map((g) => g.key)).toEqual(["blocked", "conflict", "mergeable", "behind", "stale", "active", "unbound"]);
-    expect(TODO_GROUP_DEFS.map((g) => g.title)).toEqual(["等你回答", "有冲突", "可合并", "落后需同步", "停滞", "开发中", "无绑定"]);
+    expect(TODO_GROUP_DEFS.map((g) => g.title)).toEqual(["等你回答", "有冲突", "可合并", "落后需同步", "停滞", "开发中", "尚未关联开发分支"]);
   });
 
   test("--precheck：每张卡进优先级最高的一组", () => {
@@ -184,16 +193,43 @@ describe("待办分组优先级", () => {
     expect(groupOf(noPre, "已进集成")).toBe("mergeable");
   });
 
-  test("已合入/已放弃不计入；分支已全部进主线单列", () => {
+  test("零提交分支的开发中卡计入待办：进「开发中」组、标「尚无提交」，不算已进主线、不算停滞", () => {
+    for (const t of [withPre, noPre]) {
+      const it = t.groups.find((g) => g.key === "active")!.items.find((i) => i.title === "零提交的新功能")!;
+      expect(it).toBeDefined();
+      expect(it.note).toBe("尚无提交");
+      expect(it.bindings[0]!.noCommits).toBe(true);
+      expect(it.suggestion).toBeNull();
+    }
+    expect(withPre.doneByGit).toEqual([]);
+  });
+
+  test("status 已合入（及已放弃）的卡不计入；已进主线的开发中卡仍计入，只给建议不改状态", () => {
     expect(groupOf(withPre, "已合入的不算")).toBeNull();
     expect(groupOf(withPre, "已放弃的不算")).toBeNull();
-    expect(groupOf(withPre, "进主线了")).toBe("done");
-    expect(withPre.total).toBe(features.length - 3);
+    expect(countsTowardTodo({ ...features[0]!, status: "已合入" })).toBe(false);
+    expect(countsTowardTodo({ ...features[0]!, status: "待合并" })).toBe(true);
+    const inMain = withPre.groups.find((g) => g.key === "mergeable")!.items.find((i) => i.title === "进主线了")!;
+    expect(inMain.note).toBe("已进主线");
+    expect(inMain.status).toBe("开发中");
+    expect(inMain.suggestion).toContain("是否把 F-0010 标为已进主线");
+    const inInteg = withPre.groups.find((g) => g.key === "mergeable")!.items.find((i) => i.title === "已进集成")!;
+    expect(inInteg.note).toBe("已进集成分支");
+    expect(inInteg.suggestion).toContain("已被集成分支包含，是否把 F-0003 标为已合入");
+    expect(withPre.total).toBe(features.length - 2);
+  });
+
+  test("ops 传入的 zeroCommit 集合优先于纯事实判定（reflog 显示移动过 = 有过提交、已合入）", () => {
+    const f = card("合入后领先 0", [["docs", "b/zero"]]);
+    const t = groupTodo({ milestone: MS, requested: "v1.2", features: [f], report: report(false, docsBranches), sessions: [], zeroCommit: new Set(), now: NOW });
+    expect(groupOf(t, "合入后领先 0")).toBe("mergeable");
+    const z = groupTodo({ milestone: MS, requested: "v1.2", features: [f], report: report(false, docsBranches), sessions: [], zeroCommit: new Set([bindingKey("docs", "b/zero")]), now: NOW });
+    expect(groupOf(z, "合入后领先 0")).toBe("active");
   });
 
   test("计数、needs_action 原文、落后数与顺延置顶", () => {
     const counts = Object.fromEntries(withPre.groups.map((g) => [g.key, g.count]));
-    expect(counts).toEqual({ blocked: 1, conflict: 1, mergeable: 2, behind: 3, stale: 1, active: 1, unbound: 2 });
+    expect(counts).toEqual({ blocked: 1, conflict: 1, mergeable: 3, behind: 3, stale: 1, active: 2, unbound: 2 });
     const blocked = withPre.groups[0]!.items[0]!;
     expect(blocked.needsAction).toBe("确认是否推送");
     expect(blocked.bindings[0]!.behindIntegration).toBe(9);
@@ -227,15 +263,69 @@ describe("待办分组优先级", () => {
   });
 
   test("渲染：概览按优先级、空组合并一行、等你回答带需要你、未检查给出提示", () => {
-    const text = renderTodo("演示", noPre, { width: 100 });
-    expect(text).toContain("待办 v1.2 收口（规划中）· 未合入 11 条");
-    expect(text).toContain("等你回答 1 > 有冲突 未检查 > 可合并 1");
+    const text = renderTodo("演示", { ...noPre, nextMilestone: { id: "v1.2", status: "规划中" } }, { width: 100 });
+    expect(text).toContain("待办 v1.2 收口（规划中）· 未合入 13 条");
+    expect(text.split("\n")[1]).toBe("下一版 = v1.2（规划中）");
+    expect(text).toContain("等你回答 1 > 有冲突 未检查 > 可合并 2");
+    expect(text).toContain("  可合并 · 已进主线（1）");
+    expect(text).toContain("  可合并 · 已进集成分支（1）");
+    expect(text).toContain("- F-0012 零提交的新功能 · 开发中 · 尚无提交");
+    expect(text).toContain("b/zero · 尚无提交（与主线同点或自创建后未提交）\n"); // 主线上的提交时间不算本功能的最后活动
+    expect(text).toContain("■ 尚未关联开发分支（2）");
+    expect(text).toContain("建议：以上 1 张卡的分支已被集成分支包含，是否标为已合入？");
     expect(text).toContain("需要你：确认是否推送");
     expect(text).toContain("■ 有冲突：未检查（加 --precheck");
     expect(text).toContain("从 v1.1 顺延");
-    expect(text).toContain("另有 1 条的绑定分支已全部进主线");
+    expect(text).not.toContain("不计入待办）");
     const pre = renderTodo("演示", withPre, { width: 100 });
     expect(pre).toContain("冲突 3 个文件");
-    expect(pre).toContain("试合无冲突");
+    expect(pre).toContain("  可合并 · 试合无冲突（1）");
   });
+});
+
+/* ───────────── 端到端：Codex 第 1 轮复现步骤 ───────────── */
+
+const BIN = join(import.meta.dir, "..", "bin", "heliu");
+describe("回归：从主线新建 worktree、不提交就登记新点子", () => {
+  let fx: Fixture;
+  let wt: string;
+  const heliu = (args: string[], cwd: string) => {
+    const r = Bun.spawnSync({ cmd: [BIN, ...args], cwd, env: { ...process.env, ...fx.env }, stdout: "pipe", stderr: "pipe" });
+    return { code: r.exitCode ?? -1, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+  };
+  beforeAll(() => {
+    fx = buildFixture();
+    expect(heliu(["project", "add", fx.repo, "--name", "演示", "--integration", "integ"], fx.repo).code).toBe(0);
+    wt = join(fx.repo, ".claude", "worktrees", "alarm-000001");
+    gitW(fx.repo, "worktree", "add", "-q", "-b", "feat/alarm", wt, "main");
+  });
+  afterAll(() => fx.cleanup());
+
+  test("待办 下一版：计入 1 条，在「开发中 · 尚无提交」，milestone list 计数一致", () => {
+    const add = heliu(["新点子", "让背夹支持闹钟"], wt);
+    expect(add.stdout).toContain("开发中");
+    expect(add.stdout).toContain("feat/alarm");
+    const t = heliu(["待办", "下一版"], wt);
+    expect(t.code).toBe(0);
+    expect(t.stdout).toContain("未合入 1 条");
+    expect(t.stdout).toContain("下一版 = vNext（规划中）");
+    expect(t.stdout).toContain("■ 开发中（1）");
+    expect(t.stdout).toContain("F-0001 让背夹支持闹钟 · 开发中 · 尚无提交");
+    expect(t.stdout).not.toContain("已进主线");
+    const j = JSON.parse(heliu(["待办", "下一版", "--json"], wt).stdout);
+    const ml = JSON.parse(heliu(["milestone", "list", "--json"], wt).stdout);
+    expect(ml.data.counts.find((c: { id: string }) => c.id === "vNext").todo).toBe(j.data.total);
+    expect(heliu(["milestone", "list"], wt).stdout).toContain("1/1");
+  }, 60_000);
+
+  test("首次提交后仍在待办（独立未合并 → 开发中，不再标尚无提交）", () => {
+    Bun.write(join(wt, "alarm.txt"), "闹钟\n");
+    gitW(wt, "add", "alarm.txt");
+    gitW(wt, "commit", "-q", "-m", "feat: 闹钟");
+    const j = JSON.parse(heliu(["待办", "下一版", "--json"], wt).stdout);
+    expect(j.data.total).toBe(1);
+    const it = j.data.groups.flatMap((g: { items: Array<{ id: string; note: string | null; group: string }> }) => g.items)[0];
+    expect(it.id).toBe("F-0001");
+    expect(it.note).toBeNull();
+  }, 60_000);
 });

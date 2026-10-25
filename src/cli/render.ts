@@ -46,11 +46,16 @@ export function fmtShort(isoStr: string | null): string {
 const fmtAB = (ab: AheadBehind | null) => (ab ? `↑${ab.ahead} ↓${ab.behind}` : "—");
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
-export function mergedStateText(b: FeatureView): string {
+/**
+ * 合并状态文案。tips 给出时，与主线/集成分支顶端同点的功能分支标「（无独有提交）」：
+ * 这类分支 git 祖先判断恒为「进主线/进集成分支」，但并没有任何工作被合入（分支视角的三档本身不变）。
+ */
+export function mergedStateText(b: FeatureView, tips?: { main: string | null; integ: string | null }): string {
   let base: string;
   if (b.role === "main") base = "主线";
   else if (b.role === "integration") base = b.mergedState === "in_main" ? "集成分支·已并回" : "集成分支·未并回";
   else base = b.mergedState === "in_main" ? "进主线" : b.mergedState === "in_integration" ? "进集成分支" : "独立未合并";
+  if (b.role === "feature" && b.mergedState !== "unmerged" && tips && (b.sha === tips.main || b.sha === tips.integ)) base += "（无独有提交）";
   const p = b.precheck;
   if (p) {
     if (p.timedOut) base += "·试合超时";
@@ -151,6 +156,7 @@ export function renderBranchTable(r: RepoReport, opts: { wide?: boolean; filter?
     { header: "最后提交" },
   ];
   const list = opts.filter ? r.branches.filter(opts.filter) : r.branches;
+  const tips = { main: r.branches.find((b) => b.role === "main")?.sha ?? null, integ: r.branches.find((b) => b.role === "integration")?.sha ?? null };
   const rows = list.map((b) => [
     b.label,
     b.branch,
@@ -158,7 +164,7 @@ export function renderBranchTable(r: RepoReport, opts: { wide?: boolean; filter?
     sessionCell(b),
     b.role === "main" ? "—" : fmtAB(b.vsMain),
     fmtAB(b.vsIntegration),
-    mergedStateText(b),
+    mergedStateText(b, tips),
     fmtDate(b.lastCommitAt),
   ]);
   if (!rows.length) return "  （无分支）";
@@ -178,7 +184,11 @@ export function renderStatusFull(report: ReconcileReport, opts: { wide?: boolean
     if (r.error) out.push(`  ! ${r.error}`);
     out.push(renderBranchTable(r, opts));
   }
-  out.push("", "标记：worktree 后 * = 有未提交改动，? = 检查超时/未知；会话 (+N) = 另有 N 个关联会话；--json 输出完整字段。", LINK_NOTE + "。");
+  out.push(
+    "",
+    "标记：worktree 后 * = 有未提交改动，? = 检查超时/未知；会话 (+N) = 另有 N 个关联会话；「（无独有提交）」= 分支与主线/集成分支顶端同点，并没有工作被合入；--json 输出完整字段。",
+    LINK_NOTE + "。",
+  );
   return out.join("\n");
 }
 

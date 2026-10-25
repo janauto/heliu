@@ -36,7 +36,8 @@ describe("sync 自动草稿", () => {
     const before = gitSnapshot(fx.repo);
     const r = await syncLedger(project, heliuPaths(fx.env), { dryRun: true, now: NOW });
     expect(r.dryRun).toBe(true);
-    expect(r.drafts.map((d) => d.branch).sort()).toEqual([B.behind, B.standalone].sort());
+    // at-tip 与主线同点、尚无独有提交：git 祖先判断为「已进主线」，但承诺层照样建草稿
+    expect(r.drafts.map((d) => d.branch).sort()).toEqual([B.atTip, B.behind, B.standalone].sort());
     expect(r.milestone).toBeNull();
     expect(r.milestoneWillBeCreated).toBe(true);
     expect(r.created).toEqual([]);
@@ -44,17 +45,26 @@ describe("sync 自动草稿", () => {
     expect(gitSnapshot(fx.repo)).toBe(before);
   }, 30_000);
 
-  test("跳过：已进主线的 worktree、无 worktree 的分支、主线/集成分支", async () => {
+  test("跳过：有独有提交且已进主线的 worktree、无 worktree 的分支、主线/集成分支", async () => {
     const r = await syncLedger(project, heliuPaths(fx.env), { dryRun: true, now: NOW });
-    expect(r.drafts.some((d) => d.branch === B.mergedMain || d.branch === B.atTip)).toBe(false); // 已进主线
+    expect(r.drafts.some((d) => d.branch === B.mergedMain)).toBe(false); // 有过提交且已 --no-ff 合入主线（reflog 显示移动过）
     expect(r.drafts.some((d) => d.branch === B.conflict || d.branch === B.inInteg)).toBe(false); // 没有 worktree
-    expect(r.skipped).toEqual({ hasCard: 0, inMain: 2, noWorktree: 2, notFeature: 2 });
+    expect(r.skipped).toEqual({ hasCard: 0, inMain: 1, noWorktree: 2, notFeature: 2 });
+  }, 30_000);
+
+  test("尚无独有提交的分支：标 noCommits、状态开发中、标题取分支名而不是主线最后一条提交", async () => {
+    const r = await syncLedger(project, heliuPaths(fx.env), { dryRun: true, now: NOW });
+    const d = r.drafts.find((x) => x.branch === B.atTip)!;
+    expect(d.noCommits).toBe(true);
+    expect(d.status).toBe("开发中");
+    expect(d.title).toBe("at-tip");
+    expect(r.drafts.filter((x) => x.noCommits).length).toBe(1);
   }, 30_000);
 
   test("写入：标题取会话标题、状态按会话、绑定带 worktree/会话/PR、预约下一版（自动建 vNext）", async () => {
     const before = gitSnapshot(fx.repo);
     const r = await syncLedger(project, heliuPaths(fx.env), { dryRun: false, now: NOW });
-    expect(r.created.length).toBe(2);
+    expect(r.created.length).toBe(3);
     expect(r.milestone).toBe("vNext");
     const byBranch = new Map(r.created.map((f) => [f.bindings[0]!.branch, f]));
     const epp = byBranch.get(B.standalone)!;
@@ -75,8 +85,8 @@ describe("sync 自动草稿", () => {
   test("去重：再跑一次不重复建卡（按 仓库 + 分支）", async () => {
     const r = await syncLedger(project, heliuPaths(fx.env), { dryRun: false, now: NOW });
     expect(r.drafts).toEqual([]);
-    expect(r.skipped.hasCard).toBe(2);
-    expect(new Ledger(project.ledger!).load().features.length).toBe(2);
+    expect(r.skipped.hasCard).toBe(3);
+    expect(new Ledger(project.ledger!).load().features.length).toBe(3);
   }, 30_000);
 
   test("已放弃的卡也算「已有卡」，不会被 sync 复活", async () => {

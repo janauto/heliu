@@ -6,10 +6,14 @@
  * - 预约：下一版（next）；来源 source: sync。
  * - 绑定：repo / branch / worktree / session / pr。
  * - 去重：按 仓库 + 分支，已有卡片（任何状态，含已放弃）的分支不再建。
+ * - 「未进主线」按承诺层口径：尚无独有提交的分支（与主线同点 / reflog 显示自创建后未提交）虽然 git 祖先判断为
+ *   「已进主线」，但没有任何工作被合入，照样建草稿（标「尚无提交」，状态 开发中）。
  * - dry-run：只列出将要建的草稿，不写任何文件（包括不自动建 vNext）。
  */
 import type { FeatureBinding, FeatureStatus, FeatureView, LedgerFeature, SessionLink } from "../types.ts";
+import { humanizeBranch } from "./labels.ts";
 import { Ledger } from "./ledger.ts";
+import { bindingKey, zeroCommitBranches } from "./owncommits.ts";
 import type { HeliuPaths } from "./paths.ts";
 import type { ProjectConfig } from "./project.ts";
 import { reconcile, type ReconcileResult } from "./reconcile.ts";
@@ -30,6 +34,8 @@ export interface SyncDraft {
   pr: number | null;
   lastCommitAt: string | null;
   mergedState: FeatureView["mergedState"];
+  /** 尚无独有提交（与主线同点或自创建后未提交） */
+  noCommits: boolean;
   /** 写入后的卡号（dry-run 为 null） */
   id: string | null;
 }
@@ -53,7 +59,12 @@ export interface SyncOptions {
 }
 
 /** 收集草稿候选（纯函数，便于测试） */
-export function collectDrafts(_project: ProjectConfig, rec: ReconcileResult, existing: LedgerFeature[]): { drafts: SyncDraft[]; skipped: SyncResult["skipped"] } {
+export function collectDrafts(
+  _project: ProjectConfig,
+  rec: ReconcileResult,
+  existing: LedgerFeature[],
+  zeroCommit: Set<string> = new Set(),
+): { drafts: SyncDraft[]; skipped: SyncResult["skipped"] } {
   const skipped = { hasCard: 0, inMain: 0, noWorktree: 0, notFeature: 0 };
   const bound = new Set<string>();
   for (const f of existing) for (const b of f.bindings) bound.add(`${b.repo}\u0000${b.branch}`);
@@ -67,7 +78,8 @@ export function collectDrafts(_project: ProjectConfig, rec: ReconcileResult, exi
         skipped.notFeature++;
         continue;
       }
-      if (fv.mergedState === "in_main") {
+      const noCommits = zeroCommit.has(bindingKey(repo.id, fv.branch));
+      if (fv.mergedState === "in_main" && !noCommits) {
         skipped.inMain++;
         continue;
       }
@@ -84,7 +96,8 @@ export function collectDrafts(_project: ProjectConfig, rec: ReconcileResult, exi
       // FeatureView.sessions 已按 记录 > 写入 > 目录、未归档优先、最后活动倒序排好
       const s = fv.sessions[0] ?? null;
       const sv = s ? statusById.get(s.sessionId) : undefined;
-      const title = s?.title?.trim() || fv.label;
+      // 尚无提交的分支没有自己的提交主题，M1 标签会落到主线最后一条提交上，改用分支名
+      const title = s?.title?.trim() || (noCommits ? humanizeBranch(fv.branch) : fv.label);
       const pr = s?.prs.find((p) => !p.branch || p.branch === fv.branch)?.number ?? null;
       drafts.push({
         repo: repo.id,
@@ -97,10 +110,11 @@ export function collectDrafts(_project: ProjectConfig, rec: ReconcileResult, exi
         sessionStatus: s?.statusCategory ?? sv?.statusCategory ?? null,
         title,
         titleSource: s?.title?.trim() ? "session" : "label",
-        status: (s?.statusCategory ?? null) === "completed" ? "待合并" : "开发中",
+        status: !noCommits && (s?.statusCategory ?? null) === "completed" ? "待合并" : "开发中",
         pr,
         lastCommitAt: fv.lastCommitAt,
         mergedState: fv.mergedState,
+        noCommits,
         id: null,
       });
     }
@@ -112,7 +126,12 @@ export async function syncLedger(project: ProjectConfig, paths: HeliuPaths, opts
   const ledger = Ledger.of(project);
   const rec = opts.reconciled ?? (await reconcile(project, paths, { precheck: false, dirty: false, timeoutMs: 8000 }));
   const existing = ledger.load().features;
-  const { drafts, skipped } = collectDrafts(project, rec, existing);
+  // 已被主线/集成分支包含、有独立 worktree 的功能分支：判定是否「尚无独有提交」
+  const candidates = rec.report.repos.flatMap((r) =>
+    r.reachable ? r.branches.filter((b) => b.role === "feature" && b.mergedState !== "unmerged" && b.worktree && !b.worktree.isMain).map((b) => ({ repo: r.id, branch: b.branch })) : [],
+  );
+  const zero = await zeroCommitBranches(rec.report, candidates);
+  const { drafts, skipped } = collectDrafts(project, rec, existing, zero);
   const next = ledger.resolveMilestone("next", { create: false });
   const result: SyncResult = {
     dryRun: opts.dryRun,
@@ -128,7 +147,7 @@ export async function syncLedger(project: ProjectConfig, paths: HeliuPaths, opts
   for (const d of drafts) {
     const binding: FeatureBinding = { repo: d.repo, branch: d.branch, worktree: d.worktree, session: d.session, pr: d.pr };
     const why = d.titleSource === "session" ? `会话「${d.sessionTitle}」` : "分支标签（无关联会话）";
-    const body = `${d.title}\n\n> 由 heliu sync 自动生成的草稿：标题取自${why}。请确认标题与预约版本（heliu 预约 <卡号> <版本>）。`;
+    const body = `${d.title}\n\n> 由 heliu sync 自动生成的草稿：标题取自${why}${d.noCommits ? "；分支尚无独有提交" : ""}。请确认标题与预约版本（heliu 预约 <卡号> <版本>）。`;
     const { feature, milestoneCreated } = ledger.addFeature({ title: d.title, milestone: "next", bindings: [binding], body, source: "sync", status: d.status, now: opts.now });
     if (milestoneCreated) {
       result.milestone = milestoneCreated.id;
