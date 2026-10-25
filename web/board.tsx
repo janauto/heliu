@@ -223,7 +223,14 @@ function Column(p: ColumnProps) {
           <div class="owed muted">已发布 {col.cards.length} 项</div>
         ) : (
           <div class="owed">
-            还欠 <b>{col.owed}</b> 项 · 可合 <b>{col.mergeable}</b> · 冲突 <b>{col.conflict ?? "未检查"}</b> · 等你 <b>{col.waiting}</b>
+            还欠 <b>{col.owed}</b> 项 · 可合 <b>{col.mergeable}</b> · 冲突 <b>{col.conflict ?? "未检查"}</b>
+            {col.precheckFailed > 0 ? (
+              <span class="warn" title={col.precheckSummary?.firstError ?? ""}>
+                {" "}
+                · 未能试合 <b>{col.precheckFailed}</b>
+              </span>
+            ) : null}{" "}
+            · 等你 <b>{col.waiting}</b>
           </div>
         )}
       </div>
@@ -405,7 +412,7 @@ function BindingRow({ b, flash }: { b: CardBinding; flash: (t: string) => void }
         {behind > 0 ? `↓${behind} 落后${base} ${behind} 个提交` : `不落后${base}`}
         {ahead > 0 ? ` · ↑${ahead} 本分支有 ${ahead} 个${base}没有的提交` : ""}
         {b.conflictFiles !== null && b.conflictFiles > 0 ? ` · 试合到 ${b.precheckTarget} 冲突 ${b.conflictFiles} 个文件` : ""}
-        {b.precheckError ? ` · 试合未完成：${b.precheckError}` : ""}
+        {b.precheckState === "failed" ? ` · 未能试合（${b.precheckError ?? "原因未知"}），不代表无冲突` : ""}
       </div>
       {b.worktree ? <div class="explain br">目录：{b.worktree}</div> : null}
       {b.session ? (

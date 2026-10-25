@@ -113,6 +113,7 @@ function App() {
 /** 顶部固定一行：下一版是谁 · 冲突检查到哪了 · 自动顺延的现状（如实写：M4 才有） */
 function NextLine({ ov, pc, onCheck }: { ov: OverviewData | null; pc: { state: "off" | "checking" | "on"; at: string | null; error: string | null }; onCheck: () => void }) {
   const next = ov?.next;
+  const s = ov?.precheckSummary;
   return (
     <div class="nextline">
       <span>
@@ -125,7 +126,14 @@ function NextLine({ ov, pc, onCheck }: { ov: OverviewData | null; pc: { state: "
           <span class="muted">检查中…</span>
         ) : pc.state === "on" ? (
           <>
-            已检查 {hms(ov?.precheckAt ?? pc.at)}{" "}
+            {/* 三态：有卡没试合出结果时不说「已检查」 */}
+            {s && s.requested && s.failed > 0 ? (
+              <span class="warn">
+                {s.status === "failed" ? "未完成" : "部分完成"}（{s.failed} 张未能试合：{s.firstError ?? "原因未知"}）
+              </span>
+            ) : (
+              <>已检查 {hms(ov?.precheckAt ?? pc.at)}</>
+            )}{" "}
             <button class="link" onClick={onCheck} title="重新用 merge-tree 试合（临时区进行，不碰仓库）">
               重新检查
             </button>

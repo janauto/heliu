@@ -14,6 +14,8 @@
  *   > 尚未关联开发分支（没有绑定，或绑定的分支已不存在）
  */
 import type {
+  PrecheckState,
+  PrecheckSummary,
   FeatureView,
   LedgerFeature,
   LedgerMilestone,
@@ -52,6 +54,40 @@ export function countsTowardTodo(f: LedgerFeature): boolean {
 /** 预约到某版且计入待办的卡（effective = 卡片里写的里程碑 → 实际 id，next 别名已解析） */
 export function todoFeatures(features: LedgerFeature[], milestoneId: string, effective: (f: LedgerFeature) => string | null): LedgerFeature[] {
   return features.filter((f) => effective(f) === milestoneId && countsTowardTodo(f));
+}
+
+/**
+ * 单个绑定的试合三态（只描述事实，不参与分组）：需要试合 = 独立未合并的功能分支。
+ * 请求了预检却没有结果（沙箱建不起来、超时、出错）记 failed，绝不当成「无冲突」。
+ */
+export function precheckStateOf(fv: FeatureView | null, requested: boolean): { state: PrecheckState | null; error: string | null } {
+  if (!fv || fv.role !== "feature" || fv.mergedState !== "unmerged") return { state: null, error: null };
+  if (!requested) return { state: "skipped", error: null };
+  const p = fv.precheck;
+  if (p && !p.timedOut && !p.error && p.conflictFiles !== null) return { state: "checked", error: null };
+  return { state: "failed", error: p?.timedOut ? "试合超时" : (p?.error ?? "没有得到试合结果") };
+}
+
+/** 试合汇总：冲突 N · 未能试合 M · 未检查 K（CLI 待办、看板列头/总览/顶栏共用） */
+export function summarizePrecheck(t: { precheck: boolean; groups: Array<Pick<TodoGroup, "key" | "items">> }): PrecheckSummary {
+  const items = t.groups.flatMap((g) => g.items);
+  let failed = 0;
+  let unchecked = 0;
+  let needing = 0;
+  let firstError: string | null = null;
+  for (const it of items) {
+    const bs = it.bindings;
+    if (bs.some((b) => b.precheck)) needing++;
+    const f = bs.find((b) => b.precheck === "failed");
+    if (f) {
+      failed++;
+      firstError ??= f.precheckError ?? null;
+    }
+    if (bs.some((b) => b.precheck === "skipped")) unchecked++;
+  }
+  const conflicts = t.precheck ? t.groups.filter((g) => g.key === "conflict").reduce((a, g) => a + g.items.length, 0) : null;
+  const status: PrecheckSummary["status"] = !t.precheck ? "skipped" : failed === 0 ? "checked" : failed >= needing ? "failed" : "partial";
+  return { requested: t.precheck, status, conflicts, failed, unchecked, firstError };
 }
 
 export interface TodoInput {
@@ -115,6 +151,7 @@ export function groupTodo(input: TodoInput): TodoReport {
       }
       const main = sess[0];
       const noCommits = !!fv && !!repo && (input.zeroCommit ? input.zeroCommit.has(bindingKey(b.repo, b.branch)) : zeroCommitByFacts(repo, fv));
+      const pc = precheckStateOf(fv, precheck);
       const binding: TodoBinding = {
         repo: b.repo,
         repoLabel: repo?.label ?? b.repo,
@@ -128,6 +165,8 @@ export function groupTodo(input: TodoInput): TodoReport {
         sessionStatus: main?.status ?? null,
         lastCommitAt: fv?.lastCommitAt ?? null,
         noCommits,
+        precheck: pc.state,
+        precheckError: pc.error,
       };
       return { binding, repo, fv, sessions: sess };
     });

@@ -13,6 +13,8 @@ import type {
   JsonEnvelope,
   LedgerMilestone,
   MergedState,
+  PrecheckState,
+  PrecheckSummary,
   SessionStatus,
   TodoGroupKey,
 } from "../types.ts";
@@ -71,6 +73,8 @@ export interface CardBinding {
   conflictFiles: number | null;
   conflicts: string[];
   precheckError: string | null;
+  /** 试合三态（checked / failed / skipped）；不需要试合为 null。failed 绝不当成无冲突 */
+  precheckState: PrecheckState | null;
   lastCommitAt: string | null;
   worktree: string | null;
   session: CardSession | null;
@@ -79,7 +83,7 @@ export interface CardBinding {
 export type ColumnKind = "milestone" | "unreserved" | "released";
 
 export interface CardTag {
-  kind: "waiting" | "conflict" | "behind" | "stale" | "nocommit";
+  kind: "waiting" | "conflict" | "behind" | "stale" | "nocommit" | "precheck_failed";
   text: string;
 }
 
@@ -136,7 +140,11 @@ export interface BoardColumn {
   mergeable: number;
   /** 未试合（precheck=false）时为 null =「未检查」 */
   conflict: number | null;
+  /** 请求了试合但没得到结果的卡数（「未能试合 M」） */
+  precheckFailed: number;
   waiting: number;
+  /** 本列试合汇总（summarizePrecheck，与 heliu 待办 --precheck 同一个函数）；已发布列为 null */
+  precheckSummary: PrecheckSummary | null;
   cards: BoardCard[];
 }
 
@@ -148,8 +156,10 @@ export interface FeaturesData {
   abandoned: number;
   next: string | null;
   nextStatus: LedgerMilestone["status"] | null;
-  /** 本次是否做了试合（冲突是否已检查） */
+  /** 本次是否请求了试合 */
   precheck: boolean;
+  /** 全部列合起来的试合汇总：已检查 / 部分完成 / 未完成 / 未检查 */
+  precheckSummary: PrecheckSummary;
   /** 台账里无法解析的卡片文件 */
   broken: string[];
   ledgerDir: string;
@@ -168,12 +178,14 @@ export interface OverviewData {
   integrations: Array<{ repo: string; repoLabel: string; branch: string; ahead: number | null; days: number | null }>;
   hygieneWarnings: number;
   /** 各版本列的计数（与版本列列头一致） */
-  columns: Array<{ key: string; title: string; kind: ColumnKind; isNext: boolean; owed: number; mergeable: number; conflict: number | null; waiting: number }>;
+  columns: Array<{ key: string; title: string; kind: ColumnKind; isNext: boolean; owed: number; mergeable: number; conflict: number | null; precheckFailed: number; waiting: number }>;
   /** 当前下一版 */
   next: { id: string; status: LedgerMilestone["status"] } | null;
   precheck: boolean;
   /** 冲突计数所用试合扫描的时间（precheck=false 时为 null） */
   precheckAt: string | null;
+  /** 试合汇总（顶部固定行用：已检查 / 部分完成 / 未检查） */
+  precheckSummary: PrecheckSummary;
 }
 
 /* ───────────── 卫生 ───────────── */
@@ -237,10 +249,10 @@ export interface BaselineData {
 
 /* ───────────── 合并预演 ───────────── */
 
-/** 三档建议顺序：已进集成 → 无冲突 → 有冲突 → 未完成 */
-export type ReleaseTier = "in_integration" | "clean" | "conflict" | "unfinished";
-/** 建议动作：跳过（已在集成分支）/ 合入 / 需解冲突 / 顺延 */
-export type ReleaseAction = "skip" | "merge" | "resolve" | "defer";
+/** 建议顺序：已进集成 → 无冲突 → 有冲突 → 未能试合 → 未完成 */
+export type ReleaseTier = "in_integration" | "clean" | "conflict" | "precheck_failed" | "unfinished";
+/** 建议动作：跳过（已在集成分支）/ 合入 / 需解冲突 / 重新试合或人工确认 / 顺延 */
+export type ReleaseAction = "skip" | "merge" | "resolve" | "recheck" | "defer";
 
 export interface ReleaseBinding {
   repo: string;
@@ -253,6 +265,7 @@ export interface ReleaseBinding {
   conflictFiles: number | null;
   conflicts: string[];
   precheckError: string | null;
+  precheckState: PrecheckState | null;
   behindIntegration: number | null;
   behindMain: number | null;
 }

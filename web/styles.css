@@ -248,3 +248,8 @@ button.link { border: none; background: none; color: var(--accent); cursor: poin
 .card-foot { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
 .expand { border: none; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 14px; }
 @media (max-width: 760px) { .nextline { padding: 6px 12px 8px; } }
+
+/* 试合三态：未能试合（不等于无冲突） */
+.warn { color: var(--yellow); }
+.tag.precheck_failed { color: var(--yellow); border-color: var(--yellow); }
+.tier.precheck_failed { color: var(--yellow); }

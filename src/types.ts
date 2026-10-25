@@ -337,6 +337,29 @@ export interface LedgerMilestone {
 /** milestone.todo 的分组（按优先级从高到低） */
 export type TodoGroupKey = "blocked" | "conflict" | "mergeable" | "behind" | "stale" | "active" | "unbound";
 
+/**
+ * 试合（merge-tree 预检）三态（M3 第 2 轮，Codex 反馈）：
+ * checked = 有结果；failed = 请求了但没得到结果（建不了写保护沙箱 / 超时 / 出错）；skipped = 没请求预检。
+ * 不需要试合的绑定（已进主线/集成分支、分支不存在）为 null。失败绝不当成「无冲突」。
+ */
+export type PrecheckState = "checked" | "failed" | "skipped";
+
+/** 一批待办卡片的试合汇总（CLI 待办、看板列头/总览/顶栏共用 summarizePrecheck） */
+export interface PrecheckSummary {
+  /** 是否请求了预检 */
+  requested: boolean;
+  /** checked = 全部有结果；partial = 部分未能试合；failed = 需要试合的全部失败；skipped = 未请求 */
+  status: "checked" | "partial" | "failed" | "skipped";
+  /** 有冲突的卡数（未请求为 null） */
+  conflicts: number | null;
+  /** 未能试合的卡数（任一绑定 failed） */
+  failed: number;
+  /** 未检查的卡数（任一绑定 skipped） */
+  unchecked: number;
+  /** 第一条失败原因 */
+  firstError: string | null;
+}
+
 export interface TodoBinding {
   repo: string;
   repoLabel: string;
@@ -358,6 +381,10 @@ export interface TodoBinding {
    * 这种分支 git 祖先判断恒为「已进主线」，但并没有任何工作被合入，分组时视为「开发中 · 尚无提交」。
    */
   noCommits?: boolean;
+  /** 试合三态（M3 第 2 轮追加）；不需要试合为 null */
+  precheck?: PrecheckState | null;
+  /** precheck=failed 时的原因 */
+  precheckError?: string | null;
 }
 
 export interface TodoItem {

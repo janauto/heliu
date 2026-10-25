@@ -36,14 +36,21 @@ export function OverviewPage({ status, overview, go }: { tick: number; status: R
               ) : null}
             </span>
             <span class="v">
-              还欠 <b>{c.owed}</b> 项 · 可合 <b>{c.mergeable}</b> · 冲突 <b>{c.conflict ?? "未检查"}</b> · 等你 <b>{c.waiting}</b>{" "}
+              还欠 <b>{c.owed}</b> 项 · 可合 <b>{c.mergeable}</b> · 冲突 <b>{c.conflict ?? "未检查"}</b>
+              {c.precheckFailed > 0 ? (
+                <span class="warn">
+                  {" "}
+                  · 未能试合 <b>{c.precheckFailed}</b>
+                </span>
+              ) : null}{" "}
+              · 等你 <b>{c.waiting}</b>{" "}
               <a href="#/board" onClick={(e) => (e.preventDefault(), go("board"))}>
                 看版本列
               </a>
             </span>
           </div>
         ))}
-        <p class="muted small">还欠 = 预约到这一版、台账状态还是 想法/开发中/待合并 的功能；可合 / 冲突来自试合（merge-tree，在临时区进行，不碰仓库）；等你 = 绑定的会话停下来等你回答。</p>
+        <p class="muted small">还欠 = 预约到这一版、台账状态还是 想法/开发中/待合并 的功能；可合 / 冲突来自试合（merge-tree，在临时区进行，不碰仓库）；未能试合 = 试合没得到结果（不等于无冲突）；等你 = 绑定的会话停下来等你回答。</p>
       </div>
 
       <h2>仓库健康</h2>

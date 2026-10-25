@@ -9,13 +9,15 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
-import type { BaselineData, BoardCard, FeaturesData, HygieneData, OverviewData, ReleasePlanResult, ReleasePreview } from "../src/board/api-types.ts";
+import type { BaselineData, BoardCard, FeaturesData, HygieneData, OverviewData, ReleaseBinding, ReleasePlanResult, ReleasePreview } from "../src/board/api-types.ts";
 import { ensureWebBuild } from "../src/board/build.ts";
-import { createBoardApp } from "../src/board/server.ts";
+import { releaseItem } from "../src/board/data.ts";
+import { createBoardApp, debugLogger } from "../src/board/server.ts";
+import { summarizePrecheck } from "../src/core/todo.ts";
 import { Ledger } from "../src/core/ledger.ts";
 import { heliuPaths } from "../src/core/paths.ts";
 import { addRepoToProject, loadProject, projectFile, stringifyProject } from "../src/core/project.ts";
-import type { ReconcileReport, TodoReport } from "../src/types.ts";
+import type { ReconcileReport, TodoBinding, TodoItem, TodoReport } from "../src/types.ts";
 import { B, buildFixture, type Fixture } from "./helpers/fixture.ts";
 
 let fx: Fixture;
@@ -113,7 +115,10 @@ describe("只读接口", () => {
     expect(d.columns.map((c) => c.key)).toEqual(["vNext", "__unreserved", "__released"]);
     const v = d.columns[0]!;
     expect(v.isNext).toBe(true);
-    expect([v.owed, v.mergeable, v.conflict, v.waiting]).toEqual([5, 3, 1, 0]);
+    expect([v.owed, v.mergeable, v.conflict, v.precheckFailed, v.waiting]).toEqual([5, 3, 1, 0, 0]);
+    expect(d.precheckSummary).toEqual({ requested: true, status: "checked", conflicts: 1, failed: 0, unchecked: 0, firstError: null });
+    expect(card(d, "F-0002").bindings[0]!.precheckState).toBe("checked");
+    expect(card(d, "F-0001").bindings[0]!.precheckState).toBeNull(); // 已进集成分支：不需要试合
     // 组名来自 M2 分组函数
     expect(d.groups.map((g) => g.title)).toContain("尚未关联开发分支");
     const f1 = card(d, "F-0001");
@@ -139,6 +144,8 @@ describe("只读接口", () => {
     const plain = await get<FeaturesData>("/api/features?precheck=0");
     expect(plain.body.data.columns[0]!.conflict).toBeNull();
     expect(plain.body.data.precheck).toBe(false);
+    expect(plain.body.data.precheckSummary.status).toBe("skipped");
+    expect(plain.body.data.precheckSummary.unchecked).toBe(3); // F-0002/3/5 的分支需要试合但没请求
   }, 30_000);
 
   test("overview：现在最该做的 + 下一版 + 一眼条数字", async () => {
@@ -230,7 +237,7 @@ describe("合并预演与合并单草稿", () => {
     const r = await get<ReleasePreview>("/api/release/preview?milestone=vNext");
     expect(r.status).toBe(200);
     const items = r.body.data.items;
-    const rank = { in_integration: 0, clean: 1, conflict: 2, unfinished: 3 } as const;
+    const rank = { in_integration: 0, clean: 1, conflict: 2, precheck_failed: 3, unfinished: 4 } as const;
     for (let i = 1; i < items.length; i++) expect(rank[items[i]!.tier]).toBeGreaterThanOrEqual(rank[items[i - 1]!.tier]);
     expect(items.map((x) => x.order)).toEqual(items.map((_, i) => i + 1));
     const tierOf = (id: string) => items.find((x) => x.id === id)!.tier;
@@ -286,6 +293,153 @@ describe("安全与前端", () => {
     expect(code).toContain("仅预演，不会执行合并（M4）");
     expect(code).not.toMatch(/https?:\/\/(cdn|unpkg|esm\.sh)/);
   }, 30_000);
+});
+
+/* ───────────── 试合三态（M3 第 2 轮，Codex 第 1 轮反馈） ───────────── */
+
+const tb = (p: Partial<TodoBinding>): TodoBinding => ({
+  repo: "docs",
+  repoLabel: "文档仓",
+  branch: "b",
+  exists: true,
+  mergedState: "unmerged",
+  behindMain: 0,
+  behindIntegration: 5,
+  conflictFiles: null,
+  sessionId: null,
+  sessionStatus: null,
+  lastCommitAt: null,
+  ...p,
+});
+const ti = (id: string, group: TodoItem["group"], bindings: TodoBinding[]): TodoItem => ({
+  id,
+  title: id,
+  status: "开发中",
+  acceptance: "未",
+  rolledFrom: [],
+  group,
+  bindings,
+  needsAction: group === "blocked" ? "确认一下" : null,
+  lastActivityAt: null,
+  idleDays: 0,
+  file: "/x",
+});
+
+describe("试合三态汇总", () => {
+  test("summarizePrecheck：已检查 / 部分完成 / 未完成 / 未检查", () => {
+    const ok = ti("A", "mergeable", [tb({ precheck: "checked", conflictFiles: 0 })]);
+    const cf = ti("B", "conflict", [tb({ precheck: "checked", conflictFiles: 2 })]);
+    const bad = ti("C", "behind", [tb({ precheck: "failed", precheckError: "无法建立写保护沙箱" })]);
+    const merged = ti("D", "mergeable", [tb({ mergedState: "in_integration", precheck: null })]);
+    const groups = (items: TodoItem[]) => [
+      { key: "conflict" as const, items: items.filter((i) => i.group === "conflict") },
+      { key: "mergeable" as const, items: items.filter((i) => i.group === "mergeable") },
+      { key: "behind" as const, items: items.filter((i) => i.group === "behind") },
+    ];
+    expect(summarizePrecheck({ precheck: true, groups: groups([ok, cf, merged]) })).toEqual({ requested: true, status: "checked", conflicts: 1, failed: 0, unchecked: 0, firstError: null });
+    const partial = summarizePrecheck({ precheck: true, groups: groups([ok, cf, bad]) });
+    expect([partial.status, partial.conflicts, partial.failed, partial.firstError]).toEqual(["partial", 1, 1, "无法建立写保护沙箱"]);
+    expect(summarizePrecheck({ precheck: true, groups: groups([bad, merged]) }).status).toBe("failed");
+    const skipped = summarizePrecheck({ precheck: false, groups: groups([ti("E", "behind", [tb({ precheck: "skipped" })]), merged]) });
+    expect([skipped.status, skipped.conflicts, skipped.unchecked]).toEqual(["skipped", null, 1]);
+  });
+
+  test("预演：未能试合单独一档（重新试合或人工确认），不归入顺延；等你回答仍是未完成", () => {
+    const rb = (p: Partial<ReleaseBinding>): ReleaseBinding => ({
+      repo: "docs",
+      repoLabel: "文档仓",
+      branch: "b",
+      exists: true,
+      sha: null,
+      mergedState: "unmerged",
+      precheckTarget: null,
+      conflictFiles: null,
+      conflicts: [],
+      precheckError: "无法建立写保护沙箱",
+      precheckState: "failed",
+      behindIntegration: 102,
+      behindMain: 0,
+      ...p,
+    });
+    const x = releaseItem(ti("F-1", "behind", []), "behind", [rb({})]);
+    expect([x.tier, x.action, x.actionText]).toEqual(["precheck_failed", "recheck", "重新试合或人工确认"]);
+    expect(x.reason).toContain("无法建立写保护沙箱");
+    const y = releaseItem(ti("F-2", "blocked", []), "blocked", [rb({})]);
+    expect(y.tier).toBe("unfinished");
+    expect(y.reason).toContain("另有分支未能试合");
+  });
+});
+
+describe("建不了写保护沙箱时（HELIU_NO_SANDBOX=1，Codex 第 1 轮场景）", () => {
+  let probe: Record<string, { data: unknown }>;
+  beforeAll(() => {
+    const env = { ...process.env, ...fx.env, HELIU_NO_SANDBOX: "1" };
+    const r = Bun.spawnSync({
+      cmd: [process.execPath, join(import.meta.dir, "helpers", "board-probe.ts"), "演示", "/api/features", "/api/release/preview?milestone=vNext", "/api/overview?precheck=1"],
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (r.exitCode !== 0) throw new Error(r.stderr.toString());
+    probe = JSON.parse(r.stdout.toString());
+  });
+
+  test("版本列：冲突 0 · 未能试合 3，汇总不是「已检查」；卡片标「未能试合」、不是绿灯", () => {
+    const d = probe["/api/features"]!.data as FeaturesData;
+    const v = d.columns.find((c) => c.key === "vNext")!;
+    expect(v.conflict).toBe(0);
+    expect(v.precheckFailed).toBe(3);
+    expect(d.precheckSummary.status).toBe("failed");
+    expect(d.precheckSummary.firstError).toContain("沙箱");
+    for (const id of ["F-0002", "F-0003", "F-0005"]) {
+      const c = card(d, id);
+      expect(c.light).not.toBe("green");
+      expect(c.tags.map((t) => t.kind)).toContain("precheck_failed");
+      expect(c.nextStep).toStartWith("未能试合");
+      expect(c.nextStep).not.toContain("无冲突");
+      expect(c.bindings[0]!.precheckState).toBe("failed");
+    }
+    const ov = probe["/api/overview?precheck=1"]!.data as OverviewData;
+    expect(ov.precheckSummary.failed).toBe(3);
+    expect(ov.columns.find((c) => c.key === "vNext")!.precheckFailed).toBe(3);
+  });
+
+  test("合并预演：三张进「未能试合」档（不顺延），顺序在有冲突之后、未完成之前", () => {
+    const p = probe["/api/release/preview?milestone=vNext"]!.data as ReleasePreview;
+    const tierOf = (id: string) => p.items.find((x) => x.id === id)!.tier;
+    expect(["F-0002", "F-0003", "F-0005"].map(tierOf)).toEqual(["precheck_failed", "precheck_failed", "precheck_failed"]);
+    expect(tierOf("F-0001")).toBe("in_integration");
+    expect(p.counts.precheck_failed).toBe(3);
+    for (const id of ["F-0002", "F-0003", "F-0005"]) expect(p.deferred).not.toContain(id);
+    const tiers = p.items.map((x) => x.tier);
+    expect(tiers.lastIndexOf("precheck_failed")).toBeLessThan(tiers.indexOf("unfinished"));
+  });
+
+  test("CLI heliu 待办 --precheck 同样显示「未能试合」（同一个汇总函数）", () => {
+    const r = Bun.spawnSync({
+      cmd: [join(import.meta.dir, "..", "bin", "heliu"), "待办", "vNext", "--precheck", "--project", "演示", "--wide"],
+      cwd: fx.repo,
+      env: { ...process.env, ...fx.env, HELIU_NO_SANDBOX: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const out = r.stdout.toString();
+    expect(r.exitCode).toBe(0);
+    expect(out).toContain("试合：未完成 · 冲突 0 张 · 未能试合 3 张");
+    expect(out).toContain("未能试合（无法建立写保护沙箱");
+    // 三张卡的分支行不能出现「试合无冲突」（组说明文字里的「或试合无冲突」不算）
+    expect(out).not.toMatch(/claude\/(bold-shaw|conflict|behind)[^\n]*试合无冲突/);
+  }, 30_000);
+});
+
+describe("HELIU_DEBUG", () => {
+  test("HELIU_DEBUG=1 才往 stderr 打点（同步写），否则静默", () => {
+    const code = `import { debugLogger } from ${JSON.stringify(join(import.meta.dir, "..", "src", "board", "server.ts"))}; debugLogger()("加载项目…"); debugLogger({})("不该出现");`;
+    const on = Bun.spawnSync({ cmd: [process.execPath, "-e", code], env: { ...process.env, HELIU_DEBUG: "1" }, stdout: "pipe", stderr: "pipe" });
+    expect(on.stderr.toString()).toMatch(/^\[heliu board \+\d+ms\] 加载项目…\n$/);
+    const off = Bun.spawnSync({ cmd: [process.execPath, "-e", code], env: { ...process.env, HELIU_DEBUG: "" }, stdout: "pipe", stderr: "pipe" });
+    expect(off.stderr.toString()).toBe("");
+  });
 });
 
 describe("只读纪律", () => {

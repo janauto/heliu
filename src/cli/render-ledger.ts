@@ -3,6 +3,7 @@
  * CLI 与 MCP 共用（MCP 另做 8k 字符截断）。
  */
 import type { LedgerFeature, LedgerMilestone, TodoBinding, TodoItem, TodoReport, WhereAmI } from "../types.ts";
+import { summarizePrecheck } from "../core/todo.ts";
 import type { SyncResult } from "../core/sync.ts";
 import { fmtShort, LINK_MARK } from "./render.ts";
 import { hangingWrap, outputWidth, renderTable, truncate, truncateMiddle, type Column } from "./table.ts";
@@ -131,7 +132,8 @@ function bindingState(b: TodoBinding, precheck: boolean): string {
   const parts: string[] = [];
   if (b.behindIntegration !== null) parts.push(`落后集成分支 ${b.behindIntegration}`);
   else if (b.behindMain !== null) parts.push(`落后主线 ${b.behindMain}`);
-  if (precheck && b.conflictFiles !== null) parts.push(b.conflictFiles > 0 ? `冲突 ${b.conflictFiles} 个文件` : "试合无冲突");
+  if (b.precheck === "failed") parts.push(`未能试合（${b.precheckError ?? "原因未知"}）`);
+  else if (precheck && b.conflictFiles !== null) parts.push(b.conflictFiles > 0 ? `冲突 ${b.conflictFiles} 个文件` : "试合无冲突");
   return parts.join(" · ") || "独立未合并";
 }
 
@@ -160,6 +162,13 @@ export function renderTodo(projectName: string, t: TodoReport, opts: RenderOpts 
   out.push(nm ? `下一版 = ${nm.id}（${nm.status}）` : "下一版 = （还没有「规划中」的版本；登记新点子时自动建 vNext）");
   const overview = t.groups.map((g) => `${g.title} ${g.count === null ? "未检查" : g.count}`).join(" > ");
   out.push(...hangingWrap("概览：", `${overview}（按优先级排，每张卡只进最靠前的一组）`, W));
+  if (t.precheck) {
+    // 试合三态：未能试合的卡不算「无冲突」（看板列头/总览/顶栏用同一个 summarizePrecheck）
+    const s = summarizePrecheck(t);
+    const state = s.status === "checked" ? "已完成" : s.status === "partial" ? "部分完成" : "未完成";
+    const why = s.failed ? `（${s.firstError ?? "原因未知"}；这些卡不能当成无冲突）` : "";
+    out.push(...hangingWrap("试合：", `${state} · 冲突 ${s.conflicts ?? 0} 张 · 未能试合 ${s.failed} 张${why}`, W));
+  }
   out.push(...hangingWrap("顺延：", "某版合并时没合完的功能自动挪到下一版，标「从 vX 顺延」排在组内最前（M4 执行，不会静默丢弃）", W));
   const empty = t.groups.filter((g) => g.count === 0).map((g) => g.title);
   for (const g of t.groups) {

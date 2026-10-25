@@ -7,11 +7,12 @@
  * - 防 DNS rebinding：Host 必须是 127.0.0.1 / localhost / [::1]；写接口必须是 application/json（浏览器跨站表单发不出来）。
  * - createBoardApp 不监听端口，测试直接用 app.request()；runBoard 才起服务。
  */
-import { existsSync } from "node:fs";
+import { existsSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { Hono, type Context } from "hono";
 import { SCHEMA_VERSION } from "../types.ts";
 import type { HeliuPaths } from "../core/paths.ts";
+import { Ledger } from "../core/ledger.ts";
 import { ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
 import type { BoardEnvelope, BoardMeta } from "./api-types.ts";
 import { DIST_DIR, ensureWebBuild } from "./build.ts";
@@ -158,21 +159,56 @@ export interface RunBoardOptions {
   log?: (line: string) => void;
 }
 
+/**
+ * HELIU_DEBUG=1 时逐步往 stderr 打点（同步写，进程卡住也能看到最后一步）：
+ * 用来定位桌面应用 launch.json 启动时「进程在、端口没监听、连横幅都没打」的挂起（M5 排查）。
+ */
+export function debugLogger(env: NodeJS.ProcessEnv = process.env): (step: string) => void {
+  if (env.HELIU_DEBUG !== "1") return () => undefined;
+  const t0 = performance.now();
+  return (step: string) => {
+    try {
+      writeSync(2, `[heliu board +${Math.round(performance.now() - t0)}ms] ${step}\n`);
+    } catch {
+      /* stderr 不可写就算了 */
+    }
+  };
+}
+
 /** 起服务并一直运行到 Ctrl+C（main.ts 在 main() 返回后会 process.exit，所以这里不能提前返回） */
 export async function runBoard(opts: RunBoardOptions): Promise<void> {
+  const dbg = debugLogger();
+  dbg(`开始：pid=${process.pid} cwd=${opts.cwd} bun=${Bun.version} HELIU_HOME=${opts.paths.heliuHome}`);
   const log = opts.log ?? ((l: string) => console.log(l));
+  dbg(`加载项目…（--project=${opts.projectName ?? "未指定，按目录识别"}）`);
   const project = await resolveProject(opts.paths, opts.projectName, opts.cwd);
+  dbg(`项目已加载：${project.name}（${project.repos.length} 个仓库，${project.source}）`);
+  dbg("读台账…");
+  try {
+    const ledger = Ledger.of(project);
+    const ms = ledger.listMilestones().length;
+    const n = ledger.load().features.length;
+    dbg(`台账可读：${ledger.dir}（${ms} 个里程碑、${n} 张卡）`);
+  } catch (e) {
+    dbg(`台账读取失败（不影响启动，页面里会报错）：${(e as Error).message}`);
+  }
+  dbg("检查前端打包…");
   const build = await ensureWebBuild();
+  dbg(`前端${build.built ? `已重新打包（${build.ms} ms）` : "沿用已有打包"}：${build.dir}`);
   const { app, service } = createBoardApp({ paths: opts.paths, project });
   const port = opts.port ?? DEFAULT_PORT;
+  dbg(`监听 127.0.0.1:${port}…`);
   let server: ReturnType<typeof Bun.serve>;
   try {
     server = Bun.serve({ hostname: "127.0.0.1", port, fetch: app.fetch, idleTimeout: 120 });
   } catch (e) {
     const msg = String((e as Error).message ?? e);
+    dbg(`监听失败：${msg}`);
     if (/EADDRINUSE|in use/i.test(msg)) throw new ProjectError(`端口 ${port} 已被占用：换一个端口（heliu board --port ${port + 1}），或先关掉占用它的程序`);
     throw e;
   }
+  dbg(`已监听 127.0.0.1:${server.port}`);
+  dbg("预热开始（后台扫描：不预检 + 预检）");
   service.warm();
   const url = `http://127.0.0.1:${server.port}/`;
   const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;

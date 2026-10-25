@@ -28,7 +28,7 @@ import { loadProject, type ProjectConfig } from "../core/project.ts";
 import { loadSessionContext, reconcile, type ReconcileResult } from "../core/reconcile.ts";
 import { syncLedger, type SyncResult } from "../core/sync.ts";
 import { bindingKey, sourceBranchIndex, zeroCommitBranches } from "../core/owncommits.ts";
-import { countsTowardTodo, groupTodo, STALE_DAYS, TODO_GROUP_DEFS, todoFeatures } from "../core/todo.ts";
+import { countsTowardTodo, groupTodo, precheckStateOf, STALE_DAYS, summarizePrecheck, TODO_GROUP_DEFS, todoFeatures } from "../core/todo.ts";
 import { topActions } from "../cli/render.ts";
 import type {
   BaselineData,
@@ -300,12 +300,15 @@ export class BoardService {
     }
 
     const columns: BoardColumn[] = [];
+    const todos: TodoReport[] = [];
     const mk = (key: string, kind: BoardColumn["kind"], title: string, milestone: LedgerMilestone | null): BoardColumn => {
       const list = byColumn.get(key) ?? [];
       const pseudo: LedgerMilestone = milestone ?? { id: key, title, status: "规划中", target_date: null, integration_branch: null, notes: "" };
       const todo =
         kind === "released" ? null : groupTodo({ milestone: pseudo, requested: key, features: list, report, sessions, stops, zeroCommit, nextMilestone, now: this.now() });
+      if (todo) todos.push(todo);
       const cards = this.cardsOf(scan, list, todo, key, kind);
+      const summary = todo ? summarizePrecheck(todo) : null;
       const count = (g: TodoGroupKey) => todo?.groups.find((x) => x.key === g)?.items.length ?? 0;
       const conflictCount = todo?.groups.find((x) => x.key === "conflict")?.count ?? null;
       let droppable = kind === "unreserved";
@@ -325,7 +328,9 @@ export class BoardService {
         owed: todo?.total ?? 0,
         mergeable: count("mergeable"),
         conflict: kind === "released" ? 0 : conflictCount,
+        precheckFailed: summary?.failed ?? 0,
         waiting: count("blocked"),
+        precheckSummary: summary,
         cards,
       };
     };
@@ -343,7 +348,17 @@ export class BoardService {
     const groups = TODO_GROUP_DEFS.map((d) => ({ key: d.key, title: d.title, hint: d.hint, light: LIGHT_OF[d.key] }));
     const nextMs = milestones.find((m) => m.status === "规划中") ?? null;
     return {
-      data: { columns: shown, groups, abandoned, next, nextStatus: nextMs?.status ?? null, precheck: scan.precheck, broken, ledgerDir: ledger.dir },
+      data: {
+        columns: shown,
+        groups,
+        abandoned,
+        next,
+        nextStatus: nextMs?.status ?? null,
+        precheck: scan.precheck,
+        precheckSummary: summarizePrecheck({ precheck: scan.precheck, groups: todos.flatMap((t) => t.groups) }),
+        broken,
+        ledgerDir: ledger.dir,
+      },
       meta: this.meta(scan, cached),
     };
   }
@@ -430,6 +445,7 @@ export class BoardService {
         }
       : null;
     const p = fv?.precheck ?? null;
+    const pc = precheckStateOf(fv, scan.precheck);
     return {
       repo: b.repo,
       repoLabel: repo?.label ?? b.repo,
@@ -446,7 +462,8 @@ export class BoardService {
       precheckTarget: p?.target ?? null,
       conflictFiles: p?.conflictFiles ?? null,
       conflicts: p?.conflicts ?? [],
-      precheckError: p ? (p.timedOut ? "试合超时" : p.error) : null,
+      precheckError: pc.error,
+      precheckState: pc.state,
       lastCommitAt: fv?.lastCommitAt ?? null,
       worktree: b.worktree ?? fv?.worktree?.path ?? null,
       session,
@@ -471,7 +488,17 @@ export class BoardService {
     }
     const columns = feats.data.columns
       .filter((c) => c.kind !== "released")
-      .map((c) => ({ key: c.key, title: c.title, kind: c.kind, isNext: c.isNext, owed: c.owed, mergeable: c.mergeable, conflict: c.conflict, waiting: c.waiting }));
+      .map((c) => ({
+        key: c.key,
+        title: c.title,
+        kind: c.kind,
+        isNext: c.isNext,
+        owed: c.owed,
+        mergeable: c.mergeable,
+        conflict: c.conflict,
+        precheckFailed: c.precheckFailed,
+        waiting: c.waiting,
+      }));
     const nextMs = this.ledger().listMilestones().find((m) => m.status === "规划中") ?? null;
     return {
       data: {
@@ -484,6 +511,7 @@ export class BoardService {
         next: nextMs ? { id: nextMs.id, status: nextMs.status } : null,
         precheck,
         precheckAt: precheck ? feats.meta.scannedAt : null,
+        precheckSummary: feats.data.precheckSummary,
       },
       meta: this.meta(scan, cached),
     };
@@ -559,6 +587,7 @@ export class BoardService {
           const repo = repos.get(b.repo);
           const fv = repo?.reachable ? repo.branches.find((x) => x.branch === b.branch) : undefined;
           const p = fv?.precheck ?? null;
+          const pc = precheckStateOf(fv ?? null, true);
           return {
             repo: b.repo,
             repoLabel: b.repoLabel,
@@ -569,7 +598,8 @@ export class BoardService {
             precheckTarget: p?.target ?? null,
             conflictFiles: p?.conflictFiles ?? null,
             conflicts: p?.conflicts ?? [],
-            precheckError: p ? (p.timedOut ? "试合超时" : p.error) : null,
+            precheckError: pc.error,
+            precheckState: pc.state,
             behindIntegration: b.behindIntegration,
             behindMain: b.behindMain,
           };
@@ -577,11 +607,11 @@ export class BoardService {
         items.push(releaseItem(it, g.key, bindings));
       }
     }
-    const rank: Record<ReleaseTier, number> = { in_integration: 0, clean: 1, conflict: 2, unfinished: 3 };
+    const rank: Record<ReleaseTier, number> = { in_integration: 0, clean: 1, conflict: 2, precheck_failed: 3, unfinished: 4 };
     const conflictsOf = (x: ReleaseItem) => x.bindings.reduce((a, b) => a + (b.conflictFiles ?? 0), 0);
     items.sort((a, b) => rank[a.tier] - rank[b.tier] || (a.tier === "conflict" ? conflictsOf(a) - conflictsOf(b) : 0) || a.id.localeCompare(b.id));
     items.forEach((x, i) => (x.order = i + 1));
-    const counts: Record<ReleaseTier, number> = { in_integration: 0, clean: 0, conflict: 0, unfinished: 0 };
+    const counts: Record<ReleaseTier, number> = { in_integration: 0, clean: 0, conflict: 0, precheck_failed: 0, unfinished: 0 };
     for (const x of items) counts[x.tier]++;
     const repoRefs = report.repos.map((r) => ({
       repo: r.id,
@@ -664,6 +694,9 @@ export function cardFacts(
   if (behind > 0 && g !== "behind") tags.push({ kind: "behind", text: `落后 ↓${behind}` });
   if (item && item.idleDays !== null && item.idleDays >= STALE_DAYS && g !== "stale") tags.push({ kind: "stale", text: `停滞 ${item.idleDays} 天` });
   if (item?.note === "尚无提交") tags.push({ kind: "nocommit", text: "尚无提交" });
+  // 请求了试合却没得到结果：明确标「未能试合」，不显示「无冲突」
+  const failedB = live.find((b) => b.precheckState === "failed");
+  if (failedB) tags.push({ kind: "precheck_failed", text: "未能试合" });
 
   const suggestStatus: BoardCard["suggestStatus"] = item?.suggestion ? (item.note === "已进主线" ? "已进主线" : item.note === "已进集成分支" ? "已合入" : null) : null;
   if (doneNote || !item) return { nextStep: doneNote ?? "", tags, variant: "done", suggestStatus: null };
@@ -684,13 +717,15 @@ export function cardFacts(
       } else nextStep = item.note === "试合无冲突" ? `可合并：试合到 ${target} 无冲突，合并时可直接合入` : `可合并：${item.note ?? "已进集成分支"}`;
       break;
     case "behind":
-      nextStep = `需同步基线 ↓${behind}${precheck ? "" : "（冲突未检查）"}`;
-      break;
     case "stale":
-      nextStep = `停滞 ${item.idleDays ?? "?"} 天：确认还做不做`;
-      break;
     case "active":
-      nextStep = item.note === "尚无提交" ? "开发中 · 分支尚无提交" : precheck ? "开发中" : "开发中（冲突未检查）";
+      if (failedB) {
+        // 能不能合不知道：先把「未能试合」说清楚，再补落后/停滞等事实
+        const extra = [behind > 0 ? `落后 ↓${behind}` : "", item.group === "stale" ? `停滞 ${item.idleDays ?? "?"} 天` : ""].filter(Boolean).join("，");
+        nextStep = `未能试合（${failedB.precheckError ?? "原因未知"}）：重新试合或人工确认${extra ? `；${extra}` : ""}`;
+      } else if (item.group === "behind") nextStep = `需同步基线 ↓${behind}${precheck ? "" : "（冲突未检查）"}`;
+      else if (item.group === "stale") nextStep = `停滞 ${item.idleDays ?? "?"} 天：确认还做不做`;
+      else nextStep = item.note === "尚无提交" ? "开发中 · 分支尚无提交" : precheck ? "开发中" : "开发中（冲突未检查）";
       break;
     case "unbound":
       nextStep = bindings.length ? "绑定的分支已不存在：重新关联开发分支" : "尚未关联开发分支";
@@ -708,18 +743,16 @@ export function lightTextOf(item: TodoItem, bindings: CardBinding[], groupTitle:
     parts.push(`↓${n}`);
   } else if (item.group === "stale" && item.idleDays !== null) parts.push(`${item.idleDays} 天`);
   if (item.note) parts.push(item.note);
-  if (item.group === "active" && !item.note) {
-    const err = bindings.find((b) => b.precheckError)?.precheckError;
-    if (err) parts.push(`试合未完成（${err}）`);
-  }
+  if (item.group === "active" && !item.note && bindings.some((b) => b.precheckState === "failed")) parts.push("未能试合");
   return parts.join(" · ");
 }
 
-const TIER_TEXT: Record<ReleaseTier, string> = { in_integration: "已进集成", clean: "无冲突", conflict: "有冲突", unfinished: "未完成" };
+const TIER_TEXT: Record<ReleaseTier, string> = { in_integration: "已进集成", clean: "无冲突", conflict: "有冲突", precheck_failed: "未能试合", unfinished: "未完成" };
 const ACTION_OF: Record<ReleaseTier, { action: ReleaseAction; text: string }> = {
   in_integration: { action: "skip", text: "跳过（已在集成分支）" },
   clean: { action: "merge", text: "合入" },
   conflict: { action: "resolve", text: "需解冲突" },
+  precheck_failed: { action: "recheck", text: "重新试合或人工确认" },
   unfinished: { action: "defer", text: "顺延" },
 };
 
@@ -735,10 +768,16 @@ export function releaseItem(it: TodoItem, group: TodoGroupKey, bindings: Release
   } else if (group === "conflict") {
     tier = "conflict";
     reason = `试合到 ${target} 有 ${sumConflicts(bindings)} 个冲突文件`;
+  } else if (group !== "blocked" && group !== "unbound" && bindings.some((b) => b.precheckState === "failed")) {
+    // 试合没有结果：既不能说无冲突，也不该自动顺延（Codex 第 1 轮）
+    tier = "precheck_failed";
+    const f = bindings.find((b) => b.precheckState === "failed")!;
+    const behind = Math.max(0, ...bindings.map((b) => b.behindIntegration ?? b.behindMain ?? 0));
+    reason = `未能试合：${f.precheckError ?? "原因未知"}${behind > 0 ? `；落后 ↓${behind}` : ""}`;
   } else {
     tier = "unfinished";
     const err = bindings.find((b) => b.precheckError)?.precheckError;
-    if (group === "blocked") reason = `会话在等你回答：${it.needsAction ?? "（未写明）"}`;
+    if (group === "blocked") reason = `会话在等你回答：${it.needsAction ?? "（未写明）"}${err ? `；另有分支未能试合（${err}）` : ""}`;
     else if (group === "unbound") reason = it.bindings.length ? "绑定的分支在本地已不存在" : "尚未关联开发分支（想法）";
     else if (it.note === "尚无提交") reason = "绑定分支尚无独有提交（与主线同点或自创建后未提交）";
     else if (group === "stale") reason = `停滞 ${it.idleDays ?? "?"} 天${err ? `，试合未完成（${err}）` : ""}`;
@@ -787,7 +826,7 @@ const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 export function defaultDecision(x: ReleaseItem): "并入" | "顺延" | "待定" {
   if (x.tier === "in_integration") return "并入";
   if (x.tier === "clean") return x.status === "待合并" ? "并入" : "待定";
-  if (x.tier === "conflict") return "待定";
+  if (x.tier === "conflict" || x.tier === "precheck_failed") return "待定";
   return "顺延";
 }
 
@@ -833,7 +872,10 @@ export function renderReleasePlan(projectName: string, p: ReleasePreview, now: D
   out.push(`# 合并单草稿 · ${p.milestone.id}${p.milestone.title ? ` ${p.milestone.title}` : ""}`, "");
   out.push(`> **仅预演，未执行任何合并**（执行在 M4：\`heliu release run ${p.milestone.id}\`）。生成：heliu 看板 · ${localTime(now)} · 项目 ${projectName}。`);
   out.push("> 决定以上方 frontmatter 各条的 `decision` 为准（并入 / 顺延 / 待定）；下表是同一份内容的人读视图。", "");
-  out.push(`共 ${p.items.length} 项：已进集成 ${p.counts.in_integration} · 无冲突 ${p.counts.clean} · 有冲突 ${p.counts.conflict} · 未完成 ${p.counts.unfinished}`, "");
+  out.push(
+    `共 ${p.items.length} 项：已进集成 ${p.counts.in_integration} · 无冲突 ${p.counts.clean} · 有冲突 ${p.counts.conflict} · 未能试合 ${p.counts.precheck_failed} · 未完成 ${p.counts.unfinished}`,
+    "",
+  );
   out.push("## 预演时的引用位置（M4 执行前校验，变了就停）", "", "| 仓库 | 主线 | 主线提交 | 集成分支 | 集成提交 |", "|---|---|---|---|---|");
   for (const r of p.repos) out.push(`| ${cell(r.repoLabel)} | ${cell(r.main)} | ${r.mainSha?.slice(0, 10) ?? "—"} | ${cell(r.integration ?? "（无）")} | ${r.integrationSha?.slice(0, 10) ?? "—"} |`);
   out.push("", "## 建议顺序", "", "| 顺序 | 决定 | 功能 | 仓库 · 分支 | 三档状态 | 试合冲突 | 建议动作 |", "|---|---|---|---|---|---|---|");
@@ -841,7 +883,7 @@ export function renderReleasePlan(projectName: string, p: ReleasePreview, now: D
   for (const x of p.items) {
     const where = x.bindings.map((b) => `${b.repoLabel} · ${b.branch}`).join("<br>") || "（无绑定）";
     const st = x.bindings.map((b) => stateText(b.mergedState)).join("<br>") || "—";
-    const cf = x.bindings.map((b) => (b.conflictFiles === null ? (b.precheckError ? "未完成" : "—") : String(b.conflictFiles))).join("<br>") || "—";
+    const cf = x.bindings.map((b) => (b.precheckState === "failed" ? "未能试合" : b.conflictFiles === null ? "—" : String(b.conflictFiles))).join("<br>") || "—";
     out.push(`| ${x.order} | ${defaultDecision(x)} | ${cell(`${x.id} ${x.title}`)} | ${cell(where)} | ${st} | ${cf} | ${x.actionText} |`);
   }
   const withConflicts = p.items.filter((x) => x.bindings.some((b) => b.conflicts.length));
@@ -852,6 +894,11 @@ export function renderReleasePlan(projectName: string, p: ReleasePreview, now: D
       for (const b of x.bindings) if (b.conflicts.length) out.push(`- ${b.repoLabel} · ${b.branch} → ${b.precheckTarget ?? "?"}：${b.conflicts.map((c) => `\`${c}\``).join("、")}`);
       out.push("");
     }
+  }
+  const failed = p.items.filter((x) => x.tier === "precheck_failed");
+  if (failed.length) {
+    out.push("", `## 未能试合（${failed.length}，不自动顺延：请重新试合或人工确认）`, "");
+    for (const x of failed) out.push(`- ${x.id} ${x.title}：${x.reason}`);
   }
   const deferred = p.items.filter((x) => x.tier === "unfinished");
   out.push("", `## 预计顺延（${deferred.length}）`, "");

@@ -73,12 +73,15 @@ export function ReleasePage({ tick }: { tick: number }) {
             <span class={`chip${d.counts.conflict ? " red" : ""}`}>
               有冲突 <b>{d.counts.conflict}</b>
             </span>
+            <span class={`chip${d.counts.precheck_failed ? " yellow" : ""}`} title="试合没得到结果：不算无冲突，也不自动顺延">
+              未能试合 <b>{d.counts.precheck_failed}</b>
+            </span>
             <span class="chip">
               未完成 <b>{d.counts.unfinished}</b>（预计顺延）
             </span>
           </div>
           <p class="muted small">
-            顺序规则：已进集成（已在集成分支，执行时跳过）→ 试合无冲突（合入）→ 有冲突（冲突少的在前，需解冲突）→ 未完成（等你回答 / 开发中 / 尚未关联开发分支，建议顺延）。
+            顺序规则：已进集成（已在集成分支，执行时跳过）→ 试合无冲突（合入）→ 有冲突（冲突少的在前，需解冲突）→ 未能试合（没得到试合结果，请重新试合或人工确认，不自动顺延）→ 未完成（等你回答 / 尚无提交 / 尚未关联开发分支，建议顺延）。
           </p>
           <table class="rel">
             <thead>
@@ -119,7 +122,8 @@ export function ReleasePage({ tick }: { tick: number }) {
                   <td data-k="试合冲突">
                     {x.bindings.map((b) => {
                       const k = `${x.id}|${b.repo}|${b.branch}`;
-                      if (b.conflictFiles === null) return <div class="small muted">{b.precheckError ? `未完成（${b.precheckError}）` : "—"}</div>;
+                      if (b.precheckState === "failed") return <div class="small warn">未能试合（{b.precheckError ?? "原因未知"}）</div>;
+                      if (b.conflictFiles === null) return <div class="small muted">—</div>;
                       if (b.conflictFiles === 0) return <div class="small ok">0</div>;
                       return (
                         <div class="small">
@@ -180,7 +184,7 @@ export function ReleasePage({ tick }: { tick: number }) {
           <h2>合并单草稿</h2>
           <div class="panel">
             <p>
-              把上面的预演写成 <span class="mono">releases/{d.milestone.id}.md</span>（机器可读的 frontmatter + 人读表格，默认决定：已进集成/无冲突且台账「待合并」= 并入，其余无冲突与有冲突 = 待定，未完成 = 顺延）。
+              把上面的预演写成 <span class="mono">releases/{d.milestone.id}.md</span>（机器可读的 frontmatter + 人读表格，默认决定：已进集成/无冲突且台账「待合并」= 并入，其余无冲突、有冲突、未能试合 = 待定，未完成 = 顺延）。
               <b>不会执行任何合并。</b>
             </p>
             <button class="btn primary" onClick={makePlan} disabled={plan.busy || !d.items.length}>
