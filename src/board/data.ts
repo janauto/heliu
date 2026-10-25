@@ -714,7 +714,10 @@ export function cardFacts(
       if (suggestStatus) {
         variant = "merged-pending";
         nextStep = `已合入 · 待确认台账：分支${item.note === "已进主线" ? "已进主线" : "已被集成分支包含"}，卡片状态还是「${item.status}」`;
-      } else nextStep = item.note === "试合无冲突" ? `可合并：试合到 ${target} 无冲突，合并时可直接合入` : `可合并：${item.note ?? "已进集成分支"}`;
+      } else if (item.note === "试合无冲突") {
+        // 试合无冲突只说明能合，不等于已验收；落后基线时把「建议先同步」写进下一步
+        nextStep = `可合并：试合到 ${target} 无冲突（试合无冲突 ≠ 已验收）${behind > 0 ? `；落后 ↓${behind}，建议先同步基线` : ""}`;
+      } else nextStep = `可合并：${item.note ?? "已进集成分支"}`;
       break;
     case "behind":
     case "stale":

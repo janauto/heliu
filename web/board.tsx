@@ -8,6 +8,7 @@ import { useState } from "preact/hooks";
 import type { BaselineData, BoardCard, BoardColumn, CardBinding, FeaturesData, SyncView } from "../src/board/api-types.ts";
 import type { LedgerMilestone } from "../src/types.ts";
 import { ago, api, copyText, mdhm, MERGED_TEXT, SESSION_STATUS_TEXT, useApi } from "./lib.ts";
+import { claudePrompt, type PromptMode } from "./prompt.ts";
 
 const UNRESERVED = "__unreserved";
 
@@ -80,6 +81,7 @@ export function BoardPage({ tick, precheck, onChanged }: { tick: number; prechec
           </span>
         ))}
         <span>↑ 自己的提交 · ↓ 落后基线的提交</span>
+        <span>绿灯 = 试合无冲突 ≠ 已验收；若落后基线，合并前请评估是否先同步</span>
         <span>拖卡片到另一列 = 改预约</span>
         {data.abandoned ? <span>另有 {data.abandoned} 张已放弃（不显示）</span> : null}
       </div>
@@ -313,7 +315,7 @@ function CardDetails(p: ColumnProps & { card: BoardCard }) {
       </div>
       {card.bindings.length === 0 ? <div class="muted small">还没关联开发分支</div> : null}
       {card.bindings.map((b) => (
-        <BindingRow b={b} flash={p.flash} />
+        <BindingRow b={b} flash={p.flash} prompt={promptMode(card)} />
       ))}
       {card.suggestion ? <div class="sugg">M2 建议：{card.suggestion}</div> : null}
       <div class="row">
@@ -372,7 +374,14 @@ function branchShown(b: CardBinding): string {
   return b.randomName && b.label ? b.label : b.branch;
 }
 
-function BindingRow({ b, flash }: { b: CardBinding; flash: (t: string) => void }) {
+/** 哪些卡给「复制给 Claude 会话」：需解冲突 → 合并进来；需同步基线（含可合并但落后的）→ 同步基线 */
+function promptMode(card: BoardCard): PromptMode | null {
+  if (card.group === "conflict") return "conflict";
+  if (card.group === "behind" || (card.group === "mergeable" && card.tags.some((t) => t.kind === "behind"))) return "sync";
+  return null;
+}
+
+function BindingRow({ b, flash, prompt }: { b: CardBinding; flash: (t: string) => void; prompt?: PromptMode | null }) {
   const copyBranch = () => void copyText(b.branch).then((ok) => ok && flash(`已复制分支名 ${b.branch}`));
   if (!b.exists) {
     return (
@@ -425,6 +434,15 @@ function BindingRow({ b, flash }: { b: CardBinding; flash: (t: string) => void }
         <button class="btn small" onClick={copyBranch}>
           复制分支名
         </button>
+        {prompt && b.mergedState === "unmerged" ? (
+          <button
+            class="btn small"
+            title="只复制一段中文指令，粘贴到该分支的 Claude 会话里；看板不执行任何 git 操作"
+            onClick={() => void copyText(claudePrompt(prompt, b)).then((ok) => ok && flash("已复制：粘贴到该分支的 Claude 会话里"))}
+          >
+            复制给 Claude 会话
+          </button>
+        ) : null}
         {b.session?.link ? (
           <a class="btn small" href={b.session.link}>
             打开会话

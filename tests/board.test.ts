@@ -14,6 +14,7 @@ import { ensureWebBuild } from "../src/board/build.ts";
 import { releaseItem } from "../src/board/data.ts";
 import { createBoardApp, debugLogger } from "../src/board/server.ts";
 import { summarizePrecheck } from "../src/core/todo.ts";
+import { claudePrompt } from "../web/prompt.ts";
 import { Ledger } from "../src/core/ledger.ts";
 import { heliuPaths } from "../src/core/paths.ts";
 import { addRepoToProject, loadProject, projectFile, stringifyProject } from "../src/core/project.ts";
@@ -128,7 +129,7 @@ describe("只读接口", () => {
     expect(f1.nextStep).toContain("已合入 · 待确认台账");
     const f2 = card(d, "F-0002");
     expect(f2.variant).toBe("normal");
-    expect(f2.nextStep).toBe("可合并：试合到 integ 无冲突，合并时可直接合入");
+    expect(f2.nextStep).toMatch(/^可合并：试合到 integ 无冲突（试合无冲突 ≠ 已验收）；落后 ↓\d+，建议先同步基线$/);
     const f3 = card(d, "F-0003");
     expect(f3.light).toBe("red");
     expect(f3.lightText).toBe("有冲突 · 1 个文件");
@@ -136,6 +137,12 @@ describe("只读接口", () => {
     // 主分组已由灯色表达，次要标签只列另外成立的事实
     expect(f3.tags.map((t) => t.kind)).not.toContain("conflict");
     expect(f3.bindings[0]!.conflicts).toEqual(["README.md"]);
+    // 「复制给 Claude 会话」：只生成文本
+    expect(claudePrompt("conflict", f3.bindings[0]!)).toBe(
+      `请在分支 ${B.conflict} 的 worktree（目录未知，请先打开该分支的会话）里，把 integ 合并进来并解决冲突文件：README.md；两边功能都保留，解完 git add，不要 push。`,
+    );
+    const p5 = claudePrompt("sync", card(d, "F-0005").bindings[0]!);
+    expect(p5).toContain(`的 worktree（${fx.wt.reused}）里，把 integ 同步基线并解决冲突文件：（试合没有冲突文件）`);
     const f5 = card(d, "F-0005");
     expect(f5.light).toBe("green");
     expect(f5.tags.find((t) => t.kind === "behind")?.text).toMatch(/^落后 ↓\d+$/);
