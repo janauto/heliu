@@ -13,7 +13,7 @@
  * - 只在 -p 非交互模式运行：允许列表外的工具（含 git commit / push）一律被拒，不会弹确认。
  */
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { wrapInSandbox, type WritePolicy } from "./git.ts";
 
@@ -213,4 +213,74 @@ export async function runResolver(i: ResolverInput): Promise<ResolverRun> {
     sandboxed,
     durationMs,
   };
+}
+
+/* ───────────── heliu doctor：无头 claude 可用性探测 ───────────── */
+
+export interface ResolverProbe {
+  available: boolean;
+  binary: string;
+  /** 一句话结论（中文） */
+  message: string;
+  authFailed: boolean;
+  durationMs: number;
+}
+
+/**
+ * 探测无头 claude 能否用于解冲突：`<claude> -p "ok" --max-budget-usd 0.01 --output-format json`，超时 20s。
+ * （--max-budget-usd 0 会被 CLI 当作非法参数拒绝，实测；未登录时不发生 API 调用、花费 $0；已登录时是一次极短调用。）
+ * 判定：输出未登录 / OAuth 过期 → 不可用（请在终端执行 claude login）；正常结果或「预算用完」→ 可用（认证已通过）。
+ */
+export async function probeResolver(opts: { timeoutMs?: number } = {}): Promise<ResolverProbe> {
+  const bin = resolverBinary();
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !stripped(k)) env[k] = v;
+  const timeoutMs = opts.timeoutMs ?? 20_000;
+  const started = performance.now();
+  const done = (available: boolean, message: string, authFailed = false): ResolverProbe => ({
+    available,
+    binary: bin.label,
+    message,
+    authFailed,
+    durationMs: Math.round(performance.now() - started),
+  });
+  let proc: ReturnType<typeof Bun.spawn>;
+  try {
+    proc = Bun.spawn({
+      cmd: ["/usr/bin/env", "-u", "CLAUDECODE", ...bin.cmd, "-p", "ok", "--max-budget-usd", "0.01", "--output-format", "json"],
+      cwd: tmpdir(),
+      env,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+  } catch (e) {
+    return done(false, `无法启动 ${bin.label}：${String(e)}`);
+  }
+  const out = (async () => {
+    const [stdout, stderr] = await Promise.all([new Response(proc.stdout as ReadableStream).text(), new Response(proc.stderr as ReadableStream).text()]);
+    return { stdout, stderr, code: await proc.exited };
+  })();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const r = await Promise.race([out, new Promise<"timeout">((res) => (timer = setTimeout(() => res("timeout"), timeoutMs)))]);
+  if (timer) clearTimeout(timer);
+  if (r === "timeout") {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      /* 已退出 */
+    }
+    out.catch(() => undefined);
+    return done(false, `${Math.round(timeoutMs / 1000)}s 内没有响应`);
+  }
+  const text = `${r.stdout}\n${r.stderr}`;
+  if (AUTH_FAILURE.test(text)) {
+    const why = (/(Not logged in[^"\n]*|Failed to authenticate[^"\n]*|OAuth session expired[^"\n]*|Invalid API key[^"\n]*)/i.exec(text)?.[1] ?? "未登录").trim();
+    return done(false, `未登录（${why}）：请在终端执行 claude login（或设 HELIU_CLAUDE_BIN 指向已登录的 claude）`, true);
+  }
+  const parsed = parseResolverOutput(r.stdout);
+  if (parsed && !parsed.isError) return done(true, `可用（${parsed.cost > 0 ? `探测花费 $${parsed.cost.toFixed(4)}` : "探测未产生花费"}）`);
+  if (/budget/i.test(text)) return done(true, "可用（认证已通过，探测在预算上限处停止）");
+  if (!parsed) return done(false, `没有输出可解析的结果（退出码 ${r.code}）：${r.stderr.trim().split("\n").slice(-1)[0]?.slice(0, 160) ?? ""}`);
+  return done(false, `返回错误：${parsed.summary.slice(0, 160) || `退出码 ${r.code}`}`);
 }

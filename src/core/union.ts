@@ -1,5 +1,5 @@
 /**
- * union 文件（索引类 Markdown：README、进度表）的冲突处理：「两边都保留、新日期在前」（用户 10-22 集成方案的做法）。
+ * union 文件（索引类 Markdown：README、进度表）的冲突处理：「两边内容都保留、新日期在前」（用户 10-22 集成方案的做法）。
  *
  * - 关闭排序（project.yaml union_sort_by_date: false）：直接用 `git merge-file -p --union`。
  * - 开启排序（默认）：用 `git merge-file -p` 拿到带标记的结果（标记长度 32、自定义标签，避免与正文里的 <<<<<<< 混淆），

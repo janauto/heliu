@@ -7,16 +7,16 @@
  *   fb 未完成（绑定会话 blocked）· fi 已进集成分支。
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertWriteAllowed, GitForbiddenError, runGitWrite } from "../src/core/git.ts";
 import { Ledger } from "../src/core/ledger.ts";
 import { heliuPaths } from "../src/core/paths.ts";
 import { loadProject } from "../src/core/project.ts";
 import { previewRelease, setPlanDecision } from "../src/core/release.ts";
-import { loadPlan, parsePlan, serializePlan } from "../src/core/release-plan.ts";
-import { rollbackRelease, runRelease } from "../src/core/release-run.ts";
-import { buildResolverPrompt, parseResolverOutput, resolverArgs, resolverBinary, runResolver } from "../src/core/resolver.ts";
+import { loadPlan, parsePlan, planCountsLine, serializePlan } from "../src/core/release-plan.ts";
+import { isYes, rollbackRelease, runRelease } from "../src/core/release-run.ts";
+import { buildResolverPrompt, parseResolverOutput, probeResolver, resolverArgs, resolverBinary, runResolver } from "../src/core/resolver.ts";
 import { combineHunk, entryDate, unionFromMarkers } from "../src/core/union.ts";
 import { gitW } from "./helpers/fixture.ts";
 import { buildReleaseFixture, type RFx } from "./helpers/release-fixture.ts";
@@ -195,6 +195,8 @@ describe("合并单：预演 → 改决定 → 刷新", () => {
     expect(r.plan.items.find((i) => i.branch === "feat/fb")!.detail).toContain("会话等你回答");
     expect(r.plan.base_sha).toBe(fx.sha.integ!);
     expect(r.plan.integration_branch).toBe("integ");
+    expect(planCountsLine(r.plan)).toBe("新增待合 3 · 已在集成 1 · 有冲突 2 · 未能试合 0 · 未检查 0 · 顺延 1");
+    expect(r.plan.items.filter((i) => i.precheck_state === "checked").length).toBe(6);
     const text = readFileSync(r.file, "utf8");
     expect(text).toContain("| # | 决定 | 功能 |");
     expect(text).toContain("[x] 并入");
@@ -229,11 +231,35 @@ describe("执行与回滚", () => {
     const r = await runRelease(project(), "v1.2", { dryRun: true });
     expect(r.aborted).toEqual([]);
     expect(r.dryRunLines.join("\n")).toContain("纯对象库合并");
-    expect(r.dryRunLines.join("\n")).toContain("union README.md");
+    expect(r.dryRunLines.join("\n")).toContain("union（两边内容都保留、新日期在前）README.md");
+    const sum = r.summaryLines.join("\n");
+    expect(sum).toContain("新增合入 5 项");
+    expect(sum).toContain("已在集成分支 1 项");
+    expect(sum).toContain("顺延到 v1.3 · 等你回答（1）");
     expect(r.dryRunLines.join("\n")).toContain("解冲突器 src.txt");
     expect(refsOf(fx.repo)).toBe(before);
     expect(existsSync(join(fx.ledger, "releases", "v1.2.log"))).toBe(false);
     expect(loadPlan(fx.ledger, "v1.2")!.status).toBe("草稿");
+  }, 60_000);
+
+  test("确认默认取消：只有输入 yes 才执行；回车/其他输入 = 取消，什么都不写", async () => {
+    expect(isYes("")).toBe(false);
+    expect(isYes("\n")).toBe(false);
+    expect(isYes("y")).toBe(false);
+    expect(isYes("是")).toBe(false);
+    expect(isYes(" YES ")).toBe(true);
+    expect(isYes("yes")).toBe(true);
+    const before = refsOf(fx.repo);
+    const asked: string[] = [];
+    const logs: string[] = [];
+    const r = await runRelease(project(), "v1.2", { confirm: async (q) => (asked.push(q), isYes("")), log: (l) => logs.push(l) });
+    expect(r.cancelled).toBe(true);
+    expect(asked[0]).toContain("输入 yes 执行，直接回车 = 取消");
+    expect(logs.join("\n")).toContain("执行前摘要");
+    expect(refsOf(fx.repo)).toBe(before);
+    expect(existsSync(join(fx.ledger, "releases", "v1.2.log"))).toBe(false);
+    expect(loadPlan(fx.ledger, "v1.2")!.status).toBe("草稿");
+    expect(new Ledger(fx.ledger).findMilestone("v1.2")!.status).toBe("冻结");
   }, 60_000);
 
   test("集成分支在预演后动过（base_sha 不匹配）→ 整体中止，什么都不写", async () => {
@@ -370,6 +396,122 @@ describe("checks 失败与「等它」", () => {
       useEnv({ HELIU_CACHE_DIR: fx.cache, HELIU_RESOLVER_STUB: fx.env.HELIU_RESOLVER_STUB! });
     }
   }, 120_000);
+});
+
+describe("未能试合（沙箱不可用）、run 跳过待定、看板草稿、doctor 自检", () => {
+  let fx3: RFx;
+  beforeAll(() => {
+    fx3 = buildReleaseFixture();
+  });
+  afterAll(() => rmSync(fx3.root, { recursive: true, force: true }));
+  const p3 = () => loadProject(heliuPaths({ ...process.env, ...fx3.env }), "演示");
+  const cli = (args: string[], extra: Record<string, string> = {}) =>
+    Bun.spawnSync({ cmd: [process.execPath, "run", BIN, ...args, "--project", "演示"], env: { ...process.env, ...fx3.env, ...extra }, stdout: "pipe", stderr: "pipe" });
+
+  test("看板草稿（schema 1）不能直接执行；预演先备份再生成可执行合并单，列出决定差异", async () => {
+    const dir = join(fx3.ledger, "releases");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "v1.2.md"),
+      `---\nheliu: release-plan\nschema: 1\nproject: 演示\nmilestone: v1.2\nstatus: 草稿\nitems:\n  - order: 1\n    feature: ${fx3.ids.f1}\n    title: 功能一\n    tier: clean\n    action: merge\n    decision: 待定\n    bindings:\n      - repo: docs\n        branch: feat/f1\n---\n\n# 合并单草稿\n`,
+    );
+    useEnv({ HELIU_CACHE_DIR: fx3.cache, HELIU_RESOLVER_STUB: fx3.env.HELIU_RESOLVER_STUB! });
+    try {
+      expect(loadPlan(fx3.ledger, "v1.2")!.format).toBe("board");
+      await expect(runRelease(p3(), "v1.2", { yes: true })).rejects.toThrow("看板生成的合并单草稿");
+      expect(() => setPlanDecision(p3(), "v1.2", fx3.ids.f1!, "并入")).toThrow("看板生成的合并单草稿");
+      const r = await previewRelease(p3(), heliuPaths({ ...process.env, ...fx3.env }), "v1.2");
+      expect(r.boardDraft).not.toBeNull();
+      expect(existsSync(r.boardDraft!.backup)).toBe(true);
+      expect(r.boardDraft!.differing).toEqual([{ feature: fx3.ids.f1!, board: "待定", now: "并入" }]);
+      expect(loadPlan(fx3.ledger, "v1.2")!.format).toBe("m4");
+      expect(readFileSync(r.file, "utf8")).toContain("schema: 2");
+    } finally {
+      useEnv({ HELIU_CACHE_DIR: fx.cache, HELIU_RESOLVER_STUB: fx.env.HELIU_RESOLVER_STUB! });
+    }
+  }, 60_000);
+
+  test("sandbox-exec 不可用时：待合项是「未能试合 · 待定」，绝不算有冲突", () => {
+    const r = cli(["合并", "v1.2", "--预演", "--json"], { HELIU_NO_SANDBOX: "1" });
+    expect(r.exitCode).toBe(0);
+    const plan = JSON.parse(r.stdout.toString()).data.plan as { items: Array<{ branch: string; state: string; decision: string; detail: string; precheck_state: string | null }> };
+    const by = (b: string) => plan.items.find((i) => i.branch === b)!;
+    for (const b of ["feat/f1", "feat/f2", "feat/f3", "feat/fu", "feat/fc"]) {
+      expect(by(b).state).toBe("未能试合");
+      expect(by(b).decision).toBe("待定");
+      expect(by(b).precheck_state).toBe("failed");
+    }
+    expect(by("feat/fu").detail).toContain("不等于有冲突");
+    expect(by("feat/fi").state).toBe("已进集成");
+    expect(by("feat/fb").state).toBe("未完成");
+    const text = cli(["合并", "v1.2", "--预演"], { HELIU_NO_SANDBOX: "1" }).stdout.toString();
+    expect(text).toContain("新增待合 0 · 已在集成 1 · 有冲突 0 · 未能试合 5 · 未检查 0 · 顺延 1");
+    expect(text).toContain("未能试合 → 重新试合或人工确认");
+    const md = readFileSync(join(fx3.ledger, "releases", "v1.2.md"), "utf8");
+    expect(md).toContain("tier: precheck_failed");
+    expect(md).toContain("action: 重新试合或人工确认");
+  }, 60_000);
+
+  test("run：「未能试合」且仍待定的项跳过、不并入不顺延、留在本版；本版先不收尾", async () => {
+    useEnv({ HELIU_CACHE_DIR: fx3.cache, HELIU_RESOLVER_STUB: fx3.env.HELIU_RESOLVER_STUB! });
+    try {
+      setPlanDecision(p3(), "v1.2", fx3.ids.f2!, "并入"); // 人工确认后改为并入的一项照常合入
+      const r = await runRelease(p3(), "v1.2", { yes: true });
+      expect(r.aborted).toEqual([]);
+      expect(r.merged.map((i) => i.branch)).toEqual(["feat/f2"]);
+      expect(r.pending.map((i) => i.branch).sort()).toEqual(["feat/f1", "feat/f3", "feat/fc", "feat/fu"]);
+      expect(r.pending.every((i) => i.result === "跳过·待定")).toBe(true);
+      expect(r.finalized).toBe(false);
+      expect(r.rolled).toEqual([]);
+      const integ = gitW(fx3.repo, "rev-parse", "integ");
+      expect(isAncestor(fx3.repo, fx3.sha["feat/f2"]!, integ)).toBe(true);
+      for (const b of ["feat/f1", "feat/f3", "feat/fu", "feat/fc"]) expect(isAncestor(fx3.repo, fx3.sha[b]!, integ)).toBe(false);
+      expect(Bun.spawnSync({ cmd: ["git", "-C", fx3.repo, "rev-parse", "--verify", "-q", "refs/tags/v1.2"] }).exitCode).not.toBe(0);
+      const l = new Ledger(fx3.ledger);
+      for (const k of ["f1", "f3", "fu", "fc", "fb"]) {
+        expect(l.getFeature(fx3.ids[k]!).milestone).toBe("v1.2");
+        expect(l.getFeature(fx3.ids[k]!).rolled_from).toEqual([]);
+      }
+      expect(loadPlan(fx3.ledger, "v1.2")!.status).toBe("待续");
+      const { renderRunReport } = await import("../src/cli/render-release.ts");
+      expect(renderRunReport(r, p3())).toContain("跳过的待定项 4 个（不并入、不顺延，留在本版");
+    } finally {
+      useEnv({ HELIU_CACHE_DIR: fx.cache, HELIU_RESOLVER_STUB: fx.env.HELIU_RESOLVER_STUB! });
+    }
+  }, 120_000);
+
+  test("doctor：沙箱、无头 claude（桩探测）、各仓库集成分支", () => {
+    const d = cli(["doctor", "--json"]);
+    expect(d.exitCode).toBe(0);
+    const checks = JSON.parse(d.stdout.toString()).data.checks as Array<{ id: string; level: string; message: string }>;
+    const c = (id: string) => checks.find((x) => x.id === id)!;
+    expect(c("sandbox").level).toBe("ok");
+    expect(c("headless-claude").level).toBe("ok");
+    expect(c("repo:演示/docs:integration").message).toContain("集成分支 integ");
+    const nd = cli(["doctor", "--json"], { HELIU_NO_SANDBOX: "1", HELIU_DOCTOR_SKIP_CLAUDE: "1" });
+    const c2 = JSON.parse(nd.stdout.toString()).data.checks as Array<{ id: string; level: string; message: string }>;
+    expect(c2.find((x) => x.id === "sandbox")!.level).toBe("warn");
+    expect(c2.find((x) => x.id === "sandbox")!.message).toContain("未能试合");
+    expect(c2.find((x) => x.id === "headless-claude")!.message).toContain("未检查");
+  }, 60_000);
+
+  test("无头 claude 探测：未登录 → 不可用并提示 claude login；正常 → 可用", async () => {
+    const bad = join(fx3.root, "probe-bad.sh");
+    writeFileSync(bad, `#!/bin/sh\nprintf '%s\\n' '{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login","total_cost_usd":0}'\nexit 1\n`);
+    const old = process.env.HELIU_RESOLVER_STUB;
+    try {
+      process.env.HELIU_RESOLVER_STUB = bad;
+      const a = await probeResolver();
+      expect(a.available).toBe(false);
+      expect(a.authFailed).toBe(true);
+      expect(a.message).toContain("claude login");
+      process.env.HELIU_RESOLVER_STUB = fx3.env.HELIU_RESOLVER_STUB!;
+      const b = await probeResolver();
+      expect(b.available).toBe(true);
+    } finally {
+      process.env.HELIU_RESOLVER_STUB = old;
+    }
+  });
 });
 
 describe("CLI 别名", () => {

@@ -24,6 +24,7 @@ import {
   appendExecLog,
   auditFile,
   loadPlan,
+  planCountsLine,
   resultText,
   savePlan,
   setReleaseNotes,
@@ -33,11 +34,20 @@ import {
   type ReleasePlan,
   type ResolverRecord,
 } from "./release-plan.ts";
-import { isUnionFile, ReleaseError, resolveReleaseMilestone, stamp } from "./release.ts";
+import { boardDraftMessage, isUnionFile, ReleaseError, resolveReleaseMilestone, stamp } from "./release.ts";
 import { runResolver } from "./resolver.ts";
 import { hasConflictMarkers, LABEL_BASE, LABEL_OURS, LABEL_THEIRS, UNION_MARKER_SIZE, unionFromMarkers } from "./union.ts";
 
-export type AskFn = (question: string, choices: Array<{ key: string; label: string }>, def: string) => Promise<string>;
+/**
+ * 确认：只有用户输入 yes 才返回 true；直接回车（或任何其他输入）= 取消（Codex 第 1 轮）。
+ * CLI 用 isYes 判定终端输入；测试可注入。
+ */
+export type ConfirmFn = (question: string) => Promise<boolean>;
+
+/** 终端输入是否算「确认」：去掉首尾空白后不区分大小写等于 yes；空输入 = 取消 */
+export function isYes(input: string | null | undefined): boolean {
+  return (input ?? "").trim().toLowerCase() === "yes";
+}
 
 export interface RehearsalOptions {
   /** 真实仓库（根目录与 common dir）：演练期间沙箱里一律禁止写入 */
@@ -52,7 +62,7 @@ export interface RunOptions {
   toMain?: boolean;
   /** 集成分支/主线在某个 worktree 里检出时仍继续（那个目录会显示为有改动，需你自己同步） */
   allowCheckedOut?: boolean;
-  ask?: AskFn;
+  confirm?: ConfirmFn;
   log?: (line: string) => void;
   now?: () => Date;
   /** 解冲突器本次运行的总预算（美元），默认 HELIU_RESOLVER_TOTAL_BUDGET 或 10 */
@@ -72,6 +82,10 @@ export interface RunReport {
   alreadyIn: PlanItem[];
   failed: PlanItem[];
   waiting: PlanItem[];
+  /** 决定仍是「待定」而跳过的项（多为「未能试合」）：不并入、不顺延、留在本版 */
+  pending: PlanItem[];
+  /** 用户在确认处取消（什么都没写） */
+  cancelled: boolean;
   unrehearsed: PlanItem[];
   rolled: Array<{ feature: string; title: string; to: string; reason: string }>;
   dropped: Array<{ feature: string; title: string }>;
@@ -82,6 +96,8 @@ export interface RunReport {
   unpushed: string[];
   costUsd: number;
   elapsedMs: number;
+  /** 执行前摘要（--dry-run 与交互确认共用）：新增合入 / 已在集成 / 不在本次合入（按原因分组） */
+  summaryLines: string[];
   /** --dry-run 时的逐项说明 */
   dryRunLines: string[];
   warnings: string[];
@@ -136,6 +152,7 @@ export async function runRelease(project: ProjectConfig, ref: string, opts: RunO
   const loaded = loadPlan(ledger.dir, m.id);
   if (!loaded) throw new ReleaseError(`还没有 ${m.id} 的合并单：先 heliu 合并 ${m.id} --预演`);
   const plan: ReleasePlan = loaded;
+  if (plan.format === "board") throw new ReleaseError(boardDraftMessage(m.id, plan.file));
   if (plan.status === "已发布") throw new ReleaseError(`${m.id} 已发布（${plan.finalized_at ?? ""}）。要重来先 heliu 回滚 ${m.id}`);
   const cacheRoot = heliuCacheDir();
   const auditLog = auditFile(ledger.dir, m.id);
@@ -144,8 +161,8 @@ export async function runRelease(project: ProjectConfig, ref: string, opts: RunO
   const budget = opts.resolverBudgetUsd ?? Number(process.env.HELIU_RESOLVER_TOTAL_BUDGET || 10);
   const report: RunReport = {
     plan, milestone: m.id, dryRun: !!opts.dryRun, aborted: [], finalized: false, stopped: false,
-    merged: [], alreadyIn: [], failed: [], waiting: [], unrehearsed: [], rolled: [], dropped: [], tags: [], tagErrors: [],
-    mainMoved: [], mainSkipped: [], unpushed: [], costUsd: 0, elapsedMs: 0, dryRunLines: [], warnings: [],
+    merged: [], alreadyIn: [], failed: [], waiting: [], pending: [], cancelled: false, unrehearsed: [], rolled: [], dropped: [], tags: [], tagErrors: [],
+    mainMoved: [], mainSkipped: [], unpushed: [], costUsd: 0, elapsedMs: 0, summaryLines: [], dryRunLines: [], warnings: [],
   };
   const cfgById = new Map(project.repos.map((r) => [r.id, r]));
   const releaseStates = new Set(["已进集成", "无冲突", "有冲突", "未完成"]);
@@ -215,12 +232,22 @@ export async function runRelease(project: ProjectConfig, ref: string, opts: RunO
   }
 
   const labelOf = (id: string | null) => (id ? (cfgById.get(id)?.label ?? id) : "—");
+  report.summaryLines = preRunSummary(plan, ledger, m.id, cfgById);
   if (opts.dryRun) {
     report.dryRunLines = dryRunLines(plan, project, ledger, m.id, runs, cfgById, opts);
     report.elapsedMs = Math.round(performance.now() - t0);
     return report;
   }
-  if (!opts.yes && !opts.ask) throw new ReleaseError("执行需要逐条确认：请在终端里运行，或确认合并单后加 --yes");
+  if (!opts.yes && !opts.confirm) throw new ReleaseError("执行需要确认：请在终端里运行（看完摘要后输入 yes），或确认合并单后加 --yes");
+  if (!opts.yes && opts.confirm) {
+    for (const l of report.summaryLines) log(l);
+    const ok = await opts.confirm(`按上面的摘要执行 ${m.id}？输入 yes 执行，直接回车 = 取消`);
+    if (!ok) {
+      report.cancelled = true;
+      report.elapsedMs = Math.round(performance.now() - t0);
+      return report;
+    }
+  }
 
   // 开始执行：里程碑 → 合并中（「下一版」随之指向后一个规划中的版本）
   mkdirSync(dirname(auditLog), { recursive: true });
@@ -510,6 +537,11 @@ export async function runRelease(project: ProjectConfig, ref: string, opts: RunO
   try {
     for (let k = 0; k < plan.items.length; k++) {
       const it = plan.items[k] as PlanItem;
+      if (it.decision === "待定") {
+        it.result = "跳过·待定";
+        it.result_detail = it.state === "未能试合" ? "未能试合、决定仍是待定：跳过，留在本版（重新试合或人工确认后改决定）" : "决定仍是待定：跳过，留在本版";
+        continue;
+      }
       if (it.decision !== "并入") continue;
       if (it.repo && !cfgById.has(it.repo)) {
         it.result = "未演练";
@@ -535,36 +567,12 @@ export async function runRelease(project: ProjectConfig, ref: string, opts: RunO
         continue;
       }
       const head = `#${k + 1} ${it.feature}「${it.title}」· ${labelOf(it.repo)} ${it.branch}（${it.state}${it.precheck?.conflicts.length ? `：${it.precheck.conflicts.join("、")}` : ""}）`;
-      if (!opts.yes && opts.ask) {
-        const a = await opts.ask(`${head} → 并入？`, [
-          { key: "y", label: "并入" },
-          { key: "s", label: "本次不并（顺延）" },
-          { key: "w", label: "等它" },
-          { key: "q", label: "停止" },
-        ], "y");
-        if (a === "s") {
-          it.decision = "顺延";
-          continue;
-        }
-        if (a === "w") {
-          it.decision = "等它";
-          continue;
-        }
-        if (a === "q") {
-          report.stopped = true;
-          it.result = "未执行";
-          continue;
-        }
-      }
       log(head);
       await mergeOne(rr, it);
       savePlan(plan);
-      if (it.result === "失败·待处理" && it.checks?.some((c) => !c.ok) && !opts.yes && opts.ask) {
-        const a = await opts.ask("检查失败。跳过这一项继续（它会被顺延），还是停下来？", [
-          { key: "s", label: "跳过继续" },
-          { key: "q", label: "停止" },
-        ], "s");
-        if (a === "q") report.stopped = true;
+      if (it.result === "失败·待处理" && it.checks?.some((c) => !c.ok) && !opts.yes && opts.confirm) {
+        const go = await opts.confirm("检查失败，这一项没有合入（它会被顺延）。输入 yes 跳过它继续，直接回车 = 停止");
+        if (!go) report.stopped = true;
       }
     }
 
@@ -574,15 +582,13 @@ export async function runRelease(project: ProjectConfig, ref: string, opts: RunO
       else if (it.result === "失败·待处理") report.failed.push(it);
       else if (it.result === "未演练") report.unrehearsed.push(it);
       if (it.decision === "等它" || it.result === "未执行") report.waiting.push(it);
+      if (it.result === "跳过·待定") report.pending.push(it);
     }
 
-    let finalize = report.waiting.length === 0;
-    if (finalize && !opts.yes && opts.ask) {
-      const a = await opts.ask(`全部处理完：合入 ${report.merged.length}、失败 ${report.failed.length}。打 tag ${m.id} 并把里程碑标为已发布？`, [
-        { key: "y", label: "发布" },
-        { key: "n", label: "先不收尾" },
-      ], "y");
-      finalize = a === "y";
+    // 「等它」/ 未执行 / 待定 都会让本版先不收尾：不打 tag、不顺延、不改「已发布」
+    let finalize = report.waiting.length === 0 && report.pending.length === 0;
+    if (finalize && !opts.yes && opts.confirm) {
+      finalize = await opts.confirm(`全部处理完：合入 ${report.merged.length}、失败 ${report.failed.length}。打 tag ${m.id} 并把里程碑标为已发布？输入 yes 发布，直接回车 = 先不收尾`);
       if (!finalize) report.stopped = true;
     }
 
@@ -590,7 +596,10 @@ export async function runRelease(project: ProjectConfig, ref: string, opts: RunO
     else {
       plan.status = "待续";
       appendExecLog(plan, [
-        `本次合入 ${report.merged.length} 项、失败 ${report.failed.length} 项；${report.waiting.length ? `还有 ${report.waiting.length} 项等它/未执行` : "你选择先不收尾"}，本版未打 tag、未改「已发布」。`,
+        `本次合入 ${report.merged.length} 项、失败 ${report.failed.length} 项；${[
+          report.waiting.length ? `${report.waiting.length} 项等它/未执行` : "",
+          report.pending.length ? `${report.pending.length} 项待定已跳过（${report.pending.map((i) => i.feature).join("、")}）` : "",
+        ].filter(Boolean).join("，") || "你选择先不收尾"}，本版未打 tag、未改「已发布」。`,
         `等它们好了：heliu 合并 ${m.id} --预演 → heliu 合并 ${m.id}（已合入的会显示为已进集成）`,
       ]);
     }
@@ -724,7 +733,7 @@ export async function runRelease(project: ProjectConfig, ref: string, opts: RunO
     L.push(`- 冲突处理（${conflictItems.length}）：`);
     for (const i of conflictItems) {
       const bits: string[] = [];
-      if (i.union_resolved?.length) bits.push(`union ${i.union_resolved.join("、")}`);
+      if (i.union_resolved?.length) bits.push(`union（两边内容都保留、新日期在前）${i.union_resolved.join("、")}`);
       if (i.resolver) bits.push(`解冲突器 ${i.resolver.files.join("、")}（${i.resolver.rounds} 轮，$${i.resolver.cost_usd.toFixed(2)}${i.resolver.ok ? "" : "，未解完"}）${i.resolver.summary ? `：${i.resolver.summary.replace(/\s*\n\s*/g, " / ").slice(0, 300)}` : ""}`);
       L.push(`  - ${i.feature}：${bits.join("；")}${i.result !== "已合入" ? `（${resultText(i)}）` : ""}`);
     }
@@ -751,15 +760,16 @@ function dryRunLines(plan: ReleasePlan, project: ProjectConfig, ledger: Ledger, 
       else {
         const u = i.precheck?.union ?? [];
         const o = i.precheck?.other ?? [];
-        what = `临时 worktree 合并：${u.length ? `union ${u.join("、")}` : ""}${u.length && o.length ? "；" : ""}${o.length ? `解冲突器 ${o.join("、")}` : ""}${!u.length && !o.length ? "执行时重新计算冲突" : ""}`;
+        what = `临时 worktree 合并：${u.length ? `union（两边内容都保留、新日期在前）${u.join("、")}` : ""}${u.length && o.length ? "；" : ""}${o.length ? `解冲突器 ${o.join("、")}` : ""}${!u.length && !o.length ? "执行时重新计算冲突" : ""}`;
       }
     } else if (i.decision === "顺延") what = `不合，顺延到 ${next}${i.detail ? `（${i.detail}）` : ""}`;
     else if (i.decision === "等它") what = "不合；本版先不收尾（不打 tag）";
+    else if (i.decision === "待定") what = `跳过（待定${i.state === "未能试合" ? "：未能试合，重新试合或人工确认" : ""}），不并入、不顺延，留在本版`;
     else what = "不合，改为未预约";
     out.push(`${head}：${what}`);
   });
-  const waiting = plan.items.some((i) => i.decision === "等它");
-  if (waiting) out.push(`收尾：有「等它」的项，本次不打 tag、不改「已发布」`);
+  const waiting = plan.items.some((i) => i.decision === "等它" || i.decision === "待定");
+  if (waiting) out.push(`收尾：有「等它」或「待定」的项，本次不打 tag、不顺延、不改「已发布」（合并单记为待续）`);
   else {
     for (const rr of runs.values()) out.push(`收尾：${rr.cfg.label} tag -a ${ms}${opts.toMain ? `；主线 ${rr.cfg.main} 能快进则快进` : ""}`);
     out.push(`里程碑 ${ms} → 已发布；顺延的功能卡 → ${next}（rolled_from 记 ${ms}）`);
@@ -768,11 +778,54 @@ function dryRunLines(plan: ReleasePlan, project: ProjectConfig, ledger: Ledger, 
   return out;
 }
 
+/**
+ * 执行前摘要（交互确认与 --dry-run 共用）：
+ * 新增合入（逐条）/ 已在集成（跳过）/ 不在本次合入（按原因分组：等你回答 / 运行中 / 开发中 / 无法合并 / 你决定顺延 / 未能试合·待定 / 等它 / 不并）
+ */
+export function preRunSummary(plan: ReleasePlan, ledger: Ledger, ms: string, cfgById: Map<string, RepoConfig>): string[] {
+  const next = nextMilestoneName(ledger, ms);
+  const label = (i: PlanItem) => `${i.feature} ${i.title}${i.repo ? `（${cfgById.get(i.repo)?.label ?? i.repo} ${i.branch ?? ""}）` : ""}`;
+  const rehearsed = (i: PlanItem) => !i.repo || cfgById.has(i.repo);
+  const merges = plan.items.filter((i) => i.decision === "并入" && i.state !== "已进集成" && rehearsed(i));
+  const already = plan.items.filter((i) => i.state === "已进集成" && i.decision === "并入");
+  const out: string[] = [`执行前摘要 · ${ms}（${planCountsLine(plan)}）`];
+  out.push(`新增合入 ${merges.length} 项：`);
+  for (const i of merges) {
+    const how =
+      i.state === "无冲突" ? "无冲突"
+      : i.state === "有冲突" ? `有冲突：${[i.precheck?.union.length ? `union（两边内容都保留、新日期在前）${i.precheck.union.join("、")}` : "", i.precheck?.other.length ? `解冲突器 ${i.precheck.other.join("、")}` : ""].filter(Boolean).join("；") || "执行时重算"}`
+      : i.state === "未能试合" ? "未能试合，你改为并入（执行时重新试合）"
+      : i.state === "无法合并" ? `无法合并（${i.detail ?? ""}），将记失败并顺延`
+      : `未完成，你改为并入`;
+    out.push(`  + ${label(i)} · ${how}`);
+  }
+  out.push(`已在集成分支 ${already.length} 项（跳过）${already.length ? `：${already.map((i) => i.feature).join("、")}` : ""}`);
+  const groups: Array<[string, PlanItem[]]> = [];
+  const add = (k: string, i: PlanItem) => {
+    const g = groups.find((x) => x[0] === k);
+    if (g) g[1].push(i);
+    else groups.push([k, [i]]);
+  };
+  for (const i of plan.items) {
+    if (i.decision === "并入") continue;
+    if (i.decision === "顺延") {
+      const why = i.detail?.startsWith("会话等你回答") ? "等你回答" : i.detail === "会话正在运行" ? "会话运行中" : i.detail?.startsWith("功能卡状态") ? "开发中" : i.state === "无法合并" ? "无法合并" : i.state === "未能试合" ? "未能试合" : "你决定顺延";
+      add(`顺延到 ${next} · ${why}`, i);
+    } else if (i.decision === "待定") add(i.state === "未能试合" ? "未能试合 · 待定（跳过，不并入不顺延，留在本版）" : "待定（跳过，留在本版）", i);
+    else if (i.decision === "等它") add("等它（本版先不收尾）", i);
+    else add("不并（改为未预约）", i);
+  }
+  const notIn = groups.reduce((a, g) => a + g[1].length, 0);
+  out.push(`不在本次合入 ${notIn} 项（按原因）：`);
+  for (const [k, items] of groups) out.push(`  - ${k}（${items.length}）：${items.map((i) => i.feature).join("、")}`);
+  return out;
+}
+
 /* ───────────────────────── rollback ───────────────────────── */
 
 export interface RollbackOptions {
   yes?: boolean;
-  ask?: AskFn;
+  confirm?: ConfirmFn;
   log?: (line: string) => void;
   now?: () => Date;
   allowCheckedOut?: boolean;
@@ -798,6 +851,7 @@ export async function rollbackRelease(project: ProjectConfig, ref: string, opts:
   const m = resolveReleaseMilestone(ledger, ref);
   const plan = loadPlan(ledger.dir, m.id);
   if (!plan) throw new ReleaseError(`没有 ${m.id} 的合并单`);
+  if (plan.format === "board") throw new ReleaseError(`${plan.file} 是看板草稿，从未执行过，无需回滚`);
   const moves = plan.refs_moved.filter((x) => !x.rolled_back).reverse();
   const changes = plan.ledger_changes.filter((x) => !x.rolled_back).reverse();
   const rep: RollbackReport = { milestone: m.id, reverted: [], skipped: [], conflicts: [], ledgerRestored: [], ledgerSkipped: [], milestoneStatus: null, complete: false, nothing: false };
@@ -807,12 +861,9 @@ export async function rollbackRelease(project: ProjectConfig, ref: string, opts:
     return rep;
   }
   if (!opts.yes) {
-    if (!opts.ask) throw new ReleaseError("回滚需要确认：请在终端里运行，或加 --yes");
-    const a = await opts.ask(`将按合并单逆序撤回 ${moves.length} 个引用改动、恢复 ${changes.length} 张功能卡。继续？`, [
-      { key: "y", label: "回滚" },
-      { key: "n", label: "取消" },
-    ], "n");
-    if (a !== "y") throw new ReleaseError("已取消回滚");
+    if (!opts.confirm) throw new ReleaseError("回滚需要确认：请在终端里运行（输入 yes），或加 --yes");
+    const ok = await opts.confirm(`将按合并单逆序撤回 ${moves.length} 个引用改动、恢复 ${changes.length} 张功能卡。输入 yes 回滚，直接回车 = 取消`);
+    if (!ok) throw new ReleaseError("已取消回滚（没有改动任何东西）");
   }
   const cacheRoot = heliuCacheDir();
   const auditLog = auditFile(ledger.dir, m.id);

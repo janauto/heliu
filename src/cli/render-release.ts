@@ -3,7 +3,7 @@
  */
 import type { ProjectConfig } from "../core/project.ts";
 import type { PreviewResult, SetDecisionResult } from "../core/release.ts";
-import { conflictText, resultText, type PlanItem, type ReleasePlan } from "../core/release-plan.ts";
+import { ACTION_TEXT, conflictText, planCountsLine, resultText, type PlanItem, type ReleasePlan } from "../core/release-plan.ts";
 import type { RollbackReport, RunReport } from "../core/release-run.ts";
 import { sec, type RehearseResult } from "../core/rehearse.ts";
 
@@ -17,7 +17,7 @@ export function renderItemLine(i: PlanItem, k: number, labels: Map<string, strin
   const box = i.decision === "并入" ? "[x]" : "[ ]";
   const changed = i.decision !== i.default_decision ? "（你改的）" : "";
   const where = i.repo && i.branch ? ` · ${labels.get(i.repo) ?? i.repo} ${i.branch}` : "";
-  const state = i.state === "已进集成" ? "已进集成（跳过）" : i.state;
+  const state = i.state === "已进集成" ? "已进集成（跳过）" : `${i.state} → ${ACTION_TEXT[i.state]}`;
   const extra = [i.precheck?.conflicts.length ? conflictText(i) : null, i.detail, i.behind ? `落后集成 ${i.behind}` : null].filter(Boolean).join(" · ");
   const res = resultText(i);
   return `  #${String(k + 1).padEnd(3)} ${box} ${i.decision}${changed}  ${i.feature} ${i.title}${where} · ${state}${extra ? ` · ${extra}` : ""}${res ? `  ⇒ ${res}` : ""}`;
@@ -40,8 +40,7 @@ export function renderPlan(plan: ReleasePlan, project: ProjectConfig): string {
     L.push("", `${state}（${items.length}）`);
     for (const it of items) L.push(renderItemLine(it, k++, labels));
   }
-  const c = (d: string) => plan.items.filter((i) => i.decision === d).length;
-  L.push("", `合计 ${plan.items.length} 项：并入 ${c("并入")} · 顺延 ${c("顺延")} · 等它 ${c("等它")} · 不并 ${c("不并")}`);
+  L.push("", `合计 ${plan.items.length} 项：${planCountsLine(plan)}`);
   return L.join("\n");
 }
 
@@ -49,6 +48,11 @@ export function renderPreview(r: PreviewResult, project: ProjectConfig): string 
   const L = [renderPlan(r.plan, project), ""];
   L.push(`合并单：${r.file}`);
   if (r.kept) L.push(`保留了你改过的决定 ${r.kept} 项。`);
+  if (r.boardDraft) {
+    L.push(`原文件是看板生成的草稿，已备份到 ${r.boardDraft.backup}；它的决定没有导入${r.boardDraft.differing.length ? `，与本次默认不同的 ${r.boardDraft.differing.length} 项：${r.boardDraft.differing.map((d) => `${d.feature} 看板「${d.board}」/ 现在「${d.now}」`).join("；")}` : "（与本次默认一致）"}`);
+  }
+  const failed = r.plan.items.filter((i) => i.state === "未能试合");
+  if (failed.length) L.push(`未能试合 ${failed.length} 项（没有得到试合结果，不等于有冲突）：默认「待定」，执行时跳过、留在本版；建议重新试合（heliu doctor 看沙箱是否可用）或人工确认后 heliu release set ${r.milestone.id} <卡号> 并入|顺延。`);
   L.push(`下一步（建议）：核对决定（改：heliu release set ${r.milestone.id} <卡号|#序号> 并入|顺延|等它|不并）→ heliu 合并 ${r.milestone.id} --dry-run → heliu 合并 ${r.milestone.id}`);
   return L.join("\n");
 }
@@ -71,18 +75,29 @@ export function renderRunReport(r: RunReport, project: ProjectConfig): string {
     for (const w of r.warnings) L.push(`  ! ${w}`);
     return L.join("\n");
   }
+  if (r.cancelled) {
+    L.push(`合流 · ${project.name} · 合并 ${r.milestone}：已取消（没有输入 yes），没有写任何东西`);
+    return L.join("\n");
+  }
   if (r.dryRun) {
     L.push(`合流 · ${project.name} · 合并 ${r.milestone}（--dry-run，只演示不执行）`);
+    for (const l of r.summaryLines) L.push(`  ${l}`);
+    L.push("  逐项：");
     for (const l of r.dryRunLines) L.push(`  ${l}`);
     for (const w of r.warnings) L.push(`  ! ${w}`);
     return L.join("\n");
   }
   L.push(`合流 · ${project.name} · 合并 ${r.milestone}：${r.finalized ? "已发布" : "未收尾（待续）"} · 用时 ${(r.elapsedMs / 1000).toFixed(1)}s`);
-  L.push(`  合入 ${r.merged.length} · 已在集成 ${r.alreadyIn.length} · 失败·待处理 ${r.failed.length} · 顺延 ${r.rolled.length} · 等它/未执行 ${r.waiting.length}${r.unrehearsed.length ? ` · 未演练 ${r.unrehearsed.length}` : ""}`);
-  for (const i of r.merged) L.push(`  ✓ ${i.feature} ${i.title}（${labels.get(i.repo ?? "") ?? i.repo} ${i.branch}）→ ${short(i.new_sha)}${i.union_resolved?.length ? ` · union ${i.union_resolved.join("、")}` : ""}${i.resolver ? ` · 解冲突器 ${i.resolver.rounds} 轮 $${i.resolver.cost_usd.toFixed(2)}` : ""}`);
+  L.push(`  合入 ${r.merged.length} · 已在集成 ${r.alreadyIn.length} · 失败·待处理 ${r.failed.length} · 顺延 ${r.rolled.length} · 等它/未执行 ${r.waiting.length} · 待定跳过 ${r.pending.length}${r.unrehearsed.length ? ` · 未演练 ${r.unrehearsed.length}` : ""}`);
+  for (const i of r.merged) L.push(`  ✓ ${i.feature} ${i.title}（${labels.get(i.repo ?? "") ?? i.repo} ${i.branch}）→ ${short(i.new_sha)}${i.union_resolved?.length ? ` · union（两边内容都保留、新日期在前）${i.union_resolved.join("、")}` : ""}${i.resolver ? ` · 解冲突器 ${i.resolver.rounds} 轮 $${i.resolver.cost_usd.toFixed(2)}` : ""}`);
   for (const i of r.failed) L.push(`  ✗ ${i.feature} ${i.title}：${i.result_detail ?? ""}`);
   for (const x of r.rolled) L.push(`  → 顺延 ${x.feature} ${x.title} → ${x.to}（${x.reason}）`);
   for (const i of r.waiting) L.push(`  … ${i.feature} ${i.title}：${i.decision === "等它" ? "等它" : "未执行"}`);
+  if (r.pending.length) {
+    L.push(`  跳过的待定项 ${r.pending.length} 个（不并入、不顺延，留在本版；本版因此先不收尾）：`);
+    for (const i of r.pending) L.push(`    ? ${i.feature} ${i.title}${i.state === "未能试合" ? " · 未能试合 → 重新试合或人工确认" : ""}`);
+    L.push(`    处理后：heliu 合并 ${r.milestone} --预演（重新试合）或 heliu release set ${r.milestone} <卡号> 并入|顺延，再执行`);
+  }
   for (const t of r.tags) L.push(`  tag ${t.label} ${t.tag} → ${short(t.target)}`);
   for (const t of r.tagErrors) L.push(`  ✗ ${t}`);
   for (const mm of r.mainMoved) L.push(`  主线 ${mm.label}：${short(mm.from)} → ${short(mm.to)}（快进）`);
