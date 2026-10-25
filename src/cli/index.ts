@@ -8,11 +8,16 @@
  * 全局：--project <name>  --cwd <dir>  --json  --precheck  --dirty  --timeout <ms>  --wide
  */
 import { Command, Option } from "commander";
-import { writeSync } from "node:fs";
+import { existsSync, readFileSync, writeSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, join, resolve } from "node:path";
+import YAML from "yaml";
+import { Ledger } from "../core/ledger.ts";
+import { candidateLine, detectRepo, renderOnboard, repoIdOf, type OnboardPlan } from "../core/onboard.ts";
 import { runDoctor } from "../core/doctor.ts";
 import { DEFAULT_TIMEOUT_MS } from "../core/git.ts";
 import { heliuPaths } from "../core/paths.ts";
-import { addRepoToProject, listProjectNames, loadProject, ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
+import { addRepoToProject, expandPath, listProjectNames, loadProject, projectFile, ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
 import { reconcile } from "../core/reconcile.ts";
 import { TODO_GROUP_DEFS } from "../core/todo.ts";
 import { SCHEMA_VERSION, type JsonEnvelope, type MergedState, type ProjectRef, type ScanOptions } from "../types.ts";
@@ -192,23 +197,122 @@ program
   });
 
 const projectCmd = program.command("project").description("项目注册表");
+/** 交互时直接写 stdout（out() 要到命令结束才写出，提问前摘要必须先出来） */
+function say(text: string): void {
+  const buf = Buffer.from(text.endsWith("\n") ? text : `${text}\n`, "utf8");
+  let off = 0;
+  while (off < buf.length) off += writeSync(1, buf, off, buf.length - off);
+}
+const tildify = (p: string) => (p === homedir() || p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p);
+
+interface ProjectAddOpts {
+  name?: string;
+  id?: string;
+  label?: string;
+  main?: string;
+  integration?: string;
+  remote?: string;
+  ledger?: string;
+  yes?: boolean;
+}
+
 projectCmd
   .command("add <path>")
-  .description("把一个 git 仓库登记进项目（只写 heliu 注册表，不碰仓库）")
+  .description("接入一个 git 仓库（向导）：只读猜主线/集成分支/远端/iCloud → 中文摘要 → 确认后写注册表并建台账（不碰仓库）")
   .option("--name <name>", "项目名（默认取仓库目录名）")
   .option("--id <id>", "仓库 id")
   .option("--label <label>", "仓库显示名")
   .option("--main <branch>", "主线分支（默认自动探测）")
-  .option("--integration <branch>", "集成分支")
+  .option("--integration <branch>", "集成分支（默认从候选里猜；不想要就用向导里选 0）")
   .option("--remote <remote>", "远端名（默认 origin 或第一个远端）")
-  .action(async (path: string, o: { name?: string; id?: string; label?: string; main?: string; integration?: string; remote?: string }, cmd: Command) => {
+  .option("--ledger <位置>", "台账放哪：缺省 heliu 数据目录（不写进仓库）；repo = <仓库>/.heliu/；或一个目录")
+  .option("-y, --yes", "不询问：按猜测/参数直接写注册表并建台账")
+  .action(async (path: string, o: ProjectAddOpts, cmd: Command) => {
     const g = globals(cmd);
-    const res = await addRepoToProject(heliuPaths(), { path, ...o });
-    if (g.json) printJson(envelope("project.add", { name: res.project.name, source: res.file }, { created: res.created, repo: res.repo }));
-    else {
-      out(`${res.created ? "已创建" : "已更新"}项目「${res.project.name}」：${res.file}`);
-      out(`  + ${res.repo.label}（${res.repo.id}）主线=${res.repo.main}${res.repo.remote ? ` 远端=${res.repo.remote}` : ""}${res.repo.icloud ? " · iCloud" : ""}`);
+    const paths = heliuPaths();
+    const det = await detectRepo(path, { main: o.main, integration: o.integration, remote: o.remote });
+    const name = o.name ?? basename(det.root);
+    const registry = projectFile(paths, name);
+    const exists = existsSync(registry);
+    let existingLedger: string | null = null;
+    if (exists) {
+      try {
+        const raw = YAML.parse(readFileSync(registry, "utf8")) as { ledger?: unknown };
+        existingLedger = typeof raw?.ledger === "string" ? raw.ledger : null;
+      } catch {
+        /* 坏文件交给 addRepoToProject 报错 */
+      }
     }
+    // 交互终端：问；--yes：不问直接做；非交互又没 --yes（脚本/测试）：只登记注册表、不建台账（M1 行为）
+    const interactive = !o.yes && !g.json && !!process.stdin.isTTY;
+    const wizard = interactive || !!o.yes;
+    let ledgerSetting: string | null = null;
+    let ledgerDir: string;
+    let ledgerNote: string;
+    if (existingLedger) {
+      ledgerDir = expandPath(existingLedger, join(paths.projectsDir, name));
+      ledgerNote = "沿用 project.yaml 里已有的设置";
+    } else if (o.ledger === "repo") {
+      ledgerDir = join(det.root, ".heliu");
+      ledgerNote = "放进仓库：仓库里会多一个未跟踪的 .heliu/ 目录，可自行决定是否提交";
+    } else if (o.ledger) {
+      ledgerSetting = o.ledger;
+      ledgerDir = resolve(expandPath(o.ledger, process.cwd()));
+      ledgerNote = "按 --ledger 指定";
+    } else if (wizard) {
+      ledgerDir = join(paths.projectsDir, name, "ledger");
+      ledgerSetting = tildify(ledgerDir);
+      ledgerNote = "放在 heliu 数据目录，不写进仓库；想放进仓库用 --ledger repo";
+    } else {
+      ledgerDir = join(det.root, ".heliu");
+      ledgerNote = "缺省位置；这次不建（加 --yes 才建台账）";
+    }
+    const plan: OnboardPlan = { name, exists, id: o.id ?? repoIdOf(det.root), label: o.label ?? basename(det.root), ledgerDir, ledgerSetting, ledgerNote, registry };
+
+    if (interactive) {
+      say(renderOnboard(det, plan));
+      if (det.candidates.length && !o.integration) {
+        const def = det.integration ? det.candidates.findIndex((c) => c.branch === det.integration) + 1 : 0;
+        const ans = (prompt(`集成分支选哪个？输入序号（0 = 不设），回车 = ${def}：`) ?? "").trim();
+        const n = ans === "" ? def : Number(ans);
+        if (Number.isInteger(n) && n >= 0 && n <= det.candidates.length) {
+          det.integration = n === 0 ? null : det.candidates[n - 1]!.branch;
+          if (n !== def) det.integrationWhy = "你选的";
+        }
+        say(`  → 集成分支：${det.integration ?? "不设"}`);
+      }
+      const ok = (prompt("确认写入注册表并建台账？[Y/n]") ?? "").trim();
+      if (/^n/i.test(ok)) {
+        say("已取消：什么都没写。");
+        return;
+      }
+    } else if (!g.json) out(renderOnboard(det, plan));
+
+    const res = await addRepoToProject(paths, {
+      path: det.root,
+      name,
+      id: o.id,
+      label: o.label,
+      main: det.main,
+      integration: det.integration ?? undefined,
+      remote: det.remote ?? undefined,
+      ledger: ledgerSetting,
+    });
+    let ledger: { dir: string; created: boolean } | null = null;
+    if (wizard) ledger = Ledger.of(loadProject(paths, name)).init();
+    if (g.json) {
+      printJson(envelope("project.add", { name: res.project.name, source: res.file }, { created: res.created, repo: res.repo, detection: det, ledger }));
+      return;
+    }
+    out(`${res.created ? "已创建" : "已更新"}项目「${res.project.name}」：${res.file}`);
+    out(`  + ${res.repo.label}（${res.repo.id}）主线=${res.repo.main}${res.repo.integration ? ` 集成=${res.repo.integration}` : ""}${res.repo.remote ? ` 远端=${res.repo.remote}` : ""}${res.repo.icloud ? " · iCloud" : ""}`);
+    if (ledger) {
+      out(`  台账：${ledger.created ? "已建立" : "已存在"} ${ledger.dir}`);
+      out(`下一步：heliu sync --project ${name} --dry-run（看现有分支能建多少张草稿卡）→ heliu board --project ${name}`);
+    } else {
+      out(`  （没有交互终端也没加 --yes：只登记了注册表、没建台账。确认无误后：heliu project add ${JSON.stringify(det.root)} --yes，或 heliu init --project ${name}）`);
+    }
+    if (!res.repo.integration && det.candidates.length) out(`  集成分支候选：${det.candidates.map(candidateLine).join("；")}（--integration <分支> 指定）`);
   });
 projectCmd
   .command("list")

@@ -271,6 +271,8 @@ export interface AddRepoInput {
   main?: string;
   integration?: string;
   remote?: string;
+  /** 台账位置原文（M5 向导）：项目还没设 ledger 时写进 project.yaml；已设则保留原值 */
+  ledger?: string | null;
 }
 
 /**
@@ -324,6 +326,7 @@ export async function addRepoToProject(paths: HeliuPaths, input: AddRepoInput): 
       /* 上面已校验过，不会到这里 */
     }
   }
+  if (input.ledger && !extras.ledger) extras = { ...extras, ledger: input.ledger };
   const repos = existing ? existing.repos.filter((r) => canonicalPath(r.path) !== root) : [];
   let id = input.id ?? slugId(root);
   while (repos.some((r) => r.id === id)) id = `${id}-2`;

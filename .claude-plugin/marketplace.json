@@ -1,0 +1,14 @@
+{
+  "name": "heliu-local",
+  "owner": { "name": "linxiansheng" },
+  "description": "合流（heliu）本地 marketplace：本仓库自己就是插件（source \"./\"），从本地目录原地加载，改代码不用重装。",
+  "plugins": [
+    {
+      "name": "heliu",
+      "source": "./",
+      "description": "合流：git 分支 × worktree × 桌面会话对账单 + 功能卡/版本台账 + 按里程碑合并。只读被管理仓库（合并执行除外，需你确认），永不 push、不删分支。",
+      "category": "productivity",
+      "tags": ["worktree", "milestone", "版本管理", "并行开发"]
+    }
+  ]
+}

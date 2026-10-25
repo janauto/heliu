@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "heliu-board",
-      "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "bin/heliu", "board", "--project", "磁吸背夹", "--port", "7788", "--no-open"],
+      "runtimeExecutable": "bin/heliu",
+      "runtimeArgs": ["board", "--project", "磁吸背夹", "--port", "7788", "--no-open"],
       "port": 7788
     }
   ]

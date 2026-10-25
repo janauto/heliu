@@ -177,6 +177,12 @@ export function debugLogger(env: NodeJS.ProcessEnv = process.env): (step: string
 
 /** 起服务并一直运行到 Ctrl+C（main.ts 在 main() 返回后会 process.exit，所以这里不能提前返回） */
 export async function runBoard(opts: RunBoardOptions): Promise<void> {
+  // 无论是否 HELIU_DEBUG，先往 stderr 打一行：桌面 launch.json 预览下至少能看到进程活着（M5）
+  try {
+    writeSync(2, "合流看板启动中…（HELIU_DEBUG=1 可看详细阶段）\n");
+  } catch {
+    /* stderr 不可写就算了 */
+  }
   const dbg = debugLogger();
   dbg(`开始：pid=${process.pid} cwd=${opts.cwd} bun=${Bun.version} HELIU_HOME=${opts.paths.heliuHome}`);
   const log = opts.log ?? ((l: string) => console.log(l));
