@@ -77,3 +77,5 @@
 - 同时注册 user 级 MCP 和插件时，会话里 heliu 工具会出现两份（插件自带同名 MCP）；只想要一份：`scripts/install.sh --no-mcp`。
 - 注册表里有多个项目后，在项目目录之外运行命令需要加 `--project <名>`。
 - 看板一次服务一个项目；拖拽改预约只支持桌面浏览器，手机上用卡片展开后的下拉。
+- 仓库放在 iCloud Drive 时，Claude 桌面应用的「预览」（`.claude/launch.json`）启动器拿不到 iCloud 目录的访问权（报 `Operation not permitted`），看板请在终端用 `bin/heliu board` 启动。
+- 在本仓库目录内开会话时，根目录的 `.mcp.json`（插件配置）会被当作项目级 MCP 配置再读一次，提示 `CLAUDE_PLUGIN_ROOT` 未定义；无害，插件自带的 `plugin:heliu:heliu` 才是生效的那份。
