@@ -1,0 +1,29 @@
+{
+  "description": "合流：会话开始时注入「你在哪个分支、对应哪张功能卡、预约哪一版、落后多少」；会话每轮结束时把最后活动记进本机缓存。不注册 WorktreeCreate（该事件会替换 Claude Code 默认的 worktree 创建，heliu 不代建 worktree）。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/bin/heliu-hook"],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/bin/heliu-hook"],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

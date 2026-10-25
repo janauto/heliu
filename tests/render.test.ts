@@ -2,7 +2,7 @@
  * 渲染层测试：用手工构造的对账结果，断言行动摘要的分组、全文折行、措辞与图例。
  */
 import { describe, expect, test } from "bun:test";
-import { FULL_HINT, LEGEND, REMOTE_NOTE, renderSessions, renderStatusFull, renderStatusSummary, topActions } from "../src/cli/render.ts";
+import { FULL_HINT, LEGEND, LINK_NOTE, REMOTE_NOTE, renderHygiene, renderSessions, renderStatusFull, renderStatusSummary, topActions } from "../src/cli/render.ts";
 import { hangingWrap, width, wrapText } from "../src/cli/table.ts";
 import type { FeatureView, ReconcileReport, RepoReport, SessionRef, SessionView } from "../src/types.ts";
 
@@ -163,7 +163,7 @@ describe("status 默认：一屏行动摘要", () => {
 
   test("① 最多 8 条、全文折行不截断，超出给一行提示", () => {
     const block = section("① 等你处理", "② 独立未合并");
-    expect(lines.find((l) => l.startsWith("① 等你处理"))).toBe("① 等你处理（12，均在文档仓）");
+    expect(lines.find((l) => l.startsWith("① 等你处理"))).toBe("① 等你处理（12，均在文档仓；会话最后记录的请求，可能已过期）");
     expect(block.filter((l) => l.startsWith("  - ")).length).toBe(8);
     expect(block[block.length - 1]).toBe("  …还有 4 条，`heliu sessions` 查看");
     const start = block.findIndex((l) => l.includes("Live2D"));
@@ -215,8 +215,9 @@ describe("status 默认：一屏行动摘要", () => {
       createdAt: null, lastActivityAt: "2026-10-25T10:00:00.000Z", completedTurns: 1, model: null, spawnedFrom: null, prs: [],
     };
     const t = renderStatusSummary(rep, { width: WIDTH, sessions: [sv] });
-    expect(t).toContain("① 等你处理（1，均在文档仓）");
-    expect(t).toContain("  - 没写待办的会话：等你确认是否继续");
+    expect(t).toContain("① 等你处理（1，均在文档仓；会话最后记录的请求，可能已过期）");
+    // 每条末尾带最后活动时间（本地时区 MM-DD HH:mm）
+    expect(t).toMatch(/ {2}- 没写待办的会话：等你确认是否继续 · \d{2}-\d{2} \d{2}:\d{2}/);
   });
 });
 
@@ -279,5 +280,55 @@ describe("折行工具", () => {
     const out = hangingWrap("需要你：", "第一行\n第二行很长很长很长很长很长很长", 20);
     expect(out[0]).toBe("需要你：第一行");
     expect(out.slice(1).every((l) => l.startsWith("        "))).toBe(true);
+  });
+});
+
+describe("M1 遗留修复（M2 一并完成）", () => {
+  test("图例补「已进主线 ≠ 已验收」", () => {
+    expect(LEGEND).toContain("已进主线 = 提交已被主线包含，不代表功能已验收");
+  });
+
+  test("status --full 会话列带关联来源标记，并有口径说明", () => {
+    const r = repo({ branches: [fv({ branch: "claude/x-111111", sessions: [blocked("s", "某会话", "x")] }), fv({ branch: "claude/y-222222", sessions: [{ ...blocked("t", "目录推断的", null), link: "worktree" }] })] });
+    const full = renderStatusFull(report([r]), { wide: true });
+    expect(full).toContain("(记录)等你·某会话");
+    expect(full).toContain("(目录)等你·目录推断的");
+    expect(full).toContain(LINK_NOTE);
+  });
+
+  test("sessions：分支后标记 记录/写入/目录；目录被复用时加一句「目录现在在 <分支> 上」", () => {
+    const base: SessionView = {
+      sessionId: "a", cliSessionId: null, title: "会话甲", repo: "docs", branch: "claude/a-111111", worktreeName: "a-111111", worktreePath: null, cwd: null,
+      status: "blocked", statusCategory: "blocked", statusDetail: null, needsAction: "看一下", isArchived: false, running: null, createdAt: null,
+      lastActivityAt: "2026-10-25T10:00:00.000Z", completedTurns: 1, model: null, spawnedFrom: null, prs: [],
+      linkedBranch: "claude/a-111111", branchLink: "branch", dirBranch: "claude/other-999999",
+    };
+    const written: SessionView = { ...base, sessionId: "b", title: "会话乙", branch: null, linkedBranch: "claude/b-222222", branchLink: "written", dirBranch: "claude/b-222222", worktreeName: "b-222222" };
+    const t = renderSessions("演示", [base, written], { width: 120 });
+    expect(t).toContain("分支 claude/a-111111（记录）");
+    expect(t).toContain("目录现在在 claude/other-999999 上（目录已被复用，以记录的分支为准）");
+    expect(t).toContain("分支 claude/b-222222（写入）");
+    expect(t.match(/目录现在在/g)?.length).toBe(1);
+    expect(t).toContain("会话关联来源：");
+  });
+
+  test("hygiene：按文件数计、标题统一「<类别>（N 个）」；未检查的主目录只给一行、不计数", () => {
+    const r = repo({
+      hygiene: [
+        { kind: "icloud_conflict_copy", severity: "warn", message: ".git 内有 12 个 iCloud 冲突副本", path: "/x/.git", branch: null, count: 12 },
+        { kind: "index_lock", severity: "warn", message: "锁文件", path: "/l", branch: null, count: null },
+        { kind: "orphan_admin_dir", severity: "warn", message: "孤儿 a", path: "/a", branch: null, count: null },
+        { kind: "orphan_admin_dir", severity: "warn", message: "孤儿 b", path: "/b", branch: null, count: null },
+        { kind: "main_dirty", severity: "info", message: "主目录脏检查已跳过（iCloud 仓，--dirty 才检查）", path: "/x", branch: "main", count: null },
+      ],
+    });
+    const t = renderHygiene(report([r]));
+    expect(t).toContain("[警告] iCloud 冲突副本（12 个）");
+    expect(t).toContain("[警告] 孤儿 .git/worktrees 条目（2 个）");
+    expect(t).toContain("[警告] 检测到 index.lock（1 个）：是否残留待确认");
+    expect(t).toContain("  [提示] 主目录脏检查已跳过（iCloud 仓，--dirty 才检查）");
+    expect(t).not.toContain("主目录脏项（");
+    const dirty = renderHygiene(report([repo({ hygiene: [{ kind: "main_dirty", severity: "warn", message: "主目录有 3 处已跟踪文件改动未提交", path: "/x", branch: "main", count: 3 }] })]));
+    expect(dirty).toContain("[警告] 主目录脏项（3 个）");
   });
 });

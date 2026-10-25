@@ -130,6 +130,15 @@ describe("对账结果", () => {
     expect(res.sessions.map((x) => x.sessionId).sort()).toEqual(["local_archived", "local_full", "local_minimal", "local_weird"]);
   });
 
+  test("会话 → 分支的关联来源（记录 > 写入 > 目录）与目录当前分支（M1 遗留修复）", () => {
+    const by = new Map(res.sessions.map((x) => [x.sessionId, x]));
+    expect(by.get("local_full")).toMatchObject({ linkedBranch: B.standalone, branchLink: "branch", dirBranch: B.standalone });
+    // 无 branch 字段：取 writtenBranches；会话目录 reused-dir-eeeeee 现在检出的是 behind 分支
+    expect(by.get("local_weird")).toMatchObject({ linkedBranch: B.behind, branchLink: "written", dirBranch: B.behind });
+    // 只有 cwd（主目录），没有记录/写入：不按主目录推断分支
+    expect(by.get("local_minimal")).toMatchObject({ linkedBranch: null, branchLink: null, dirBranch: "main" });
+  });
+
   test("merge-tree 预检：冲突文件数与目标", () => {
     expect(br(B.conflict).precheck).toMatchObject({ target: "integ", conflictFiles: 1, conflicts: ["README.md"], timedOut: false });
     expect(br(B.standalone).precheck).toMatchObject({ target: "integ", conflictFiles: 0, contentEquivalent: false });

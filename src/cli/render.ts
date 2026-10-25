@@ -9,13 +9,18 @@ import type {
   HygieneKind,
   ReconcileReport,
   RepoReport,
+  SessionLink,
   SessionView,
 } from "../types.ts";
 import { SESSION_STATUS_LABEL } from "../core/sessions.ts";
 import { hangingWrap, outputWidth, pad, renderTable, truncate, truncateMiddle, width, type Column } from "./table.ts";
 
 /** 表头/摘要上方的口径说明 */
-export const LEGEND = "图例：↑领先 ↓落后（提交数）· worktree 数不含主目录 · 工作区检查数含主目录";
+export const LEGEND = "图例：↑领先 ↓落后（提交数）· worktree 数不含主目录 · 工作区检查数含主目录 · 已进主线 = 提交已被主线包含，不代表功能已验收";
+/** 会话↔分支关联来源的中文标记 */
+export const LINK_MARK: Record<SessionLink, string> = { branch: "记录", written: "写入", worktree: "目录" };
+/** 关联来源的口径说明 */
+export const LINK_NOTE = "会话关联来源：记录 = 会话记录的分支；写入 = 会话往该分支写过提交；目录 = 仅按会话目录所在 worktree 推断（目录可能已被复用）";
 /** 健康条末尾的远端口径括注 */
 export const REMOTE_NOTE = "（远端对比基于本地已有引用，未 fetch）";
 /** 摘要末尾的展开提示 */
@@ -31,6 +36,12 @@ export function fmtDateTime(isoStr: string | null): string {
   if (!isoStr) return "—";
   const d = new Date(isoStr);
   return `${fmtDate(isoStr)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+/** MM-DD HH:mm（等你处理条目末尾的最后活动时间） */
+export function fmtShort(isoStr: string | null): string {
+  if (!isoStr) return "—";
+  const d = new Date(isoStr);
+  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 const fmtAB = (ab: AheadBehind | null) => (ab ? `↑${ab.ahead} ↓${ab.behind}` : "—");
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
@@ -64,7 +75,7 @@ function sessionCell(b: FeatureView): string {
   if (!s) return "—";
   const more = b.sessions.length > 1 ? `(+${b.sessions.length - 1})` : "";
   const status = s.status === "unknown" ? "" : `${SESSION_STATUS_LABEL[s.status]}·`;
-  return `${status}${s.title ?? "无标题"}${more}`;
+  return `(${LINK_MARK[s.link]})${status}${s.title ?? "无标题"}${more}`;
 }
 
 export function healthLine(r: RepoReport): string {
@@ -167,7 +178,7 @@ export function renderStatusFull(report: ReconcileReport, opts: { wide?: boolean
     if (r.error) out.push(`  ! ${r.error}`);
     out.push(renderBranchTable(r, opts));
   }
-  out.push("", "标记：worktree 后 * = 有未提交改动，? = 检查超时/未知；会话 (+N) = 另有 N 个关联会话；--json 输出完整字段。");
+  out.push("", "标记：worktree 后 * = 有未提交改动，? = 检查超时/未知；会话 (+N) = 另有 N 个关联会话；--json 输出完整字段。", LINK_NOTE + "。");
   return out.join("\n");
 }
 
@@ -310,8 +321,10 @@ export function renderStatusSummary(report: ReconcileReport, opts: SummaryOption
   const waitRepos = [...new Set(waiting.map((w) => w.repo))];
   const tagEach = multi && waitRepos.length > 1;
   const where = multi && waitRepos.length === 1 ? `，均在${waitRepos[0]}` : "";
-  out.push(`① 等你处理（${waiting.length}${where}）${waiting.length ? "" : "：无"}`);
-  for (const w of waiting.slice(0, SUMMARY_LIMIT)) out.push(...hangingWrap("  - ", `${tagEach ? `[${w.repo}] ` : ""}${w.title}：${w.needs}`, W));
+  out.push(`① 等你处理（${waiting.length}${where}${waiting.length ? "；会话最后记录的请求，可能已过期" : ""}）${waiting.length ? "" : "：无"}`);
+  for (const w of waiting.slice(0, SUMMARY_LIMIT)) {
+    out.push(...hangingWrap("  - ", `${tagEach ? `[${w.repo}] ` : ""}${w.title}：${w.needs}${w.at ? ` · ${fmtShort(w.at)}` : ""}`, W));
+  }
   if (waiting.length > SUMMARY_LIMIT) out.push(`  …还有 ${waiting.length - SUMMARY_LIMIT} 条，\`heliu sessions\` 查看`);
 
   // ② 独立未合并
@@ -392,7 +405,7 @@ const HYGIENE_TITLE: Record<HygieneKind, string> = {
   dir_branch_mismatch: "目录名 ≠ 分支名",
   orphan_admin_dir: "孤儿 .git/worktrees 条目",
   prunable_worktree: "worktree 目录已不存在",
-  index_lock: "检测到 index.lock（是否残留待确认）",
+  index_lock: "检测到 index.lock",
   merged_worktree_remains: "分支已进主线但 worktree 仍在",
   worktree_no_commits: "worktree 相对主线 0 提交",
   detached_worktree: "worktree 分离 HEAD",
@@ -428,10 +441,21 @@ export function renderHygiene(report: ReconcileReport): string {
     for (const k of HYGIENE_ORDER) {
       const g = groups.get(k);
       if (!g) continue;
+      // 主目录未检查/未完成：只给一行说明，不计数
+      if (k === "main_dirty") {
+        const notChecked = g.filter((x) => x.severity === "info");
+        for (const h of notChecked) out.push(`  [提示] ${h.message}`);
+        const dirty = g.filter((x) => x.severity !== "info");
+        if (!dirty.length) continue;
+        out.push(`  [警告] ${HYGIENE_TITLE[k]}（${dirty.reduce((a, x) => a + (x.count ?? 1), 0)} 个）`);
+        for (const h of dirty) out.push(`    - ${h.message}`);
+        continue;
+      }
       const sev = g.some((x) => x.severity === "warn") ? "警告" : "提示";
-      const title = HYGIENE_TITLE[k];
-      // 标题本身以括注结尾时把计数并进括注，避免「（…）（1）」
-      out.push(`  [${sev}] ${title.endsWith("）") ? `${title.slice(0, -1)}；共 ${g.length}）` : `${title}（${g.length}）`}`);
+      // 按文件数计：一条问题自带 count（如 iCloud 冲突副本 12 个文件）时用它
+      const n = g.reduce((a, x) => a + (x.count ?? 1), 0);
+      const note = k === "index_lock" ? "：是否残留待确认（可能有 git 进程正在运行）" : "";
+      out.push(`  [${sev}] ${HYGIENE_TITLE[k]}（${n} 个）${note}`);
       for (const h of g) out.push(`    - ${h.message}`);
     }
   }
@@ -444,10 +468,20 @@ function sessionBlock(s: SessionView, W: number, wide?: boolean): string[] {
   const status = s.status === "blocked" ? "" : `${SESSION_STATUS_LABEL[s.status]} · `;
   out.push(...hangingWrap("  - ", `${fmtDateTime(s.lastActivityAt)} · ${status}${s.title ?? "无标题"}`, W));
   // 位置行不折行（分支名/目录名断开就没法复制了）：目录名与分支同名时省略目录
-  const slug = s.branch ? (s.branch.split("/").pop() ?? s.branch) : null;
+  const branch = s.linkedBranch ?? s.branch;
+  const slug = branch ? (branch.split("/").pop() ?? branch) : null;
   const dir = s.worktreeName && s.worktreeName !== slug ? `目录 ${s.worktreeName}` : "";
-  const where = [s.repo, s.branch ? `分支 ${s.branch}` : "无分支", dir, pr].filter(Boolean).join(" · ");
-  out.push("    " + (wide ? where : truncateMiddle(where, W - 4)));
+  const link = branch ? `（${LINK_MARK[s.branchLink ?? "branch"]}）` : "";
+  const where = [s.repo, branch ? `分支 ${branch}${link}` : "无分支", dir, pr].filter(Boolean).join(" · ");
+  if (wide || width(where) <= W - 4 || !dir) out.push("    " + (wide ? where : truncateMiddle(where, W - 4)));
+  else {
+    // 放不下时把目录挪到下一行，保证分支名与关联来源标记完整（分支名断开就没法复制了）
+    out.push("    " + truncateMiddle([s.repo, branch ? `分支 ${branch}${link}` : "无分支", pr].filter(Boolean).join(" · "), W - 4));
+    out.push("    " + truncateMiddle(dir, W - 4));
+  }
+  if (branch && s.dirBranch && s.dirBranch !== branch) {
+    out.push(...hangingWrap("    ", `目录现在在 ${s.dirBranch} 上（目录已被复用，以记录的分支为准）`, W));
+  }
   if (s.status === "blocked") {
     out.push(...hangingWrap("    需要你：", s.needsAction?.trim() || s.statusDetail?.trim() || "（会话未写明需要什么）", W));
   }
@@ -495,7 +529,7 @@ export function renderSessions(projectName: string, sessions: SessionView[], opt
         SESSION_STATUS_LABEL[s.status],
         s.title ?? "无标题",
         s.repo,
-        s.branch ?? "—",
+        (s.linkedBranch ?? s.branch) ? `${s.linkedBranch ?? s.branch}（${LINK_MARK[s.branchLink ?? "branch"]}）` : "—",
         s.worktreeName ?? (s.worktreePath ? (s.worktreePath.split("/").pop() ?? "") : "—"),
         s.prs.length ? s.prs.map((p) => `#${p.number ?? "?"}${p.state ? " " + p.state.toLowerCase() : ""}`).join(",") : "—",
       ]);
@@ -504,6 +538,7 @@ export function renderSessions(projectName: string, sessions: SessionView[], opt
   } else if (rest.length) {
     out.push("", `提示：heliu sessions --all 显示其余 ${rest.length} 条（${restParts.join(" · ")}）`);
   }
+  if (sessions.length) out.push("", ...hangingWrap("", LINK_NOTE, W));
   return out.join("\n");
 }
 

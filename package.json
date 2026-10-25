@@ -1,7 +1,7 @@
 {
   "name": "heliu",
-  "version": "0.1.0",
-  "description": "合流（heliu）：把分支 × worktree × 桌面会话联成一张对账单的只读 CLI",
+  "version": "0.2.0",
+  "description": "合流（heliu）：分支 × worktree × 桌面会话对账单 + 功能卡/里程碑台账（CLI · MCP · hooks · Skill）",
   "type": "module",
   "private": true,
   "bin": {
@@ -16,6 +16,7 @@
     "bun": ">=1.3.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "commander": "15.0.0",
     "string-width": "8.3.0",
     "yaml": "2.9.1",

@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "bin/heliu"]
+  "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", "bin/heliu", "bin/heliu-hook"]
 }

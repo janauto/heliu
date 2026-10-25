@@ -1,7 +1,10 @@
 /**
  * heliu CLI 入口。
- * heliu status|branches|sessions|hygiene|doctor|project add <path>|project list
- * 全局：--project <name>  --json  --precheck  --dirty  --timeout <ms>  --wide
+ * M1（只读对账）：heliu status|branches|sessions|hygiene|doctor|project add <path>|project list
+ * M2（台账）：heliu init | feature add|list|reserve|bind|status|accept|rename | milestone add|list|todo|freeze|rename
+ *            | sync [--dry-run] | whereami | mcp
+ * 中文别名：新点子 "<标题>" [--预约 v1.2] · 待办 [v1.2|下一版] · 预约 F-0003 v1.3 · 我在哪
+ * 全局：--project <name>  --cwd <dir>  --json  --precheck  --dirty  --timeout <ms>  --wide
  */
 import { Command, Option } from "commander";
 import { writeSync } from "node:fs";
@@ -11,6 +14,23 @@ import { heliuPaths } from "../core/paths.ts";
 import { addRepoToProject, listProjectNames, loadProject, ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
 import { reconcile } from "../core/reconcile.ts";
 import { SCHEMA_VERSION, type JsonEnvelope, type MergedState, type ProjectRef, type ScanOptions } from "../types.ts";
+import {
+  opFeatureAdd,
+  opFeatureBind,
+  opFeatureList,
+  opFeatureReserve,
+  opFeatureSet,
+  opInit,
+  opMilestoneAdd,
+  opMilestoneFreeze,
+  opMilestoneList,
+  opMilestoneRename,
+  opMilestoneTodo,
+  opSync,
+  opWhereami,
+  type OpContext,
+  type OpResult,
+} from "../app/ops.ts";
 import {
   LEGEND,
   renderBranchTable,
@@ -25,6 +45,7 @@ import {
 
 interface GlobalOpts {
   project?: string;
+  cwd?: string;
   json?: boolean;
   precheck?: boolean;
   dirty?: boolean;
@@ -55,17 +76,29 @@ function scanOptions(g: GlobalOpts): ScanOptions {
 }
 
 async function project(g: GlobalOpts): Promise<ProjectConfig> {
-  return resolveProject(heliuPaths(), g.project, process.cwd());
+  return resolveProject(heliuPaths(), g.project, g.cwd ?? process.cwd());
+}
+
+/** 台账类命令的上下文（与 MCP 共用 src/app/ops.ts） */
+function opCtx(g: GlobalOpts): OpContext {
+  return { paths: heliuPaths(), cwd: g.cwd ?? process.cwd(), projectName: g.project, source: "cli", render: { wide: g.wide } };
+}
+
+/** 输出：--json 走稳定外壳，否则中文文本 */
+function emit(g: GlobalOpts, command: string, r: OpResult): void {
+  if (g.json) printJson(envelope(command, r.project, r.data));
+  else out(r.text);
 }
 
 const program = new Command();
 program
   .name("heliu")
-  .description("合流：分支 × worktree × 桌面会话 只读对账单")
-  .version("0.1.0", "-V, --version", "显示版本")
+  .description("合流：分支 × worktree × 桌面会话 对账单 + 功能卡/版本台账")
+  .version("0.2.0", "-V, --version", "显示版本")
   .helpOption("-h, --help", "显示帮助")
   .addHelpCommand(false)
   .option("-p, --project <name>", "项目名（默认按当前目录自动识别）")
+  .option("--cwd <dir>", "按这个目录识别项目与当前分支（默认当前目录）")
   .option("--json", "输出稳定 JSON（schemaVersion=1）")
   .option("--precheck", "对未合并分支跑 merge-tree 试合，统计冲突文件数（在临时对象区进行）")
   .option("--dirty", "iCloud 仓也做工作区脏检查（可能较慢）")
@@ -200,6 +233,163 @@ projectCmd
         out(`    - ${r.label}（${r.id}）主线=${r.main}${r.integration ? ` 集成=${r.integration}` : ""}${r.icloud ? " · iCloud" : ""}  ${r.path}`);
       }
     }
+  });
+
+/* ───────────────────────── M2：台账 ───────────────────────── */
+
+program
+  .command("init")
+  .description("建立台账目录（milestones.yaml + features/）；位置：project.yaml 的 ledger，缺省 <主仓库>/.heliu/")
+  .action(async (_o, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "init", await opInit(opCtx(g)));
+  });
+
+interface AddOpts {
+  milestone?: string;
+  预约?: string;
+  bind?: boolean;
+  session?: string;
+  body?: string;
+  unreserved?: boolean;
+}
+async function featureAddAction(titleParts: string[], o: AddOpts, cmd: Command): Promise<void> {
+  const g = globals(cmd);
+  const milestone = o.unreserved ? null : (o.预约 ?? o.milestone ?? "next");
+  emit(g, "feature.add", await opFeatureAdd(opCtx(g), { title: titleParts.join(" "), milestone, bind: o.bind, session: o.session ?? null, body: o.body }));
+}
+function addFeatureOptions(c: Command): Command {
+  return c
+    .option("-m, --milestone <版本>", "预约到哪一版（默认下一版）")
+    .option("--预约 <版本>", "同 --milestone")
+    .option("--unreserved", "先不预约任何版本")
+    .option("--no-bind", "不自动绑定当前分支")
+    .option("--session <id>", "绑定的桌面会话 id（local_…）")
+    .option("--body <文本>", "补充说明");
+}
+
+const featureCmd = program.command("feature").description("功能卡：登记、预约、绑定、改状态");
+addFeatureOptions(featureCmd.command("add <标题...>").description("登记一张功能卡（默认预约下一版，自动绑定当前分支）")).action(featureAddAction);
+addFeatureOptions(program.command("新点子 <标题...>").description("= feature add：把一句话需求登记成功能卡，默认预约下一版")).action(featureAddAction);
+
+featureCmd
+  .command("list")
+  .description("列出功能卡")
+  .option("-m, --milestone <版本>", "只看预约到某版的（可写 下一版）")
+  .option("--status <状态>", "只看某些状态（逗号分隔）")
+  .action(async (o: { milestone?: string; status?: string }, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "feature.list", await opFeatureList(opCtx(g), o));
+  });
+
+async function reserveAction(id: string, milestone: string, _o: unknown, cmd: Command): Promise<void> {
+  const g = globals(cmd);
+  emit(g, "feature.reserve", await opFeatureReserve(opCtx(g), id, milestone));
+}
+featureCmd.command("reserve <卡号> <版本>").description("改预约版本（版本不存在则新建；写 无 取消预约）").action(reserveAction);
+program.command("预约 <卡号> <版本>").description("= feature reserve：把功能卡预约到某一版").action(reserveAction);
+
+featureCmd
+  .command("bind <卡号>")
+  .description("绑定分支/会话/PR；不给 --branch 时绑定当前目录所在分支")
+  .option("--repo <id>", "仓库 id")
+  .option("--branch <分支>", "分支名")
+  .option("--worktree <路径>", "worktree 路径")
+  .option("--session <id>", "桌面会话 id")
+  .option("--pr <编号>", "PR 编号")
+  .action(async (id: string, o: { repo?: string; branch?: string; worktree?: string; session?: string; pr?: string }, cmd: Command) => {
+    const g = globals(cmd);
+    const pr = o.pr !== undefined ? Number(String(o.pr).replace(/^#/, "")) : null;
+    emit(g, "feature.bind", await opFeatureBind(opCtx(g), id, { ...o, pr: pr !== null && Number.isFinite(pr) ? pr : null }));
+  });
+
+featureCmd
+  .command("status <卡号> <状态>")
+  .description("改功能状态：想法 / 开发中 / 待合并 / 已合入 / 已进主线 / 已发布 / 已放弃")
+  .action(async (id: string, status: string, _o, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "feature.status", await opFeatureSet(opCtx(g), id, { status }));
+  });
+
+featureCmd
+  .command("accept <卡号> <档位>")
+  .description("改验收档位：未 / 已合并 / 已构建 / 宿主测试 / 实机通过（与合并状态无关）")
+  .action(async (id: string, acceptance: string, _o, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "feature.accept", await opFeatureSet(opCtx(g), id, { acceptance }));
+  });
+
+featureCmd
+  .command("rename <卡号> <新标题...>")
+  .description("改功能卡标题（sync 草稿确认时常用）")
+  .action(async (id: string, title: string[], _o, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "feature.rename", await opFeatureSet(opCtx(g), id, { title: title.join(" ") }));
+  });
+
+const milestoneCmd = program.command("milestone").description("里程碑（版本）：新建、列表、待办、冻结、改名");
+milestoneCmd
+  .command("add <版本>")
+  .description("新建里程碑（规划中）")
+  .option("--title <标题>", "标题")
+  .option("--target <日期>", "目标日期 YYYY-MM-DD")
+  .option("--integration <分支>", "集成分支（缺省用项目配置）")
+  .action(async (id: string, o: { title?: string; target?: string; integration?: string }, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "milestone.add", await opMilestoneAdd(opCtx(g), { id, ...o }));
+  });
+milestoneCmd
+  .command("list")
+  .description("列出里程碑与待办数，标出「下一版」")
+  .action(async (_o, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "milestone.list", await opMilestoneList(opCtx(g)));
+  });
+
+async function todoAction(ms: string | undefined, _o: unknown, cmd: Command): Promise<void> {
+  const g = globals(cmd);
+  emit(g, "milestone.todo", await opMilestoneTodo(opCtx(g), ms ?? "下一版", { precheck: !!g.precheck }));
+}
+milestoneCmd.command("todo [版本]").description("某一版还欠什么（默认下一版），按 等你回答/有冲突/可合并/落后/停滞/开发中/无绑定 分组").action(todoAction);
+program.command("待办 [版本]").description("= milestone todo：某一版还欠什么（默认 下一版）").action(todoAction);
+
+milestoneCmd
+  .command("freeze <版本>")
+  .description("冻结：不再接新预约")
+  .action(async (id: string, _o, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "milestone.freeze", await opMilestoneFreeze(opCtx(g), id));
+  });
+milestoneCmd
+  .command("rename <原名> <新名>")
+  .description("里程碑改名（如 vNext → v1.3），同步更新所有功能卡")
+  .action(async (from: string, to: string, _o, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "milestone.rename", await opMilestoneRename(opCtx(g), from, to));
+  });
+
+program
+  .command("sync")
+  .description("把在 worktree 里开发、没有功能卡、未进主线的分支登记成草稿卡（预约下一版）")
+  .option("--dry-run", "只列出将要建的草稿，不写入")
+  .action(async (o: { dryRun?: boolean }, cmd: Command) => {
+    const g = globals(cmd);
+    emit(g, "sync", await opSync(opCtx(g), { dryRun: !!o.dryRun }));
+  });
+
+async function whereamiAction(_o: unknown, cmd: Command): Promise<void> {
+  const g = globals(cmd);
+  emit(g, "whereami", await opWhereami(opCtx(g)));
+}
+program.command("whereami").description("我在哪：当前目录的仓库/分支/功能卡/预约版本/落后数/会话（--cwd 指定目录）").action(whereamiAction);
+program.command("我在哪").description("= whereami").action(whereamiAction);
+
+program
+  .command("mcp")
+  .description("以 MCP server（stdio）运行，供 Claude Code / Codex 调用")
+  .action(async () => {
+    const { runMcpServer } = await import("../mcp/server.ts");
+    await runMcpServer();
   });
 
 async function flushOut(): Promise<void> {

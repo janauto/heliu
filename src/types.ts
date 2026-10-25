@@ -254,6 +254,15 @@ export interface SessionView {
   model: string | null;
   spawnedFrom: { sessionId: string | null; title: string | null } | null;
   prs: PrRef[];
+  /**
+   * 会话关联到的分支（M2 追加）：记录（JSON 的 branch 字段）> 写入（writtenBranches 最后一条）> 目录（cwd 所在 worktree 当前分支）。
+   * branch 字段保持 v1 语义（只取 JSON 记录值）。
+   */
+  linkedBranch?: string | null;
+  /** linkedBranch 的来源：branch=记录 / written=写入 / worktree=目录 */
+  branchLink?: SessionLink | null;
+  /** 会话目录（cwd/worktreePath 所在 worktree）现在检出的分支；与记录分支不同说明目录被复用 */
+  dirBranch?: string | null;
 }
 
 export interface DoctorCheck {
@@ -270,4 +279,136 @@ export interface JsonEnvelope<T> {
   generatedAt: string;
   project: ProjectRef | null;
   data: T;
+}
+
+/* ───────────────────────── M2：台账（承诺层） ───────────────────────── */
+
+/** 功能状态机（产品定义第 4 节） */
+export const FEATURE_STATUSES = ["想法", "开发中", "待合并", "已合入", "已进主线", "已发布", "已放弃"] as const;
+export type FeatureStatus = (typeof FEATURE_STATUSES)[number];
+
+/** 验收档位（ADR-5，独立字段，合并不自动提升） */
+export const ACCEPTANCE_LEVELS = ["未", "已合并", "已构建", "宿主测试", "实机通过"] as const;
+export type AcceptanceLevel = (typeof ACCEPTANCE_LEVELS)[number];
+
+/** 里程碑状态 */
+export const MILESTONE_STATUSES = ["规划中", "冻结", "合并中", "已发布"] as const;
+export type MilestoneStatus = (typeof MILESTONE_STATUSES)[number];
+
+/** 功能卡来源 */
+export type FeatureSource = "session" | "cli" | "mcp" | "hook" | "sync";
+
+export interface FeatureBinding {
+  repo: string;
+  branch: string;
+  worktree: string | null;
+  session: string | null;
+  pr: number | null;
+}
+
+/** 台账里的一张功能卡（features/F-0001-<slug>.md 的 frontmatter + 正文） */
+export interface LedgerFeature {
+  id: string;
+  title: string;
+  status: FeatureStatus;
+  /** 预约的里程碑 id（可能是字面量 next）；null = 未预约 */
+  milestone: string | null;
+  acceptance: AcceptanceLevel;
+  bindings: FeatureBinding[];
+  rolled_from: string[];
+  source: FeatureSource;
+  created: string;
+  updated: string;
+  /** frontmatter 之后的正文（原样保留） */
+  body: string;
+  /** 卡片文件绝对路径 */
+  file: string;
+}
+
+export interface LedgerMilestone {
+  id: string;
+  title: string;
+  status: MilestoneStatus;
+  target_date: string | null;
+  integration_branch: string | null;
+  notes: string;
+}
+
+/** milestone.todo 的分组（按优先级从高到低） */
+export type TodoGroupKey = "blocked" | "conflict" | "mergeable" | "behind" | "stale" | "active" | "unbound";
+
+export interface TodoBinding {
+  repo: string;
+  repoLabel: string;
+  branch: string;
+  /** 分支在本地是否存在 */
+  exists: boolean;
+  mergedState: MergedState | null;
+  /** 落后主线提交数 */
+  behindMain: number | null;
+  /** 落后集成分支提交数（仓库无集成分支为 null） */
+  behindIntegration: number | null;
+  /** 冲突文件数（仅 --precheck） */
+  conflictFiles: number | null;
+  sessionId: string | null;
+  sessionStatus: SessionStatus | null;
+  lastCommitAt: string | null;
+}
+
+export interface TodoItem {
+  id: string;
+  title: string;
+  status: FeatureStatus;
+  acceptance: AcceptanceLevel;
+  rolledFrom: string[];
+  group: TodoGroupKey;
+  bindings: TodoBinding[];
+  /** 等你回答时的 needs_action 原文（缺失用 status_detail） */
+  needsAction: string | null;
+  /** 最后活动：会话最后活动 / 最后提交 / Stop hook 记录 取最新 */
+  lastActivityAt: string | null;
+  idleDays: number | null;
+  file: string;
+}
+
+export interface TodoGroup {
+  key: TodoGroupKey;
+  title: string;
+  hint: string;
+  /** 有冲突组在未 --precheck 时为 null（未检查） */
+  count: number | null;
+  items: TodoItem[];
+}
+
+export interface TodoReport {
+  milestone: LedgerMilestone;
+  /** 用户输入的里程碑引用（如「下一版」） */
+  requested: string;
+  precheck: boolean;
+  /** 计入待办的条数 */
+  total: number;
+  groups: TodoGroup[];
+  /** 绑定分支已全部进主线、但台账状态未更新的卡（不计入待办） */
+  doneByGit: TodoItem[];
+}
+
+/** whereami：当前目录 → 项目/仓库/分支/功能卡/里程碑/落后数/会话 */
+export interface WhereAmI {
+  cwd: string;
+  project: ProjectRef | null;
+  repo: { id: string; label: string; path: string } | null;
+  /** 当前所在检出目录（worktree 或主目录）的顶层路径 */
+  worktree: string | null;
+  isMainCheckout: boolean;
+  branch: string | null;
+  detached: boolean;
+  role: BranchRole | null;
+  feature: { id: string; title: string; status: FeatureStatus; milestone: string | null; acceptance: AcceptanceLevel; file: string } | null;
+  milestone: { id: string; title: string; status: MilestoneStatus } | null;
+  behindMain: number | null;
+  behindIntegration: number | null;
+  session: { sessionId: string | null; cliSessionId: string | null; title: string | null } | null;
+  ledgerDir: string | null;
+  notes: string[];
+  elapsedMs: number;
 }

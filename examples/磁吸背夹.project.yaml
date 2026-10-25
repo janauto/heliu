@@ -2,6 +2,9 @@
 # 正本位置：~/Library/Application Support/heliu/projects/磁吸背夹/project.yaml
 # 主线/集成分支均于 2026-10-26 只读核实（symbolic-ref、branch --list、merge-base）。
 name: 磁吸背夹
+# 台账（功能卡 + 里程碑）放在 heliu 自己的数据目录：M2 起不往磁吸背夹三个仓库写任何文件。
+# 缺省是 <主仓库>/.heliu/（主仓库 = primary 或第一个仓库）。
+ledger: ~/Library/Application Support/heliu/projects/磁吸背夹/ledger
 repos:
   - id: docs
     label: 文档仓

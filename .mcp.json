@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "heliu": {
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/heliu", "mcp"]
+    }
+  }
+}

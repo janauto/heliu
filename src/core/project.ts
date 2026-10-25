@@ -4,7 +4,8 @@
  * 本模块只写 heliu 自己的注册表目录，绝不写被管理仓库。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
 import { runGit, lines } from "./git.ts";
@@ -23,6 +24,14 @@ export const RepoConfigSchema = z.object({
 export const ProjectConfigSchema = z.object({
   name: z.string().min(1),
   repos: z.array(RepoConfigSchema).min(1),
+  /** 主仓库 id（台账默认放 <主仓库>/.heliu/）；缺省为第一个仓库 */
+  primary: z.string().nullish(),
+  /** 台账目录覆盖（支持 ~ 与相对 project.yaml 的路径） */
+  ledger: z.string().nullish(),
+  /** M4 用：合并时按 union 策略处理的文件（M2 只解析不使用） */
+  union_files: z.array(z.string()).nullish(),
+  /** M4 用：合并后要跑的检查命令（M2 只解析不使用） */
+  checks: z.array(z.string()).nullish(),
 });
 
 export interface RepoConfig {
@@ -40,6 +49,28 @@ export interface ProjectConfig {
   repos: RepoConfig[];
   /** 实际读取的 project.yaml 路径 */
   source: string;
+  /** 主仓库 id；缺省为 repos[0] */
+  primary?: string | null;
+  /** project.yaml 里写的台账目录（已展开 ~、相对路径按 project.yaml 所在目录解析）；null = 默认 <主仓库>/.heliu */
+  ledger?: string | null;
+  /** M4 用，M2 只解析 */
+  unionFiles?: string[];
+  /** M4 用，M2 只解析 */
+  checks?: string[];
+}
+
+/** 展开 ~ 与相对路径（相对 project.yaml 所在目录） */
+export function expandPath(p: string, baseDir: string): string {
+  let out = p.trim();
+  if (out === "~") out = homedir();
+  else if (out.startsWith("~/")) out = join(homedir(), out.slice(2));
+  return isAbsolute(out) ? out : resolve(baseDir, out);
+}
+
+/** 主仓库：primary 指定的仓库，否则第一个 */
+export function primaryRepo(project: ProjectConfig): RepoConfig {
+  const byId = project.primary ? project.repos.find((r) => r.id === project.primary) : undefined;
+  return byId ?? (project.repos[0] as RepoConfig);
 }
 
 export class ProjectError extends Error {
@@ -75,7 +106,20 @@ export function parseProjectYaml(text: string, source: string): ProjectConfig {
       icloud: r.icloud ?? looksLikeICloud(r.path),
     };
   });
-  return { name: parsed.data.name, repos, source };
+  const d = parsed.data;
+  if (d.primary && !repos.some((r) => r.id === d.primary)) {
+    throw new ProjectError(`${source} 中 primary=${d.primary} 不是任何仓库的 id`);
+  }
+  const baseDir = source.startsWith("(") ? process.cwd() : dirname(source);
+  return {
+    name: d.name,
+    repos,
+    source,
+    primary: d.primary ?? null,
+    ledger: d.ledger ? expandPath(d.ledger, baseDir) : null,
+    unionFiles: d.union_files ?? [],
+    checks: d.checks ?? [],
+  };
 }
 
 export function projectFile(paths: HeliuPaths, name: string): string {
@@ -176,9 +220,17 @@ export async function resolveProject(paths: HeliuPaths, name: string | undefined
   );
 }
 
+/** project.yaml 中除 name/repos 外需要原样保留的字段（project add 重写文件时不丢） */
+export interface ProjectExtras {
+  primary?: string | null;
+  ledger?: string | null;
+  union_files?: string[] | null;
+  checks?: string[] | null;
+}
+
 /** 生成 project.yaml 文本（带注释头） */
-export function stringifyProject(name: string, repos: RepoConfig[]): string {
-  const doc = {
+export function stringifyProject(name: string, repos: RepoConfig[], extras: ProjectExtras = {}): string {
+  const doc: Record<string, unknown> = {
     name,
     repos: repos.map((r) => {
       const o: Record<string, unknown> = { id: r.id, label: r.label, path: r.path, main: r.main };
@@ -188,6 +240,10 @@ export function stringifyProject(name: string, repos: RepoConfig[]): string {
       return o;
     }),
   };
+  if (extras.primary) doc.primary = extras.primary;
+  if (extras.ledger) doc.ledger = extras.ledger;
+  if (extras.union_files?.length) doc.union_files = extras.union_files;
+  if (extras.checks?.length) doc.checks = extras.checks;
   return `# heliu 项目注册表（由 heliu project add 生成/更新；可手工编辑）\n${YAML.stringify(doc)}`;
 }
 
@@ -249,7 +305,18 @@ export async function addRepoToProject(paths: HeliuPaths, input: AddRepoInput): 
 
   const name = input.name ?? basename(root);
   const file = projectFile(paths, name);
-  const existing = existsSync(file) ? parseProjectYaml(readFileSync(file, "utf8"), file) : null;
+  const existingText = existsSync(file) ? readFileSync(file, "utf8") : null;
+  const existing = existingText !== null ? parseProjectYaml(existingText, file) : null;
+  // 原样保留 ledger 等字段（ledger 用文件里的原文，不写展开后的绝对路径）
+  let extras: ProjectExtras = {};
+  if (existingText !== null) {
+    try {
+      const raw = YAML.parse(existingText) as Record<string, unknown>;
+      extras = { primary: raw.primary as string, ledger: raw.ledger as string, union_files: raw.union_files as string[], checks: raw.checks as string[] };
+    } catch {
+      /* 上面已校验过，不会到这里 */
+    }
+  }
   const repos = existing ? existing.repos.filter((r) => canonicalPath(r.path) !== root) : [];
   let id = input.id ?? slugId(root);
   while (repos.some((r) => r.id === id)) id = `${id}-2`;
@@ -264,6 +331,6 @@ export async function addRepoToProject(paths: HeliuPaths, input: AddRepoInput): 
   };
   repos.push(repo);
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, stringifyProject(name, repos), "utf8");
-  return { file, project: { name, repos, source: file }, repo, created: !existing };
+  writeFileSync(file, stringifyProject(name, repos, extras), "utf8");
+  return { file, project: { ...(existing ?? {}), name, repos, source: file }, repo, created: !existing };
 }

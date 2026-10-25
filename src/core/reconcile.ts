@@ -571,6 +571,22 @@ async function buildHealth(scan: RepoScan, report: RepoReport, now: Date): Promi
   };
 }
 
+/**
+ * 会话 → 分支（展示与 sync 用）：记录（JSON branch 字段）> 写入（writtenBranches 最后一条）> 目录（cwd 所在 worktree 当前分支）。
+ * dirBranch = 会话目录现在检出的分支（目录可能被别的会话复用，与记录分支不同时要提示）。
+ */
+function sessionBranchInfo(s: DesktopSession, sc: RepoScan): { linkedBranch: string | null; branchLink: SessionLink | null; dirBranch: string | null } {
+  const dirPath = s.worktreePath ?? s.cwd;
+  const real = dirPath ? canonicalPath(dirPath) : null;
+  const wt = real ? sc.worktreeReal.filter((w) => isUnder(real, w.path)).sort((a, b) => b.path.length - a.path.length)[0] : undefined;
+  const dirBranch = wt?.wt.branch ?? null;
+  if (s.branch) return { linkedBranch: s.branch, branchLink: "branch", dirBranch };
+  const written = s.writtenBranches[s.writtenBranches.length - 1];
+  if (written) return { linkedBranch: written.branch, branchLink: "written", dirBranch };
+  if (wt && !wt.wt.isMain && dirBranch) return { linkedBranch: dirBranch, branchLink: "worktree", dirBranch };
+  return { linkedBranch: null, branchLink: null, dirBranch };
+}
+
 export interface ReconcileResult {
   report: ReconcileReport;
   sessions: SessionView[];
@@ -594,6 +610,7 @@ export async function reconcile(
   for (const sc of scans) {
     for (const s of owned.get(sc) ?? []) {
       const running = runningFor(s, ctx.running);
+      const bi = sessionBranchInfo(s, sc);
       sessions.push({
         sessionId: s.sessionId,
         cliSessionId: s.cliSessionId,
@@ -615,6 +632,9 @@ export async function reconcile(
         model: s.model,
         spawnedFrom: s.spawnedFrom,
         prs: s.prs,
+        linkedBranch: bi.linkedBranch,
+        branchLink: bi.branchLink,
+        dirBranch: bi.dirBranch,
       });
     }
   }
