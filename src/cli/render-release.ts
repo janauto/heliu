@@ -5,7 +5,7 @@ import type { ProjectConfig } from "../core/project.ts";
 import type { PreviewResult, SetDecisionResult } from "../core/release.ts";
 import { conflictText, resultText, type PlanItem, type ReleasePlan } from "../core/release-plan.ts";
 import type { RollbackReport, RunReport } from "../core/release-run.ts";
-import type { RehearseResult } from "../core/rehearse.ts";
+import { sec, type RehearseResult } from "../core/rehearse.ts";
 
 const short = (s: string | null | undefined) => (s ? s.slice(0, 7) : "—");
 
@@ -113,7 +113,7 @@ export function renderRollback(r: RollbackReport, project: ProjectConfig): strin
 export function renderRehearsal(r: RehearseResult): string {
   const L = [
     `演练完成：${r.milestone} · 合入 ${r.run.merged.length} · 失败 ${r.run.failed.length} · 顺延 ${r.run.rolled.length} · tag ${r.run.tags.length ? "已打" : "未打"} · 解冲突器 $${r.run.costUsd.toFixed(2)}`,
-    `耗时：克隆 ${(r.cloneMs / 1000).toFixed(1)}s · 预演 ${(r.previewMs / 1000).toFixed(1)}s · 执行 ${(r.runMs / 1000).toFixed(1)}s · 合计 ${(r.totalMs / 1000).toFixed(1)}s`,
+    `耗时：克隆 ${sec(r.cloneMs)} · 预演 ${sec(r.previewMs)} · 执行 ${sec(r.runMs)} · 合计 ${sec(r.totalMs)}`,
     `真仓库零写入：${r.zeroWrite ? "一致" : "有差异（见报告）"}（${r.snapshots.map((s) => `${s.label} ${s.items} 项`).join("、")}）`,
   ];
   if (r.run.aborted.length) L.push(`中止：${r.run.aborted.join("；")}`);

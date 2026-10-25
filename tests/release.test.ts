@@ -7,7 +7,7 @@
  *   fb 未完成（绑定会话 blocked）· fi 已进集成分支。
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertWriteAllowed, GitForbiddenError, runGitWrite } from "../src/core/git.ts";
 import { Ledger } from "../src/core/ledger.ts";
@@ -16,7 +16,7 @@ import { loadProject } from "../src/core/project.ts";
 import { previewRelease, setPlanDecision } from "../src/core/release.ts";
 import { loadPlan, parsePlan, serializePlan } from "../src/core/release-plan.ts";
 import { rollbackRelease, runRelease } from "../src/core/release-run.ts";
-import { buildResolverPrompt, parseResolverOutput, resolverArgs, resolverBinary } from "../src/core/resolver.ts";
+import { buildResolverPrompt, parseResolverOutput, resolverArgs, resolverBinary, runResolver } from "../src/core/resolver.ts";
 import { combineHunk, entryDate, unionFromMarkers } from "../src/core/union.ts";
 import { gitW } from "./helpers/fixture.ts";
 import { buildReleaseFixture, type RFx } from "./helpers/release-fixture.ts";
@@ -158,6 +158,21 @@ describe("解冲突器调用约定", () => {
     for (const s of ["F-0005「冲突功能 C」", "feat: 冲突地改 src", "integ: 改 src", "只解冲突", "不重构", "两边的功能都保留", "git add", "一句话报告"]) expect(p).toContain(s);
     expect(parseResolverOutput('噪声\n{"type":"result","subtype":"success","is_error":false,"num_turns":4,"result":"ok","total_cost_usd":0.5}\n')).toEqual({ cost: 0.5, turns: 4, summary: "ok", isError: false });
     expect(parseResolverOutput("不是 json")).toBeNull();
+  });
+  test("未登录 / OAuth 过期：立即判失败、$0、标 authFailed（不重试）", async () => {
+    const stub = join(fx.root, "auth-fail-stub.sh");
+    writeFileSync(stub, `#!/bin/sh\ncat > /dev/null\nprintf '%s\\n' '{"type":"result","subtype":"success","is_error":true,"num_turns":1,"result":"Not logged in · Please run /login","total_cost_usd":0}'\nexit 1\n`);
+    const old = process.env.HELIU_RESOLVER_STUB;
+    process.env.HELIU_RESOLVER_STUB = stub;
+    try {
+      const r = await runResolver({ cwd: fx.root, files: ["x"], milestone: "v", integration: { branch: "i", recent: [] }, incoming: { feature: "F-1", title: "t", branch: "b", firstCommit: null }, round: 1 });
+      expect(r.ok).toBe(false);
+      expect(r.authFailed).toBe(true);
+      expect(r.costUsd).toBe(0);
+      expect(r.error).toContain("无法登录");
+    } finally {
+      process.env.HELIU_RESOLVER_STUB = old;
+    }
   });
 });
 

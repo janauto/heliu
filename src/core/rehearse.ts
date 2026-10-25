@@ -97,7 +97,7 @@ export async function rehearseRelease(project: ProjectConfig, paths: HeliuPaths,
   });
   const cloneMs = Math.round(performance.now() - tc);
   if (!cl.ok) throw new ReleaseError(`克隆失败（${Math.round(cloneMs / 1000)}s）：${cl.timedOut ? "超过 10 分钟" : cl.stderr.trim()}`);
-  log(`  克隆完成 ${(cloneMs / 1000).toFixed(1)}s`);
+  log(`  克隆完成 ${sec(cloneMs)}`);
 
   // 预演：真实仓库只读，合并单写进台账副本
   const tp = performance.now();
@@ -105,7 +105,7 @@ export async function rehearseRelease(project: ProjectConfig, paths: HeliuPaths,
   log("预演（真实仓库只读对账 + 试合）…");
   const preview = await previewRelease(projPreview, paths, m.id, { now: now() });
   const previewMs = Math.round(performance.now() - tp);
-  log(`  合并单 ${preview.plan.items.length} 项，${(previewMs / 1000).toFixed(1)}s`);
+  log(`  合并单 ${preview.plan.items.length} 项，${sec(previewMs)}`);
 
   // 执行：只含主仓库、指向克隆
   const tr = performance.now();
@@ -145,7 +145,7 @@ export async function rehearseRelease(project: ProjectConfig, paths: HeliuPaths,
   return res;
 }
 
-const sec = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+export const sec = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
 const short = (s: string | null | undefined) => (s ? s.slice(0, 7) : "—");
 const cell = (x: string) => x.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 
