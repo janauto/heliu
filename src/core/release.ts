@@ -10,7 +10,7 @@ import type { LedgerFeature, LedgerMilestone, SessionView } from "../types.ts";
 import { Ledger, LedgerError, normalizeFeatureId } from "./ledger.ts";
 import type { HeliuPaths } from "./paths.ts";
 import { primaryRepo, type ProjectConfig } from "./project.ts";
-import { reconcile } from "./reconcile.ts";
+import { reconcile, type ReconcileResult } from "./reconcile.ts";
 import { precheckStateOf } from "./todo.ts";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -87,6 +87,22 @@ export interface PreviewOptions {
   timeoutMs?: number;
 }
 
+export interface BuildOptions extends PreviewOptions {
+  /** 已有的对账结果（必须带 --precheck 试合）；看板传它的缓存，省一次扫描。缺省现扫 */
+  reconciled?: ReconcileResult;
+}
+
+export interface BuildResult {
+  /** 本次预演算出的合并单（已按刷新规则保留上次改过的决定），**未写盘** */
+  plan: ReleasePlan;
+  kept: number;
+  /** 上一份可执行合并单（schema 2）；没有或是看板草稿时为 null */
+  previous: ReleasePlan | null;
+  /** 磁盘上原有的文件（可能是看板草稿 format=board） */
+  loaded: ReleasePlan | null;
+  milestone: LedgerMilestone;
+}
+
 export interface PreviewResult {
   plan: ReleasePlan;
   kept: number;
@@ -97,28 +113,25 @@ export interface PreviewResult {
   file: string;
 }
 
-/** 生成/刷新合并单草稿（只读仓库；只写 <台账>/releases/<里程碑>.md） */
-export async function previewRelease(project: ProjectConfig, paths: HeliuPaths, ref: string, opts: PreviewOptions = {}): Promise<PreviewResult> {
+/**
+ * 合并单构建器（纯计算，只读仓库，不写任何文件）：CLI `heliu 合并 --预演`、MCP、看板（M3）的合并预演都走它，
+ * 保证同一台账下三处的 状态 / 档位 / 建议动作 / 默认决定 是同一套规则。
+ */
+export async function buildReleasePlan(project: ProjectConfig, paths: HeliuPaths, ref: string, opts: BuildOptions = {}): Promise<BuildResult> {
   const now = opts.now ?? new Date();
   const ledger = Ledger.of(project);
   const m = resolveReleaseMilestone(ledger, ref);
   const loaded = loadPlan(ledger.dir, m.id);
-  // 看板草稿（schema 1）不是可执行合并单：先备份，再按本次预演重新生成；它的决定不导入，只列出差异
-  let boardBackup: string | null = null;
-  if (loaded?.format === "board") {
-    const hist = join(ledger.dir, "releases", ".history");
-    mkdirSync(hist, { recursive: true });
-    const p2 = (x: number) => String(x).padStart(2, "0");
-    boardBackup = join(hist, `${m.id.replace(/[/\\:]/g, "-")}-看板草稿-${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}.md`);
-    if (existsSync(loaded.file)) copyFileSync(loaded.file, boardBackup);
-  }
   const previous = loaded?.format === "board" ? null : loaded;
   if (previous?.status === "已发布") {
     throw new ReleaseError(`${m.id} 已于 ${previous.finalized_at ?? "之前"} 发布（tag 已打）。要重来请先 heliu 回滚 ${m.id}`);
   }
   const milestones = ledger.listMilestones();
   const features = ledger.load().features.filter((f) => f.status !== "已放弃" && ledger.effectiveMilestone(f, milestones) === m.id);
-  const rec = await reconcile(project, paths, { precheck: true, dirty: false, timeoutMs: opts.timeoutMs ?? 8000 });
+  const rec =
+    opts.reconciled && opts.reconciled.report.options.precheck
+      ? opts.reconciled
+      : await reconcile(project, paths, { precheck: true, dirty: false, timeoutMs: opts.timeoutMs ?? 8000 });
   const sessionsById = new Map(rec.sessions.map((s) => [s.sessionId, s]));
 
   const repos: PlanRepo[] = project.repos.map((r) => {
@@ -162,6 +175,23 @@ export async function previewRelease(project: ProjectConfig, paths: HeliuPaths, 
   };
   const { plan, kept } = mergeWithPrevious(fresh, previous);
   if (previous?.status === "已回滚") plan.status = "草稿";
+  return { plan, kept, previous, loaded, milestone: m };
+}
+
+/** 生成/刷新合并单草稿（只读仓库；只写 <台账>/releases/<里程碑>.md）= buildReleasePlan + 写盘 */
+export async function previewRelease(project: ProjectConfig, paths: HeliuPaths, ref: string, opts: BuildOptions = {}): Promise<PreviewResult> {
+  const now = opts.now ?? new Date();
+  const { plan, kept, previous, loaded, milestone: m } = await buildReleasePlan(project, paths, ref, opts);
+  const ledger = Ledger.of(project);
+  // 看板旧草稿（schema 1）不是可执行合并单：先备份，再写本次预演；它的决定不导入，只列出差异
+  let boardBackup: string | null = null;
+  if (loaded?.format === "board") {
+    const hist = join(ledger.dir, "releases", ".history");
+    mkdirSync(hist, { recursive: true });
+    const p2 = (x: number) => String(x).padStart(2, "0");
+    boardBackup = join(hist, `${m.id.replace(/[/\\:]/g, "-")}-看板草稿-${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}.md`);
+    if (existsSync(loaded.file)) copyFileSync(loaded.file, boardBackup);
+  }
   savePlan(plan);
   let boardDraft: PreviewResult["boardDraft"] = null;
   if (loaded?.format === "board" && boardBackup) {

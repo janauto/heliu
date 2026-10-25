@@ -3,11 +3,10 @@
  *
  * - 对账结果按「项目 × 是否预检」缓存 20 秒，并发请求共用同一次扫描（页面多处同时拉数据）。
  * - 台账每次请求现读（纯文本，很快），所以改预约后立刻可见，不用清缓存。
- * - 写操作只经过 Ledger（台账目录）与 releases/ 草稿，绝不碰被管理仓库。
+ * - 写操作只经过 Ledger（台账目录）与 M4 的 previewRelease（releases/<里程碑>.md 合并单），绝不碰被管理仓库。
+ * - 合并预演不自己判档：直接调用 M4 buildReleasePlan（与 heliu 合并 --预演 同一个函数），只做字段映射。
  */
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync, copyFileSync } from "node:fs";
-import { join } from "node:path";
-import YAML from "yaml";
+import { readFileSync, statSync } from "node:fs";
 import type {
   FeatureBinding,
   FeatureView,
@@ -49,6 +48,8 @@ import type {
   ReleasePreview,
   ReleaseTier,
 } from "./api-types.ts";
+import { buildReleasePlan, previewRelease, type BuildResult } from "../core/release.ts";
+import { ACTION_TEXT, TIER_OF, type ItemState } from "../core/release-plan.ts";
 import { baselinePreview } from "./baseline.ts";
 import { buildHygiene } from "./hygiene.ts";
 
@@ -573,91 +574,32 @@ export class BoardService {
     return baselinePreview(project, f, this.timeoutMs);
   }
 
-  /* ───────────── 合并预演（只读）与合并单草稿 ───────────── */
+  /* ───────────── 合并预演（只读）与合并单：直接用 M4 的合并单构建器，规则只有一套 ───────────── */
 
+  /**
+   * 合并预演：调用 M4 buildReleasePlan（与 heliu 合并 --预演 / MCP heliu_release_preview 同一个函数，传入看板缓存的试合扫描），
+   * 只把它的 items 映射成看板表格字段；不写任何文件。
+   */
   async releasePreview(ref: string): Promise<{ data: ReleasePreview; meta: BoardMeta }> {
-    const { data: todo, meta } = await this.todo(ref, true);
-    const { scan } = await this.scan(true);
-    const report = scan.result.report;
-    const repos = new Map(report.repos.map((r) => [r.id, r]));
-    const items: ReleaseItem[] = [];
-    for (const g of todo.groups) {
-      for (const it of g.items) {
-        const bindings: ReleaseBinding[] = it.bindings.map((b) => {
-          const repo = repos.get(b.repo);
-          const fv = repo?.reachable ? repo.branches.find((x) => x.branch === b.branch) : undefined;
-          const p = fv?.precheck ?? null;
-          const pc = precheckStateOf(fv ?? null, true);
-          return {
-            repo: b.repo,
-            repoLabel: b.repoLabel,
-            branch: b.branch,
-            exists: b.exists,
-            sha: fv?.sha ?? null,
-            mergedState: b.mergedState,
-            precheckTarget: p?.target ?? null,
-            conflictFiles: p?.conflictFiles ?? null,
-            conflicts: p?.conflicts ?? [],
-            precheckError: pc.error,
-            precheckState: pc.state,
-            behindIntegration: b.behindIntegration,
-            behindMain: b.behindMain,
-          };
-        });
-        items.push(releaseItem(it, g.key, bindings));
-      }
-    }
-    const rank: Record<ReleaseTier, number> = { in_integration: 0, clean: 1, conflict: 2, precheck_failed: 3, unfinished: 4 };
-    const conflictsOf = (x: ReleaseItem) => x.bindings.reduce((a, b) => a + (b.conflictFiles ?? 0), 0);
-    items.sort((a, b) => rank[a.tier] - rank[b.tier] || (a.tier === "conflict" ? conflictsOf(a) - conflictsOf(b) : 0) || a.id.localeCompare(b.id));
-    items.forEach((x, i) => (x.order = i + 1));
-    const counts: Record<ReleaseTier, number> = { in_integration: 0, clean: 0, conflict: 0, precheck_failed: 0, unfinished: 0 };
-    for (const x of items) counts[x.tier]++;
-    const repoRefs = report.repos.map((r) => ({
-      repo: r.id,
-      repoLabel: r.label,
-      main: r.main,
-      mainSha: r.branches.find((b) => b.role === "main")?.sha ?? null,
-      integration: r.integration,
-      integrationSha: r.branches.find((b) => b.role === "integration")?.sha ?? null,
-    }));
-    const data: ReleasePreview = {
-      milestone: todo.milestone,
-      generatedAt: report.generatedAt,
-      scanMs: scan.ms,
-      repos: repoRefs,
-      items,
-      counts,
-      deferred: items.filter((x) => x.tier === "unfinished").map((x) => x.id),
-      suggestions: todo.groups.flatMap((g) => g.items).flatMap((i) => (i.suggestion ? [{ id: i.id, text: i.suggestion }] : [])),
-    };
-    return { data, meta };
+    const project = this.project;
+    const { scan, cached } = await this.scan(true);
+    const built = await buildReleasePlan(project, this.paths, ref.trim() || "下一版", { now: this.now(), timeoutMs: this.timeoutMs, reconciled: scan.result });
+    return { data: releasePreviewOf(project, this.ledger(project), built, scan), meta: this.meta(scan, cached) };
   }
 
+  /** 生成合并单：调用 M4 previewRelease（schema 2，与 CLI 同一个文件、同一格式；看板旧草稿先备份到 releases/.history/） */
   async releasePlan(ref: string): Promise<ReleasePlanResult> {
     const project = this.project;
-    const { data: preview } = await this.releasePreview(ref);
-    const ledger = this.ledger(project);
-    const dir = join(ledger.dir, "releases");
-    mkdirSync(dir, { recursive: true });
-    const file = join(dir, `${safeName(preview.milestone.id)}.md`);
-    let backup: string | null = null;
-    if (existsSync(file)) {
-      const old = readFileSync(file, "utf8");
-      const status = /^status:\s*(.+)$/m.exec(old.split(/\n---/)[0] ?? "")?.[1]?.trim();
-      if (status && status !== "草稿") {
-        throw new LedgerError(`合并单 ${file} 已是「${status}」状态，看板只生成草稿，不覆盖（如需重来请先改名或删除该文件）`);
-      }
-      const hist = join(dir, ".history");
-      mkdirSync(hist, { recursive: true });
-      backup = join(hist, `${safeName(preview.milestone.id)}-${stamp(this.now())}.md`);
-      copyFileSync(file, backup);
-    }
-    const text = renderReleasePlan(project.name, preview, this.now());
-    const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
-    writeFileSync(tmp, text, "utf8");
-    renameSync(tmp, file);
-    return { file, backup, items: preview.items.length, deferred: preview.deferred.length };
+    const { scan } = await this.scan(true);
+    const r = await previewRelease(project, this.paths, ref.trim() || "下一版", { now: this.now(), timeoutMs: this.timeoutMs, reconciled: scan.result });
+    return {
+      file: r.file,
+      backup: r.boardDraft?.backup ?? null,
+      items: r.plan.items.length,
+      deferred: new Set(r.plan.items.filter((i) => i.decision === "顺延").map((i) => i.feature)).size,
+      kept: r.kept,
+      status: r.plan.status,
+    };
   }
 }
 
@@ -750,59 +692,6 @@ export function lightTextOf(item: TodoItem, bindings: CardBinding[], groupTitle:
   return parts.join(" · ");
 }
 
-const TIER_TEXT: Record<ReleaseTier, string> = { in_integration: "已进集成", clean: "无冲突", conflict: "有冲突", precheck_failed: "未能试合", unfinished: "未完成" };
-const ACTION_OF: Record<ReleaseTier, { action: ReleaseAction; text: string }> = {
-  in_integration: { action: "skip", text: "跳过（已在集成分支）" },
-  clean: { action: "merge", text: "合入" },
-  conflict: { action: "resolve", text: "需解冲突" },
-  precheck_failed: { action: "recheck", text: "重新试合或人工确认" },
-  unfinished: { action: "defer", text: "顺延" },
-};
-
-export function releaseItem(it: TodoItem, group: TodoGroupKey, bindings: ReleaseBinding[]): ReleaseItem {
-  let tier: ReleaseTier;
-  let reason: string;
-  const target = bindings.find((b) => b.precheckTarget)?.precheckTarget ?? "集成分支";
-  if (group === "mergeable") {
-    // M2 细分：已进主线 / 已进集成分支 → 已进集成档；试合无冲突 → 无冲突档
-    const allIn = it.note ? it.note !== "试合无冲突" : bindings.filter((b) => b.exists).every((b) => b.mergedState !== "unmerged");
-    tier = allIn ? "in_integration" : "clean";
-    reason = allIn ? (it.note === "已进主线" ? "绑定分支已被主线包含" : "绑定分支已被集成分支包含") : `试合到 ${target} 无冲突`;
-  } else if (group === "conflict") {
-    tier = "conflict";
-    reason = `试合到 ${target} 有 ${sumConflicts(bindings)} 个冲突文件`;
-  } else if (group !== "blocked" && group !== "unbound" && bindings.some((b) => b.precheckState === "failed")) {
-    // 试合没有结果：既不能说无冲突，也不该自动顺延（Codex 第 1 轮）
-    tier = "precheck_failed";
-    const f = bindings.find((b) => b.precheckState === "failed")!;
-    const behind = Math.max(0, ...bindings.map((b) => b.behindIntegration ?? b.behindMain ?? 0));
-    reason = `未能试合：${f.precheckError ?? "原因未知"}${behind > 0 ? `；落后 ↓${behind}` : ""}`;
-  } else {
-    tier = "unfinished";
-    const err = bindings.find((b) => b.precheckError)?.precheckError;
-    if (group === "blocked") reason = `会话在等你回答：${it.needsAction ?? "（未写明）"}${err ? `；另有分支未能试合（${err}）` : ""}`;
-    else if (group === "unbound") reason = it.bindings.length ? "绑定的分支在本地已不存在" : "尚未关联开发分支（想法）";
-    else if (it.note === "尚无提交") reason = "绑定分支尚无独有提交（与主线同点或自创建后未提交）";
-    else if (group === "stale") reason = `停滞 ${it.idleDays ?? "?"} 天${err ? `，试合未完成（${err}）` : ""}`;
-    else if (group === "behind") reason = `落后且试合未完成${err ? `（${err}）` : ""}`;
-    else reason = err ? `试合未完成（${err}）` : "开发中";
-  }
-  return {
-    order: 0,
-    id: it.id,
-    title: it.title,
-    status: it.status,
-    tier,
-    tierText: TIER_TEXT[tier],
-    action: ACTION_OF[tier].action,
-    actionText: ACTION_OF[tier].text,
-    reason,
-    needsAction: it.needsAction,
-    todoGroup: group,
-    bindings,
-  };
-}
-
 /** M1 摘要里的 CLI 指引换成看板页面名（结论句本身不变） */
 export function boardWording(s: string): string {
   return s
@@ -811,106 +700,93 @@ export function boardWording(s: string): string {
     .replace("M2 起可预约版本", "可在「版本列」预约到某一版");
 }
 
-function safeName(id: string): string {
-  return id.replace(/[/\\:]/g, "-");
-}
-function stamp(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-}
-function localTime(iso: string | Date): string {
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
+/* ───────────── M4 合并单 → 看板表格 ───────────── */
 
-/** 默认决定：已进集成/无冲突且台账「待合并」→ 并入；有冲突或台账还是「开发中」→ 待定；未完成 → 顺延 */
-export function defaultDecision(x: ReleaseItem): "并入" | "顺延" | "待定" {
-  if (x.tier === "in_integration") return "并入";
-  if (x.tier === "clean") return x.status === "待合并" ? "并入" : "待定";
-  if (x.tier === "conflict" || x.tier === "precheck_failed") return "待定";
-  return "顺延";
-}
+const ACTION_KEY: Record<ItemState, ReleaseAction> = {
+  已进集成: "skip",
+  无冲突: "merge",
+  有冲突: "resolve",
+  未能试合: "recheck",
+  未完成: "defer",
+  无法合并: "fix",
+};
 
-/** 合并单草稿：frontmatter 机器段（M4 读取）+ 人读表（同一份内容） */
-export function renderReleasePlan(projectName: string, p: ReleasePreview, now: Date): string {
-  const fm = {
-    heliu: "release-plan",
-    schema: 1,
-    project: projectName,
-    milestone: p.milestone.id,
-    status: "草稿",
-    generated_at: now.toISOString(),
-    generated_by: "heliu board（M3 预演，未执行任何合并）",
-    scanned_at: p.generatedAt,
-    repos: p.repos.map((r) => ({
-      repo: r.repo,
-      main: r.main,
-      main_sha: r.mainSha,
-      integration: r.integration,
-      integration_sha: r.integrationSha,
-    })),
-    items: p.items.map((x) => ({
-      order: x.order,
-      feature: x.id,
-      title: x.title,
-      tier: x.tier,
-      action: x.action,
-      decision: defaultDecision(x),
-      bindings: x.bindings.map((b) => ({
-        repo: b.repo,
-        branch: b.branch,
-        sha: b.sha,
-        merged_state: b.mergedState,
-        target: b.precheckTarget,
-        conflict_files: b.conflictFiles,
-        conflicts: b.conflicts,
-      })),
-    })),
-    deferred: p.deferred,
-  };
-  const out: string[] = [];
-  out.push(`---\n${YAML.stringify(fm, { lineWidth: 0 })}---`, "");
-  out.push(`# 合并单草稿 · ${p.milestone.id}${p.milestone.title ? ` ${p.milestone.title}` : ""}`, "");
-  out.push(`> **仅预演，未执行任何合并**（执行在 M4：\`heliu release run ${p.milestone.id}\`）。生成：heliu 看板 · ${localTime(now)} · 项目 ${projectName}。`);
-  out.push("> 决定以上方 frontmatter 各条的 `decision` 为准（并入 / 顺延 / 待定）；下表是同一份内容的人读视图。", "");
-  out.push(
-    `共 ${p.items.length} 项：已进集成 ${p.counts.in_integration} · 无冲突 ${p.counts.clean} · 有冲突 ${p.counts.conflict} · 未能试合 ${p.counts.precheck_failed} · 未完成 ${p.counts.unfinished}`,
-    "",
-  );
-  out.push("## 预演时的引用位置（M4 执行前校验，变了就停）", "", "| 仓库 | 主线 | 主线提交 | 集成分支 | 集成提交 |", "|---|---|---|---|---|");
-  for (const r of p.repos) out.push(`| ${cell(r.repoLabel)} | ${cell(r.main)} | ${r.mainSha?.slice(0, 10) ?? "—"} | ${cell(r.integration ?? "（无）")} | ${r.integrationSha?.slice(0, 10) ?? "—"} |`);
-  out.push("", "## 建议顺序", "", "| 顺序 | 决定 | 功能 | 仓库 · 分支 | 三档状态 | 试合冲突 | 建议动作 |", "|---|---|---|---|---|---|---|");
-  const stateText = (s: ReleaseBinding["mergedState"]) => (s === "in_main" ? "进主线" : s === "in_integration" ? "进集成分支" : s === "unmerged" ? "独立未合并" : "分支不存在");
-  for (const x of p.items) {
-    const where = x.bindings.map((b) => `${b.repoLabel} · ${b.branch}`).join("<br>") || "（无绑定）";
-    const st = x.bindings.map((b) => stateText(b.mergedState)).join("<br>") || "—";
-    const cf = x.bindings.map((b) => (b.precheckState === "failed" ? "未能试合" : b.conflictFiles === null ? "—" : String(b.conflictFiles))).join("<br>") || "—";
-    out.push(`| ${x.order} | ${defaultDecision(x)} | ${cell(`${x.id} ${x.title}`)} | ${cell(where)} | ${st} | ${cf} | ${x.actionText} |`);
-  }
-  const withConflicts = p.items.filter((x) => x.bindings.some((b) => b.conflicts.length));
-  if (withConflicts.length) {
-    out.push("", "## 冲突文件（merge-tree 试合）", "");
-    for (const x of withConflicts) {
-      out.push(`### ${x.id} ${x.title}`);
-      for (const b of x.bindings) if (b.conflicts.length) out.push(`- ${b.repoLabel} · ${b.branch} → ${b.precheckTarget ?? "?"}：${b.conflicts.map((c) => `\`${c}\``).join("、")}`);
-      out.push("");
+/** M4 合并单（buildReleasePlan 的结果）映射成看板预演：档位/动作/决定/原因全部取自合并单，不另算 */
+export function releasePreviewOf(project: ProjectConfig, ledger: Ledger, built: BuildResult, scan: Scan): ReleasePreview {
+  const { plan } = built;
+  const report = scan.result.report;
+  const statusOf = new Map(ledger.load().features.map((f) => [f.id, f.status]));
+  const repoCfg = new Map(project.repos.map((r) => [r.id, r]));
+  const integOf = new Map(plan.repos.map((r) => [r.repo, r.integration_branch]));
+  const items: ReleaseItem[] = plan.items.map((it, i) => {
+    const tier = TIER_OF[it.state];
+    const rr = it.repo ? report.repos.find((r) => r.id === it.repo) : undefined;
+    const fv = rr?.reachable && it.branch ? (rr.branches.find((b) => b.branch === it.branch) ?? null) : null;
+    const pc = precheckStateOf(fv, true);
+    const target = it.repo ? (integOf.get(it.repo) ?? null) : null;
+    const bindings: ReleaseBinding[] =
+      it.repo && it.branch
+        ? [
+            {
+              repo: it.repo,
+              repoLabel: repoCfg.get(it.repo)?.label ?? it.repo,
+              branch: it.branch,
+              exists: !!fv,
+              sha: it.branch_sha,
+              mergedState: fv?.mergedState ?? null,
+              precheckTarget: target,
+              conflictFiles: it.precheck ? it.precheck.conflicts.length : null,
+              conflicts: it.precheck?.conflicts ?? [],
+              precheckError: it.precheck_state === "failed" ? pc.error : null,
+              precheckState: it.precheck_state ?? null,
+              behindIntegration: it.behind,
+              behindMain: fv?.vsMain?.behind ?? null,
+            },
+          ]
+        : [];
+    let reason = it.detail ?? "";
+    if (!reason) {
+      if (it.state === "已进集成") reason = "绑定分支已被集成分支包含";
+      else if (it.state === "无冲突") reason = `试合到 ${target ?? "集成分支"} 无冲突`;
+      else if (it.state === "有冲突") {
+        const pcx = it.precheck;
+        reason = `试合到 ${target ?? "集成分支"} 有 ${pcx?.conflicts.length ?? 0} 个冲突文件${pcx?.union.length ? `（其中 union 文件 ${pcx.union.length} 个，两边都保留）` : ""}`;
+      } else reason = it.state;
     }
+    return {
+      order: i + 1,
+      id: it.feature,
+      title: it.title,
+      status: statusOf.get(it.feature) ?? null,
+      tier,
+      tierText: it.state,
+      action: ACTION_KEY[it.state],
+      actionText: ACTION_TEXT[it.state],
+      decision: it.decision,
+      defaultDecision: it.default_decision,
+      reason,
+      bindings,
+    };
+  });
+  const counts = { in_integration: 0, clean: 0, conflict: 0, precheck_failed: 0, unfinished: 0, unmergeable: 0 } as Record<ReleaseTier, number>;
+  for (const x of items) counts[x.tier]++;
+  // 没配集成分支的仓库：M4 判「无法合并 → 顺延」，在页面顶部说清楚怎么补
+  const warnings: string[] = [];
+  for (const r of project.repos) {
+    if (!plan.items.some((i) => i.repo === r.id)) continue;
+    if (!r.integration) warnings.push(`${r.label}未配置集成分支：该仓库的功能「无法合并 → 顺延」。补上：heliu project add "${r.path}" --integration <分支>，或编辑 project.yaml 的 integration`);
+    else if (!integOf.get(r.id)) warnings.push(`${r.label}的集成分支 ${r.integration} 在本地不存在：该仓库的功能「无法合并 → 顺延」`);
   }
-  const failed = p.items.filter((x) => x.tier === "precheck_failed");
-  if (failed.length) {
-    out.push("", `## 未能试合（${failed.length}，不自动顺延：请重新试合或人工确认）`, "");
-    for (const x of failed) out.push(`- ${x.id} ${x.title}：${x.reason}`);
-  }
-  const deferred = p.items.filter((x) => x.tier === "unfinished");
-  out.push("", `## 预计顺延（${deferred.length}）`, "");
-  if (!deferred.length) out.push("无。");
-  for (const x of deferred) out.push(`- ${x.id} ${x.title}：${x.reason}`);
-  if (p.suggestions.length) {
-    out.push("", `## 台账状态建议（${p.suggestions.length}，heliu 不自动改）`, "");
-    for (const x of p.suggestions) out.push(`- ${x.text}`);
-  }
-  out.push("");
-  return out.join("\n");
+  const loaded = built.loaded;
+  return {
+    milestone: built.milestone,
+    generatedAt: report.generatedAt,
+    scanMs: scan.ms,
+    repos: plan.repos.map((r) => ({ repo: r.repo, repoLabel: r.label, main: r.main, mainSha: r.main_sha, integration: r.integration_branch, integrationSha: r.base_sha })),
+    items,
+    counts,
+    deferred: [...new Set(plan.items.filter((i) => i.decision === "顺延").map((i) => i.feature))],
+    warnings,
+    plan: { file: plan.file, exists: !!loaded, format: loaded?.format ?? null, status: loaded?.status ?? null, kept: built.kept },
+  };
 }

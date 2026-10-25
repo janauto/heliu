@@ -26,6 +26,7 @@ export function ReleasePage({ tick }: { tick: number }) {
     try {
       const r = await api<ReleasePlanResult>("/api/release/plan", { method: "POST", body: { milestone: sel } });
       setPlan({ busy: false, result: r.data, error: null });
+      pv.reload();
     } catch (e) {
       setPlan({ busy: false, result: null, error: (e as Error).message });
     }
@@ -60,6 +61,12 @@ export function ReleasePage({ tick }: { tick: number }) {
       {sel && !d && !pv.error ? <p class="muted">正在试合…</p> : null}
       {d ? (
         <div>
+          {d.warnings.map((w) => (
+            <p class="banner small">
+              <b>注意：</b>
+              {w}
+            </p>
+          ))}
           <div class="counts">
             <span class="chip">
               共 <b>{d.items.length}</b> 项
@@ -77,11 +84,14 @@ export function ReleasePage({ tick }: { tick: number }) {
               未能试合 <b>{d.counts.precheck_failed}</b>
             </span>
             <span class="chip">
-              未完成 <b>{d.counts.unfinished}</b>（预计顺延）
+              未完成 <b>{d.counts.unfinished}</b>
+            </span>
+            <span class="chip" title="分支不存在 / 仓库未配置集成分支等：合并时没法执行，默认顺延">
+              无法合并 <b>{d.counts.unmergeable}</b>
             </span>
           </div>
           <p class="muted small">
-            顺序规则：已进集成（已在集成分支，执行时跳过）→ 试合无冲突（合入）→ 有冲突（冲突少的在前，需解冲突）→ 未能试合（没得到试合结果，请重新试合或人工确认，不自动顺延）→ 未完成（等你回答 / 尚无提交 / 尚未关联开发分支，建议顺延）。
+            与 <span class="mono">heliu 合并 {d.milestone.id} --预演</span> 同一套规则（同一个合并单构建器）。顺序：已进集成（执行时跳过）→ 无冲突（合入）→ 有冲突（只有 union 文件的在前，再按冲突文件数）→ 未能试合（没得到试合结果：待定，不自动顺延）→ 未完成（会话等你回答 / 正在运行，或卡片还是「想法 / 开发中」：默认顺延）→ 无法合并（分支不存在、仓库未配置集成分支等：默认顺延）。
           </p>
           <table class="rel">
             <thead>
@@ -92,6 +102,7 @@ export function ReleasePage({ tick }: { tick: number }) {
                 <th>三档状态</th>
                 <th>试合冲突</th>
                 <th>建议动作</th>
+                <th>决定</th>
               </tr>
             </thead>
             <tbody>
@@ -99,7 +110,7 @@ export function ReleasePage({ tick }: { tick: number }) {
                 <tr>
                   <td data-k="顺序">{x.order}</td>
                   <td data-k="功能">
-                    <b>{x.title}</b> <span class="muted small">{x.id} · 台账 {x.status}</span>
+                    <b>{x.title}</b> <span class="muted small">{x.id}{x.status ? ` · 台账 ${x.status}` : ""}</span>
                     <div class={`tier ${x.tier} small`}>{x.tierText}</div>
                     <div class="muted small">{x.reason}</div>
                   </td>
@@ -144,6 +155,10 @@ export function ReleasePage({ tick }: { tick: number }) {
                   <td data-k="建议动作" class="act">
                     {x.actionText}
                   </td>
+                  <td data-k="决定" class="act" title={x.decision !== x.defaultDecision ? `默认是「${x.defaultDecision}」，合并单里已改成「${x.decision}」` : "默认决定"}>
+                    {x.decision}
+                    {x.decision !== x.defaultDecision ? <span class="muted small">（已改）</span> : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -155,7 +170,7 @@ export function ReleasePage({ tick }: { tick: number }) {
             {d.deferred.length ? (
               <ul class="files">
                 {d.items
-                  .filter((x) => x.tier === "unfinished")
+                  .filter((x) => x.decision === "顺延")
                   .map((x) => (
                     <li>
                       {x.id} {x.title}：<span class="muted">{x.reason}</span>
@@ -167,36 +182,31 @@ export function ReleasePage({ tick }: { tick: number }) {
             )}
             <p class="muted small">顺延 = 合并时没合完的功能挪到下一版并标「从 {d.milestone.id} 顺延」（由终端 heliu 合并 执行，不会静默丢弃）。</p>
           </div>
-          {d.suggestions.length ? (
-            <>
-              <h2>台账状态建议（{d.suggestions.length}）</h2>
-              <div class="panel">
-                <ul class="files">
-                  {d.suggestions.map((s) => (
-                    <li>{s.text}</li>
-                  ))}
-                </ul>
-                <p class="muted small">只是建议，heliu 不会自动改台账状态。</p>
-              </div>
-            </>
-          ) : null}
-
-          <h2>合并单草稿</h2>
+          <h2>合并单</h2>
           <div class="panel">
             <p>
-              把上面的预演写成 <span class="mono">releases/{d.milestone.id}.md</span>（机器可读的 frontmatter + 人读表格，默认决定：已进集成/无冲突且台账「待合并」= 并入，其余无冲突、有冲突、未能试合 = 待定，未完成 = 顺延）。
-              <b>不会执行任何合并。</b>
+              <span class="mono">{d.plan.file}</span>：
+              {d.plan.exists
+                ? d.plan.format === "board"
+                  ? "现在是旧版看板草稿（不能直接执行），生成合并单时会先备份再覆盖。"
+                  : `已存在 · ${d.plan.status ?? "草稿"}${d.plan.kept ? ` · 上面的决定保留了你改过的 ${d.plan.kept} 项` : ""}`
+                : "还没有。"}
+            </p>
+            <p>
+              「生成合并单」= 在终端运行 <span class="mono">heliu 合并 {d.milestone.id} --预演</span>：写同一个文件、同一格式（保留你改过的决定），之后可以 <span class="mono">heliu release set</span> 改决定、
+              <span class="mono">heliu 合并 {d.milestone.id}</span> 在终端里逐条确认执行。<b>看板不会执行任何合并。</b>
             </p>
             <button class="btn primary" onClick={makePlan} disabled={plan.busy || !d.items.length}>
-              {plan.busy ? "生成中…" : "生成合并单草稿"}
+              {plan.busy ? "生成中…" : d.plan.exists && d.plan.format !== "board" ? "刷新合并单" : "生成合并单"}
             </button>
             {plan.result ? (
               <p class="ok">
-                已写入：<span class="mono">{plan.result.file}</span>（{plan.result.items} 项，预计顺延 {plan.result.deferred}）
+                已写入：<span class="mono">{plan.result.file}</span>（{plan.result.items} 项 · 状态 {plan.result.status} · 预计顺延 {plan.result.deferred} 张卡
+                {plan.result.kept ? ` · 保留了你改过的 ${plan.result.kept} 项决定` : ""}）
                 {plan.result.backup ? (
                   <>
                     <br />
-                    <span class="muted small">旧草稿已备份到 {plan.result.backup}</span>
+                    <span class="muted small">旧的看板草稿已备份到 {plan.result.backup}</span>
                   </>
                 ) : null}
               </p>

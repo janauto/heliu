@@ -5,19 +5,19 @@
  * 安全（Host、Content-Type）/ 前端打包与首页 / 被管理仓库零写入（整棵目录 stat 快照）。
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import YAML from "yaml";
-import type { BaselineData, BoardCard, FeaturesData, HygieneData, OverviewData, ReleaseBinding, ReleasePlanResult, ReleasePreview } from "../src/board/api-types.ts";
+import type { BaselineData, BoardCard, FeaturesData, HygieneData, OverviewData, ReleasePlanResult, ReleasePreview } from "../src/board/api-types.ts";
 import { ensureWebBuild } from "../src/board/build.ts";
-import { releaseItem } from "../src/board/data.ts";
 import { createBoardApp, debugLogger } from "../src/board/server.ts";
 import { summarizePrecheck } from "../src/core/todo.ts";
 import { claudePrompt } from "../web/prompt.ts";
 import { Ledger } from "../src/core/ledger.ts";
-import { heliuPaths } from "../src/core/paths.ts";
-import { addRepoToProject, loadProject, projectFile, stringifyProject } from "../src/core/project.ts";
+import { heliuPaths, type HeliuPaths } from "../src/core/paths.ts";
+import { addRepoToProject, loadProject, projectFile, stringifyProject, type ProjectConfig } from "../src/core/project.ts";
+import { buildReleasePlan, setPlanDecision } from "../src/core/release.ts";
+import { ACTION_TEXT, loadPlan, TIER_OF } from "../src/core/release-plan.ts";
 import type { ReconcileReport, TodoBinding, TodoItem, TodoReport } from "../src/types.ts";
 import { B, buildFixture, type Fixture } from "./helpers/fixture.ts";
 
@@ -26,6 +26,8 @@ let ledgerDir: string;
 let dist: string;
 let app: ReturnType<typeof createBoardApp>["app"];
 let before: string;
+let paths: HeliuPaths;
+let project: ProjectConfig;
 
 /** 被管理仓库整棵目录（含 .git、.claude/worktrees 下的各 worktree）的 stat 快照 */
 function treeSnapshot(root: string): string {
@@ -62,19 +64,19 @@ const cardFile = (id: string) => {
 
 beforeAll(async () => {
   fx = buildFixture();
-  const paths = heliuPaths({ ...process.env, ...fx.env });
+  paths = heliuPaths({ ...process.env, ...fx.env });
   const reg = await addRepoToProject(paths, { path: fx.repo, name: "演示", integration: "integ" });
   // 台账放在仓库外（真实项目也是这样配置），这样「被管理仓库零写入」可以对整棵目录做快照
   ledgerDir = join(fx.root, "台账 目录");
   writeFileSync(projectFile(paths, "演示"), stringifyProject("演示", reg.project.repos, { ledger: ledgerDir }));
-  const project = loadProject(paths, "演示");
+  project = loadProject(paths, "演示");
   const L = Ledger.of(project);
   const bind = (branch: string) => [{ repo: reg.repo.id, branch, worktree: null, session: null, pr: null }];
   L.addFeature({ title: "已进集成的功能", bindings: bind(B.inInteg), status: "开发中" }); // F-0001
   L.addFeature({ title: "EPP 网关", bindings: bind(B.standalone), status: "待合并" }); // F-0002
-  L.addFeature({ title: "冲突地改 README", bindings: bind(B.conflict) }); // F-0003
+  L.addFeature({ title: "冲突地改 README", bindings: bind(B.conflict), status: "待合并" }); // F-0003
   L.addFeature({ title: "只是个想法" }); // F-0004
-  L.addFeature({ title: "老分支调研", bindings: bind(B.behind) }); // F-0005
+  L.addFeature({ title: "老分支调研", bindings: bind(B.behind), status: "待合并" }); // F-0005
   dist = mkdtempSync(join(tmpdir(), "heliu-dist-"));
   ({ app } = createBoardApp({ paths, project, distDir: dist }));
   before = treeSnapshot(fx.repo);
@@ -239,41 +241,74 @@ describe("写台账", () => {
   });
 });
 
-describe("合并预演与合并单草稿", () => {
-  test("preview 顺序：已进集成 → 无冲突 → 有冲突 → 未完成", async () => {
+describe("合并预演与合并单（M4 合并单构建器，看板与 CLI 同一套规则）", () => {
+  const RANK = { in_integration: 0, clean: 1, conflict: 2, precheck_failed: 3, unfinished: 4, unmergeable: 5 } as const;
+
+  test("preview：档位/动作/决定取自 M4 合并单，顺序 已进集成 → 无冲突 → 有冲突 → 未能试合 → 未完成 → 无法合并", async () => {
     const r = await get<ReleasePreview>("/api/release/preview?milestone=vNext");
     expect(r.status).toBe(200);
-    const items = r.body.data.items;
-    const rank = { in_integration: 0, clean: 1, conflict: 2, precheck_failed: 3, unfinished: 4 } as const;
-    for (let i = 1; i < items.length; i++) expect(rank[items[i]!.tier]).toBeGreaterThanOrEqual(rank[items[i - 1]!.tier]);
+    const d = r.body.data;
+    const items = d.items;
+    for (let i = 1; i < items.length; i++) expect(RANK[items[i]!.tier]).toBeGreaterThanOrEqual(RANK[items[i - 1]!.tier]);
     expect(items.map((x) => x.order)).toEqual(items.map((_, i) => i + 1));
-    const tierOf = (id: string) => items.find((x) => x.id === id)!.tier;
-    expect(tierOf("F-0001")).toBe("in_integration");
-    expect(tierOf("F-0002")).toBe("clean");
-    expect(tierOf("F-0003")).toBe("conflict");
-    expect(tierOf("F-0004")).toBe("unfinished");
-    expect(items.find((x) => x.id === "F-0003")!.actionText).toBe("需解冲突");
-    expect(r.body.data.deferred).toContain("F-0004");
-    expect(r.body.data.repos[0]!.integrationSha).toMatch(/^[0-9a-f]{40}$/);
+    const it = (id: string) => items.find((x) => x.id === id)!;
+    expect([it("F-0001").tier, it("F-0001").action]).toEqual(["in_integration", "skip"]);
+    expect([it("F-0005").tier, it("F-0005").decision]).toEqual(["clean", "并入"]); // 待合并 + 试合无冲突
+    expect([it("F-0003").tier, it("F-0003").action, it("F-0003").actionText]).toEqual(["conflict", "resolve", "合入（需解冲突）"]);
+    expect(it("F-0003").bindings[0]!.conflicts).toEqual(["README.md"]);
+    expect([it("F-0002").tier, it("F-0002").reason]).toEqual(["unfinished", "会话正在运行"]); // M4：绑定会话在跑 → 未完成
+    expect([it("F-0004").tier, it("F-0004").decision, it("F-0004").reason]).toEqual(["unmergeable", "顺延", "没有绑定分支"]);
+    expect(d.deferred).toEqual(expect.arrayContaining(["F-0002", "F-0004"]));
+    expect(d.repos[0]!.integrationSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(d.warnings).toEqual([]);
+    expect(d.plan.exists).toBe(false); // 预演不写文件
+    expect(existsSync(join(ledgerDir, "releases", "vNext.md"))).toBe(false);
   }, 30_000);
 
-  test("plan：写 releases/vNext.md（frontmatter + 人读表，未执行合并）；再写一次备份旧稿", async () => {
+  test("与 buildReleasePlan（heliu 合并 --预演 用的同一个函数）逐项一致", async () => {
+    const r = await get<ReleasePreview>("/api/release/preview?milestone=vNext");
+    const built = await buildReleasePlan(project, paths, "vNext");
+    const mine = r.body.data.items.map((x) => [x.id, x.bindings[0]?.branch ?? null, x.tierText, x.tier, x.actionText, x.decision]);
+    const m4 = built.plan.items.map((i) => [i.feature, i.branch, i.state, TIER_OF[i.state], ACTION_TEXT[i.state], i.decision]);
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine).toEqual(m4);
+  }, 30_000);
+
+  test("未配置集成分支的仓库：M4 口径「无法合并 → 顺延」，预演页顶部给补救提示", async () => {
+    // 同一仓库、同一台账，另登记一个没配 integration 的项目（只读预演，不写文件）
+    mkdirSync(join(paths.projectsDir, "无集成"), { recursive: true });
+    writeFileSync(projectFile(paths, "无集成"), stringifyProject("无集成", project.repos.map((x) => ({ ...x, integration: null })), { ledger: ledgerDir }));
+    const { app: app2 } = createBoardApp({ paths, project: loadProject(paths, "无集成"), distDir: dist });
+    const r = await app2.request("/api/release/preview?milestone=vNext");
+    const d = ((await r.json()) as { data: ReleasePreview }).data;
+    const f3 = d.items.find((x) => x.id === "F-0003")!;
+    expect([f3.tier, f3.tierText, f3.decision, f3.reason]).toEqual(["unmergeable", "无法合并", "顺延", "仓库未配置集成分支（project.yaml integration）"]);
+    expect(d.warnings).toHaveLength(1);
+    expect(d.warnings[0]).toContain(`${project.repos[0]!.label}未配置集成分支`);
+    expect(d.warnings[0]).toContain("--integration");
+    expect(d.deferred).toContain("F-0003");
+  }, 30_000);
+
+  test("plan：写 M4 合并单（schema 2，与 CLI 同一个文件）；改过的决定刷新后保留，看板预演也显示", async () => {
     const r = await send<ReleasePlanResult>("POST", "/api/release/plan", { milestone: "vNext" });
     expect(r.status).toBe(201);
     expect(r.body.data.file).toBe(join(ledgerDir, "releases", "vNext.md"));
-    const text = readFileSync(r.body.data.file, "utf8");
-    expect(text).toContain("仅预演，未执行任何合并");
-    const fm = YAML.parse(text.split("\n---\n")[0]!.replace(/^---\n/, "")) as { status: string; items: Array<{ feature: string; decision: string; tier: string }>; repos: Array<{ integration_sha: string }> };
-    expect(fm.status).toBe("草稿");
-    expect(fm.items[0]!.tier).toBe("in_integration");
-    expect(fm.items.find((x) => x.feature === "F-0002")!.decision).toBe("并入"); // 无冲突 + 台账待合并
-    expect(fm.items.find((x) => x.feature === "F-0003")!.decision).toBe("待定");
-    expect(fm.items.find((x) => x.feature === "F-0004")!.decision).toBe("顺延");
-    expect(fm.repos[0]!.integration_sha).toMatch(/^[0-9a-f]{40}$/);
-    expect(text).not.toMatch(/^- \[ \]/m); // 不写 Obsidian 复选框
+    expect(r.body.data.status).toBe("草稿");
+    expect(r.body.data.backup).toBeNull();
+    const plan = loadPlan(ledgerDir, "vNext")!;
+    expect(plan.format).toBe("m4");
+    expect(plan.items.find((i) => i.feature === "F-0003")!.decision).toBe("并入");
+    expect(plan.repos[0]!.base_sha).toMatch(/^[0-9a-f]{40}$/);
+    expect(readFileSync(r.body.data.file, "utf8")).not.toMatch(/^- \[ \]/m); // 不写 Obsidian 复选框
+    // CLI 那边改决定（heliu release set）→ 看板预演与再次生成都保留
+    setPlanDecision(project, "vNext", "F-0003", "顺延");
+    const p = await get<ReleasePreview>("/api/release/preview?milestone=vNext");
+    const f3 = p.body.data.items.find((x) => x.id === "F-0003")!;
+    expect([f3.decision, f3.defaultDecision]).toEqual(["顺延", "并入"]);
+    expect(p.body.data.plan).toMatchObject({ exists: true, format: "m4", status: "草稿", kept: 1 });
     const again = await send<ReleasePlanResult>("POST", "/api/release/plan", { milestone: "vNext" });
-    expect(again.body.data.backup).not.toBeNull();
-    expect(existsSync(again.body.data.backup!)).toBe(true);
+    expect(again.body.data.kept).toBe(1);
+    expect(loadPlan(ledgerDir, "vNext")!.items.find((i) => i.feature === "F-0003")!.decision).toBe("顺延");
   }, 30_000);
 });
 
@@ -350,31 +385,6 @@ describe("试合三态汇总", () => {
     const skipped = summarizePrecheck({ precheck: false, groups: groups([ti("E", "behind", [tb({ precheck: "skipped" })]), merged]) });
     expect([skipped.status, skipped.conflicts, skipped.unchecked]).toEqual(["skipped", null, 1]);
   });
-
-  test("预演：未能试合单独一档（重新试合或人工确认），不归入顺延；等你回答仍是未完成", () => {
-    const rb = (p: Partial<ReleaseBinding>): ReleaseBinding => ({
-      repo: "docs",
-      repoLabel: "文档仓",
-      branch: "b",
-      exists: true,
-      sha: null,
-      mergedState: "unmerged",
-      precheckTarget: null,
-      conflictFiles: null,
-      conflicts: [],
-      precheckError: "无法建立写保护沙箱",
-      precheckState: "failed",
-      behindIntegration: 102,
-      behindMain: 0,
-      ...p,
-    });
-    const x = releaseItem(ti("F-1", "behind", []), "behind", [rb({})]);
-    expect([x.tier, x.action, x.actionText]).toEqual(["precheck_failed", "recheck", "重新试合或人工确认"]);
-    expect(x.reason).toContain("无法建立写保护沙箱");
-    const y = releaseItem(ti("F-2", "blocked", []), "blocked", [rb({})]);
-    expect(y.tier).toBe("unfinished");
-    expect(y.reason).toContain("另有分支未能试合");
-  });
 });
 
 describe("建不了写保护沙箱时（HELIU_NO_SANDBOX=1，Codex 第 1 轮场景）", () => {
@@ -411,13 +421,18 @@ describe("建不了写保护沙箱时（HELIU_NO_SANDBOX=1，Codex 第 1 轮场�
     expect(ov.columns.find((c) => c.key === "vNext")!.precheckFailed).toBe(3);
   });
 
-  test("合并预演：三张进「未能试合」档（不顺延），顺序在有冲突之后、未完成之前", () => {
+  test("合并预演（M4 口径）：试合没结果的进「未能试合」档、默认待定不顺延；会话在跑的仍是未完成", () => {
     const p = probe["/api/release/preview?milestone=vNext"]!.data as ReleasePreview;
-    const tierOf = (id: string) => p.items.find((x) => x.id === id)!.tier;
-    expect(["F-0002", "F-0003", "F-0005"].map(tierOf)).toEqual(["precheck_failed", "precheck_failed", "precheck_failed"]);
-    expect(tierOf("F-0001")).toBe("in_integration");
-    expect(p.counts.precheck_failed).toBe(3);
-    for (const id of ["F-0002", "F-0003", "F-0005"]) expect(p.deferred).not.toContain(id);
+    const item = (id: string) => p.items.find((x) => x.id === id)!;
+    expect(["F-0003", "F-0005"].map((id) => [item(id).tier, item(id).action, item(id).defaultDecision])).toEqual([
+      ["precheck_failed", "recheck", "待定"],
+      ["precheck_failed", "recheck", "待定"],
+    ]);
+    expect(item("F-0005").bindings[0]!.precheckError).toContain("沙箱");
+    expect(item("F-0002").tier).toBe("unfinished");
+    expect(item("F-0001").tier).toBe("in_integration");
+    expect(p.counts.precheck_failed).toBe(2);
+    expect(p.deferred).not.toContain("F-0005");
     const tiers = p.items.map((x) => x.tier);
     expect(tiers.lastIndexOf("precheck_failed")).toBeLessThan(tiers.indexOf("unfinished"));
   });

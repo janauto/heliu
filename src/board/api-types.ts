@@ -247,12 +247,12 @@ export interface BaselineData {
   elapsedMs: number;
 }
 
-/* ───────────── 合并预演 ───────────── */
+/* ───────────── 合并预演（M5 起直接映射 M4 合并单，规则只有一套） ───────────── */
 
-/** 建议顺序：已进集成 → 无冲突 → 有冲突 → 未能试合 → 未完成 */
-export type ReleaseTier = "in_integration" | "clean" | "conflict" | "precheck_failed" | "unfinished";
-/** 建议动作：跳过（已在集成分支）/ 合入 / 需解冲突 / 重新试合或人工确认 / 顺延 */
-export type ReleaseAction = "skip" | "merge" | "resolve" | "recheck" | "defer";
+/** 档位 = M4 合并单的 PlanTier：已进集成 → 无冲突 → 有冲突 → 未能试合 → 未完成 → 无法合并 */
+export type ReleaseTier = "in_integration" | "clean" | "conflict" | "precheck_failed" | "unfinished" | "unmergeable";
+/** 建议动作：跳过（已在集成分支）/ 合入 / 合入需解冲突 / 重新试合或人工确认 / 顺延 / 先补分支或配置 */
+export type ReleaseAction = "skip" | "merge" | "resolve" | "recheck" | "defer" | "fix";
 
 export interface ReleaseBinding {
   repo: string;
@@ -270,19 +270,23 @@ export interface ReleaseBinding {
   behindMain: number | null;
 }
 
+/** 合并单的一项（M4 按「功能卡 × 绑定分支」一项） */
 export interface ReleaseItem {
   order: number;
   id: string;
   title: string;
-  status: FeatureStatus;
+  /** 台账状态（卡片已删时为 null） */
+  status: FeatureStatus | null;
   tier: ReleaseTier;
+  /** M4 的状态名：已进集成 / 无冲突 / 有冲突 / 未能试合 / 未完成 / 无法合并 */
   tierText: string;
   action: ReleaseAction;
   actionText: string;
-  /** 为什么进这一档（事实） */
+  /** 合并单里的决定（并入 / 顺延 / 等它 / 不并 / 待定），已保留你上次改过的 */
+  decision: string;
+  defaultDecision: string;
+  /** 为什么是这一档（事实，取自合并单 detail） */
   reason: string;
-  needsAction: string | null;
-  todoGroup: TodoGroupKey;
   bindings: ReleaseBinding[];
 }
 
@@ -291,8 +295,9 @@ export interface ReleaseRepoRef {
   repoLabel: string;
   main: string;
   mainSha: string | null;
+  /** null = 未配置集成分支或本地不存在 */
   integration: string | null;
-  /** 预演时集成分支所在提交（M4 执行前校验 old_sha） */
+  /** 预演时集成分支所在提交（M4 执行前校验 base_sha） */
   integrationSha: string | null;
 }
 
@@ -303,18 +308,23 @@ export interface ReleasePreview {
   repos: ReleaseRepoRef[];
   items: ReleaseItem[];
   counts: Record<ReleaseTier, number>;
-  /** 预计顺延（未完成档）的卡号 */
+  /** 决定为「顺延」的卡号 */
   deferred: string[];
-  /** M2 的台账状态建议（如「是否把 F-0003 标为已合入？」），只展示 */
-  suggestions: Array<{ id: string; text: string }>;
+  /** 页面顶部提示，如「App 仓未配置集成分支：…」 */
+  warnings: string[];
+  /** 磁盘上的合并单（<台账>/releases/<里程碑>.md）；看板预演本身不写它 */
+  plan: { file: string; exists: boolean; format: "m4" | "board" | null; status: string | null; kept: number };
 }
 
 export interface ReleasePlanResult {
   file: string;
-  /** 覆盖前的旧草稿备份位置 */
+  /** 旧的看板草稿（schema 1）备份位置 */
   backup: string | null;
   items: number;
   deferred: number;
+  /** 刷新时保留了几项你改过的决定 */
+  kept: number;
+  status: string;
 }
 
 /* ───────────── sync（POST /api/sync，结构同 src/core/sync.ts 的 SyncResult，前端只用这些字段） ───────────── */

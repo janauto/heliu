@@ -253,3 +253,4 @@ button.link { border: none; background: none; color: var(--accent); cursor: poin
 .warn { color: var(--yellow); }
 .tag.precheck_failed { color: var(--yellow); border-color: var(--yellow); }
 .tier.precheck_failed { color: var(--yellow); }
+.tier.unmergeable { color: var(--gray); }
