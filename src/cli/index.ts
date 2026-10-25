@@ -4,6 +4,7 @@
  * M2（台账）：heliu init | feature add|list|reserve|bind|status|accept|rename | milestone add|list|todo|freeze|rename
  *            | sync [--dry-run] | whereami | mcp
  * 中文别名：新点子 "<标题>" [--预约 v1.2] · 待办 [v1.2|下一版] · 预约 F-0003 v1.3 · 我在哪
+ * M3（看板）：heliu board [--port 7788] [--open|--no-open]
  * 全局：--project <name>  --cwd <dir>  --json  --precheck  --dirty  --timeout <ms>  --wide
  */
 import { Command, Option } from "commander";
@@ -13,6 +14,7 @@ import { DEFAULT_TIMEOUT_MS } from "../core/git.ts";
 import { heliuPaths } from "../core/paths.ts";
 import { addRepoToProject, listProjectNames, loadProject, ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
 import { reconcile } from "../core/reconcile.ts";
+import { TODO_GROUP_DEFS } from "../core/todo.ts";
 import { SCHEMA_VERSION, type JsonEnvelope, type MergedState, type ProjectRef, type ScanOptions } from "../types.ts";
 import {
   opFeatureAdd,
@@ -350,7 +352,11 @@ async function todoAction(ms: string | undefined, _o: unknown, cmd: Command): Pr
   const g = globals(cmd);
   emit(g, "milestone.todo", await opMilestoneTodo(opCtx(g), ms ?? "下一版", { precheck: !!g.precheck }));
 }
-milestoneCmd.command("todo [版本]").description("某一版还欠什么（默认下一版），按 等你回答/有冲突/可合并/落后/停滞/开发中/无绑定 分组").action(todoAction);
+// 组名取自分组函数本身（src/core/todo.ts），改名时帮助文案自动跟上
+milestoneCmd
+  .command("todo [版本]")
+  .description(`某一版还欠什么（默认下一版），按 ${TODO_GROUP_DEFS.map((d) => d.title).join("/")} 分组（可合并再细分 已进主线/已进集成分支/试合无冲突）`)
+  .action(todoAction);
 program.command("待办 [版本]").description("= milestone todo：某一版还欠什么（默认 下一版）").action(todoAction);
 
 milestoneCmd
@@ -383,6 +389,21 @@ async function whereamiAction(_o: unknown, cmd: Command): Promise<void> {
 }
 program.command("whereami").description("我在哪：当前目录的仓库/分支/功能卡/预约版本/落后数/会话（--cwd 指定目录）").action(whereamiAction);
 program.command("我在哪").description("= whereami").action(whereamiAction);
+
+program
+  .command("board")
+  .description("中文看板（本机网页，只监听 127.0.0.1）：总览 / 版本列 / 卫生 / 会话 / 合并预演；合并只预演不执行")
+  .option("--port <port>", "端口", "7788")
+  .option("--open", "启动后用浏览器打开（默认）")
+  .option("--no-open", "不自动打开浏览器")
+  .action(async (o: { port?: string; open?: boolean }, cmd: Command) => {
+    const g = globals(cmd);
+    const port = Number(o.port ?? 7788);
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new ProjectError(`端口不合法：${o.port}`);
+    const { runBoard } = await import("../board/server.ts");
+    // 看板一直运行到 Ctrl+C；地址等提示直接打印（不进命令结束时才写出的缓冲）
+    await runBoard({ paths: heliuPaths(), projectName: g.project, cwd: g.cwd ?? process.cwd(), port, open: o.open !== false });
+  });
 
 program
   .command("mcp")

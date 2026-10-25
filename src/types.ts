@@ -295,8 +295,8 @@ export type AcceptanceLevel = (typeof ACCEPTANCE_LEVELS)[number];
 export const MILESTONE_STATUSES = ["规划中", "冻结", "合并中", "已发布"] as const;
 export type MilestoneStatus = (typeof MILESTONE_STATUSES)[number];
 
-/** 功能卡来源 */
-export type FeatureSource = "session" | "cli" | "mcp" | "hook" | "sync";
+/** 功能卡来源（board = M3 看板登记，追加） */
+export type FeatureSource = "session" | "cli" | "mcp" | "hook" | "sync" | "board";
 
 export interface FeatureBinding {
   repo: string;
