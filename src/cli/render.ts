@@ -9,7 +9,6 @@ import type {
   HygieneKind,
   ReconcileReport,
   RepoReport,
-  SessionRef,
   SessionView,
 } from "../types.ts";
 import { SESSION_STATUS_LABEL } from "../core/sessions.ts";
@@ -180,10 +179,10 @@ export interface SummaryOptions {
   sessions?: SessionView[];
 }
 
-/** 等你处理的文案：needs_action 优先，其次 status_detail */
-function needsText(s: SessionRef, byId: Map<string, SessionView>): string {
-  return s.needsAction?.trim() || byId.get(s.sessionId)?.statusDetail?.trim() || "（会话未写明需要什么，见 heliu sessions）";
-}
+/** 摘要里每组最多列几条 */
+export const SUMMARY_LIMIT = 8;
+/** ④ 不是全集时最多列几条 */
+export const BEHIND_LIMIT = 5;
 
 /**
  * 单行「标签 · 尾部」：不折行，超宽先截标签，标签已短仍超宽再中间截断尾部（分支名保留 hash 后缀）。
@@ -203,86 +202,185 @@ function behindBase(r: RepoReport, b: FeatureView): number {
   return (r.integration ? b.vsIntegration?.behind : b.vsMain?.behind) ?? 0;
 }
 
-function renderRepoSummary(r: RepoReport, opts: Required<Pick<SummaryOptions, "width">> & SummaryOptions, byId: Map<string, SessionView>): string[] {
-  const out: string[] = [];
-  const W = opts.width;
-  const feats = r.branches.filter((b) => b.role !== "main");
+const independentOf = (r: RepoReport) => r.branches.filter((b) => b.role === "feature" && b.mergedState === "unmerged");
+const reachable = (report: ReconcileReport) => report.repos.filter((r) => r.reachable && r.health);
 
-  // ① 等你处理：关联会话状态为「等你」的分支，needs_action 全文折行
-  const waiting = r.branches
-    .map((b) => ({ b, ss: b.sessions.filter((s) => s.status === "blocked") }))
-    .filter((x) => x.ss.length > 0);
-  out.push(`  ① 等你处理（${waiting.length}）${waiting.length ? "" : "：无"}`);
-  for (const { b, ss } of waiting) {
-    // 目录被复用（目录名≠分支名）时补上目录，方便找到工作区
-    const reused = b.worktree && !b.worktree.isMain && b.worktree.dirName !== (b.branch.split("/").pop() ?? b.branch);
-    out.push(fitLine("    - ", b.label, b.branch + (reused ? `（目录 ${b.worktree?.dirName}）` : ""), W, opts.wide));
-    for (const s of ss) {
-      if (s.title && s.title !== b.label) out.push(...hangingWrap("      会话：", s.title, W));
-      out.push(...hangingWrap("      需要你：", needsText(s, byId), W));
+interface WaitingItem {
+  repo: string;
+  title: string;
+  needs: string;
+  at: string | null;
+}
+
+/** 等你处理：有会话明细时按会话（含未关联分支的会话），否则从分支挂的会话里去重 */
+function waitingItems(report: ReconcileReport, sessions: SessionView[] | undefined): WaitingItem[] {
+  const repoLabel = new Map(report.repos.map((r) => [r.id, r.label]));
+  const items: WaitingItem[] = [];
+  if (sessions) {
+    for (const s of sessions) {
+      if (s.status !== "blocked") continue;
+      items.push({
+        repo: repoLabel.get(s.repo) ?? s.repo,
+        title: s.title ?? "无标题会话",
+        needs: s.needsAction?.trim() || s.statusDetail?.trim() || "（会话未写明需要什么，见 heliu sessions）",
+        at: s.lastActivityAt,
+      });
+    }
+  } else {
+    const seen = new Set<string>();
+    for (const r of report.repos) {
+      for (const b of r.branches) {
+        for (const s of b.sessions) {
+          if (s.status !== "blocked" || seen.has(s.sessionId)) continue;
+          seen.add(s.sessionId);
+          items.push({ repo: r.label, title: s.title ?? b.label, needs: s.needsAction?.trim() || "（会话未写明需要什么，见 heliu sessions）", at: s.lastActivityAt });
+        }
+      }
     }
   }
+  return items.sort((a, b) => (b.at ?? "").localeCompare(a.at ?? ""));
+}
+
+/**
+ * 「现在最该做的」：按严重度依次检查，各一句，最多 3 句。
+ * 集成分支未并回 ≥1 天 > 等你 ≥1 > 独立未合并 ≥1 > 主线与远端分叉 > 孤儿/锁文件警告
+ */
+export function topActions(report: ReconcileReport, waitingCount: number): string[] {
+  const repos = reachable(report);
+  const out: string[] = [];
+  const integ = repos.filter((r) => {
+    const i = r.health!.integration;
+    return !!i && i.exists && !i.mergedIntoMain && (i.unmergedDays ?? 0) >= 1;
+  });
+  if (integ.length === 1) {
+    const r = integ[0]!;
+    const i = r.health!.integration!;
+    out.push(`${r.label}集成分支领先主线 ${i.aheadOfMain ?? "?"} 提交、${i.unmergedDays} 天未并回 → 先把它并回 ${r.main}`);
+  } else if (integ.length > 1) {
+    const parts = integ.map((r) => `${r.label}（领先 ${r.health!.integration!.aheadOfMain ?? "?"}、${r.health!.integration!.unmergedDays} 天）`);
+    out.push(`集成分支未并回主线：${parts.join("、")} → 先把它们并回主线`);
+  }
+  if (waitingCount > 0) out.push(`${waitingCount} 个会话在等你拍板（见 ①，全部：heliu sessions）`);
+  const indep = repos.map((r) => ({ r, n: independentOf(r).length })).filter((x) => x.n > 0);
+  const indepTotal = indep.reduce((a, x) => a + x.n, 0);
+  if (indepTotal > 0) {
+    const detail = repos.length > 1 ? `（${indep.map((x) => `${x.r.label} ${x.n}`).join(" / ")}）` : "";
+    out.push(`${indepTotal} 条独立分支未进任何版本${detail}，M2 起可预约`);
+  }
+  for (const r of repos) {
+    const m = r.health!.mainVsRemote;
+    if (m && (m.ahead ?? 0) > 0 && (m.behind ?? 0) > 0) {
+      out.push(`${r.label}主线与 ${m.remoteRef.replace(/^refs\/remotes\//, "")} 分叉（↑${m.ahead} ↓${m.behind}）→ 先对齐远端`);
+    }
+  }
+  for (const r of repos) {
+    const orphans = r.hygiene.filter((h) => h.kind === "orphan_admin_dir" || h.kind === "prunable_worktree").length;
+    const locks = r.hygiene.filter((h) => h.kind === "index_lock").length;
+    if (orphans || locks) {
+      const what = [orphans ? `${orphans} 个孤儿 worktree 条目` : "", locks ? `${locks} 个残留 index.lock` : ""].filter(Boolean).join("、");
+      out.push(`${r.label}有 ${what}（heliu hygiene 查看，人工确认后清理）`);
+    }
+  }
+  return out.slice(0, 3);
+}
+
+/**
+ * heliu status 默认：一屏行动摘要（项目级，跨仓库合并四组，每组限条数）。
+ * ① 等你处理 ≤8（全文）② 独立未合并 ≤8（按最后提交倒序）③ 计数 + 一句话 ④ 全部落后时一句话，否则 ≤5
+ */
+export function renderStatusSummary(report: ReconcileReport, opts: SummaryOptions = {}): string {
+  const W = opts.width ?? outputWidth();
+  const repos = reachable(report);
+  const multi = report.repos.length > 1;
+  const out: string[] = [renderHeader(report), LEGEND, "健康条", renderHealth(report)];
+  for (const r of report.repos) {
+    for (const w of r.warnings) out.push(`  ! ${r.label}：${w}`);
+    if (r.reachable && r.error) out.push(`  ! ${r.label}：${r.error}`);
+  }
+
+  const waiting = waitingItems(report, opts.sessions);
+  const actions = topActions(report, waiting.length);
+  if (actions.length) {
+    out.push("现在最该做的");
+    actions.forEach((a, i) => out.push(opts.wide ? `  ${i + 1}）${a}` : truncate(`  ${i + 1}）${a}`, W)));
+  }
+
+  // ① 等你处理：全来自同一仓库时不逐条打仓库标记（省宽度、少折行），在标题里说明
+  const waitRepos = [...new Set(waiting.map((w) => w.repo))];
+  const tagEach = multi && waitRepos.length > 1;
+  const where = multi && waitRepos.length === 1 ? `，均在${waitRepos[0]}` : "";
+  out.push(`① 等你处理（${waiting.length}${where}）${waiting.length ? "" : "：无"}`);
+  for (const w of waiting.slice(0, SUMMARY_LIMIT)) out.push(...hangingWrap("  - ", `${tagEach ? `[${w.repo}] ` : ""}${w.title}：${w.needs}`, W));
+  if (waiting.length > SUMMARY_LIMIT) out.push(`  …还有 ${waiting.length - SUMMARY_LIMIT} 条，\`heliu sessions\` 查看`);
 
   // ② 独立未合并
-  const independent = feats.filter((b) => b.role === "feature" && b.mergedState === "unmerged");
-  out.push(`  ② 独立未合并（${independent.length}）${independent.length ? "" : "：无"}`);
-  if (independent.length) {
+  const indep = repos.flatMap((r) => independentOf(r).map((b) => ({ r, b })));
+  indep.sort((x, y) => (y.b.lastCommitAt ?? "").localeCompare(x.b.lastCommitAt ?? ""));
+  const perRepo = multi ? `：${repos.map((r) => `${r.label} ${independentOf(r).length}`).join(" · ")}` : "";
+  out.push(`② 独立未合并（${indep.length}${indep.length ? perRepo : ""}）${indep.length ? "" : "：无"}`);
+  if (indep.length) {
+    const anyInteg = indep.some((x) => x.r.integration);
     const columns: Column[] = [
-      { header: "标签", max: 26 },
-      { header: "分支", max: 44, cut: "middle" },
+      ...(multi ? [{ header: "仓库" } as Column] : []),
+      { header: "标签", max: 24 },
+      { header: "分支", max: 40, cut: "middle" },
       { header: "主线↑/↓", align: "right" },
-      ...(r.integration ? [{ header: "集成↑/↓", align: "right" } as Column] : []),
+      ...(anyInteg ? [{ header: "集成↑/↓", align: "right" } as Column] : []),
       { header: "最后提交" },
     ];
-    const rows = independent.map((b) => [
+    const rows = indep.slice(0, SUMMARY_LIMIT).map(({ r, b }) => [
+      ...(multi ? [r.label] : []),
       b.label,
       b.branch,
       fmtAB(b.vsMain),
-      ...(r.integration ? [fmtAB(b.vsIntegration)] : []),
+      ...(anyInteg ? [r.integration ? fmtAB(b.vsIntegration) : "—"] : []),
       fmtDate(b.lastCommitAt),
     ]);
-    out.push(renderTable(columns, rows, { wide: opts.wide, indent: "    " }));
+    out.push(renderTable(columns, rows, { wide: opts.wide, indent: "  " }));
+    if (indep.length > SUMMARY_LIMIT) out.push(`  …还有 ${indep.length - SUMMARY_LIMIT} 条，\`--full\` 查看`);
   }
 
-  // ③ 已进集成分支待回主线：只给计数 + 一句话
-  const inInteg = feats.filter((b) => b.role === "feature" && b.mergedState === "in_integration").length;
-  const integ = r.health?.integration ?? null;
-  let integLine: string;
-  if (!r.integration) integLine = "未配置集成分支";
-  else if (!integ?.exists) integLine = `集成分支 ${r.integration} 不存在`;
-  else if (integ.mergedIntoMain) integLine = `${inInteg} 条 · 集成分支已并回主线`;
-  else {
-    const days = integ.unmergedDays !== null ? `，${integ.unmergedDays} 天未并回` : "，尚未并回";
-    integLine = `${inInteg} 条 · 集成分支领先主线 ${integ.aheadOfMain ?? "?"}${days}`;
+  // ③ 已进集成分支待回主线：计数 + 一句话
+  const integParts: string[] = [];
+  for (const r of repos) {
+    if (!r.integration) continue;
+    const n = r.branches.filter((b) => b.role === "feature" && b.mergedState === "in_integration").length;
+    const i = r.health!.integration;
+    const who = multi ? `${r.label} ` : "";
+    // 第一句写全「集成分支领先主线 N，M 天未并回」，后面的仓库只写数字，控制在一行内
+    const days = i?.unmergedDays !== null && i?.unmergedDays !== undefined ? `，${i.unmergedDays} 天未并回` : "";
+    if (!i?.exists) integParts.push(`${who}集成分支 ${r.integration} 不存在`);
+    else if (i.mergedIntoMain) integParts.push(`${who}${n} 条（集成分支已并回主线）`);
+    else integParts.push(`${who}${n} 条（集成分支领先主线 ${i.aheadOfMain ?? "?"}${days}）`);
   }
-  out.push(`  ③ 已进集成分支待回主线：${integLine}`);
-
-  // ④ 落后需同步：尚未合入（不在主线、不在集成分支）且相对集成分支（无集成则主线）落后的分支
-  const behind = independent.filter((b) => behindBase(r, b) > 0).sort((a, b) => behindBase(r, b) - behindBase(r, a));
-  const baseName = r.integration ? "集成分支" : "主线";
-  out.push(`  ④ 落后需同步（相对${baseName}，${behind.length} 条）${behind.length ? (behind.length > 5 ? "，落后最多的 5 条：" : "：") : "：无"}`);
-  for (const b of behind.slice(0, 5)) {
-    out.push(fitLine("    - ", b.label, `${b.branch} · ↓${behindBase(r, b)}`, W, opts.wide));
+  {
+    // 一行放得下就一行；放不下则每个仓库一行（不在句子中间折断）
+    const prefix = "③ 已进集成分支待回主线：";
+    const one = prefix + (integParts.length ? integParts.join("；") : "未配置集成分支");
+    if (opts.wide || integParts.length <= 1 || width(one) <= W) out.push(one);
+    else integParts.forEach((p, i) => out.push((i === 0 ? prefix : " ".repeat(width(prefix))) + p));
   }
-  return out;
-}
 
-/** heliu status 默认：行动摘要（健康条 + 每仓库四组） */
-export function renderStatusSummary(report: ReconcileReport, opts: SummaryOptions = {}): string {
-  const W = opts.width ?? outputWidth();
-  const byId = new Map((opts.sessions ?? []).map((s) => [s.sessionId, s]));
-  const out: string[] = [renderHeader(report), LEGEND, "", "健康条", renderHealth(report)];
-  for (const r of report.repos) {
-    out.push("", repoTitle(r));
-    for (const w of r.warnings) out.push(`  ! ${w}`);
-    if (!r.reachable) {
-      out.push(`  ✗ ${r.error ?? "不可达"}，已跳过`);
-      continue;
+  // ④ 落后需同步：已进主线的不算；全部落后时只给一句话
+  const behindLines: string[] = [];
+  for (const r of repos) {
+    const ind = independentOf(r);
+    const behind = ind.filter((b) => behindBase(r, b) > 0).sort((a, b) => behindBase(r, b) - behindBase(r, a));
+    if (!behind.length) continue;
+    const base = r.integration ? "集成分支" : "主线";
+    const who = multi ? r.label : "";
+    if (behind.length === ind.length) {
+      const min = Math.min(...behind.map((b) => behindBase(r, b)));
+      behindLines.push(`  ${who}${who ? " " : ""}${ind.length} 条独立分支全部落后${base}（最少 ↓${min}），合并前需同步基线`);
+    } else {
+      behindLines.push(`  ${who}${who ? " " : ""}${behind.length} 条落后${base}${behind.length > BEHIND_LIMIT ? `，落后最多的 ${BEHIND_LIMIT} 条` : ""}：`);
+      for (const b of behind.slice(0, BEHIND_LIMIT)) behindLines.push(fitLine("    - ", b.label, `${b.branch} · ↓${behindBase(r, b)}`, W, opts.wide));
     }
-    if (r.error) out.push(`  ! ${r.error}`);
-    out.push(...renderRepoSummary(r, { ...opts, width: W }, byId));
   }
-  out.push("", FULL_HINT);
+  out.push(`④ 落后需同步${behindLines.length ? "" : "：无"}`);
+  out.push(...behindLines.map((l) => (opts.wide ? l : truncate(l, W))));
+
+  out.push(FULL_HINT);
   return out.join("\n");
 }
 
@@ -354,8 +452,8 @@ function sessionBlock(s: SessionView, W: number, wide?: boolean): string[] {
 }
 
 /**
- * heliu sessions：默认只列「等你处理」与「运行中」两组并完整显示文案；
- * --all 再追加其余会话（待验收/已完成/已归档等）的表格。
+ * heliu sessions：默认只列「等你处理」（最多 8 条）与全部「运行中」并完整显示文案；
+ * --all 列出全部等你，并追加其余会话（待验收/已完成/已归档等）的表格。
  */
 export function renderSessions(projectName: string, sessions: SessionView[], opts: { all?: boolean; wide?: boolean; width?: number } = {}): string {
   const W = opts.width ?? outputWidth();
@@ -373,7 +471,11 @@ export function renderSessions(projectName: string, sessions: SessionView[], opt
     `合流 · ${projectName} · 会话 ${sessions.length} 条：等你 ${waiting.length} · 运行中 ${running.length}${restParts.length ? `；另有 ${restParts.join(" · ")}` : ""}`,
   ];
   out.push("", `■ 等你处理（${waiting.length}）${waiting.length ? "" : "：无"}`);
-  for (const s of waiting) out.push(...sessionBlock(s, W, opts.wide));
+  // 默认最多 8 条（按最后活动倒序）；--all 全列
+  const shownWaiting = opts.all ? waiting : waiting.slice(0, SUMMARY_LIMIT);
+  for (const s of shownWaiting) out.push(...sessionBlock(s, W, opts.wide));
+  const moreWaiting = waiting.length - shownWaiting.length;
+  if (moreWaiting > 0) out.push(`  …还有 ${moreWaiting} 条等你，\`heliu sessions --all\` 查看`);
   out.push("", `■ 运行中（${running.length}，含在线空闲）${running.length ? "" : "：无"}`);
   for (const s of running) out.push(...sessionBlock(s, W, opts.wide));
 
@@ -401,7 +503,7 @@ export function renderSessions(projectName: string, sessions: SessionView[], opt
       out.push(renderTable(columns, rows, { wide: opts.wide, indent: "  " }));
     }
   } else if (rest.length) {
-    out.push("", `提示：heliu sessions --all 显示其余 ${rest.length} 条（${restParts.join(" · ")}）`);
+    out.push("", `提示：heliu sessions --all 显示其余 ${rest.length} 条（${restParts.join(" · ")}）${moreWaiting > 0 ? `，以及另外 ${moreWaiting} 条等你` : ""}`);
   }
   return out.join("\n");
 }

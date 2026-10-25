@@ -2,7 +2,7 @@
  * 渲染层测试：用手工构造的对账结果，断言行动摘要的分组、全文折行、措辞与图例。
  */
 import { describe, expect, test } from "bun:test";
-import { FULL_HINT, LEGEND, REMOTE_NOTE, renderSessions, renderStatusFull, renderStatusSummary } from "../src/cli/render.ts";
+import { FULL_HINT, LEGEND, REMOTE_NOTE, renderSessions, renderStatusFull, renderStatusSummary, topActions } from "../src/cli/render.ts";
 import { hangingWrap, width, wrapText } from "../src/cli/table.ts";
 import type { FeatureView, ReconcileReport, RepoReport, SessionRef, SessionView } from "../src/types.ts";
 
@@ -86,104 +86,104 @@ function report(repos: RepoReport[]): ReconcileReport {
   };
 }
 
-const branches: FeatureView[] = [
+// 文档仓：12 个等你（超过 8 条上限）、11 条独立未合并全部落后集成分支（④ 应只给一句话）、3 条已进集成
+const docsBranches: FeatureView[] = [
   fv({ branch: "main", role: "main", mergedState: "in_main", label: "主线", vsMain: null }),
   fv({ branch: "integ", role: "integration", vsIntegration: null, vsMain: { ahead: 102, behind: 0 } }),
-  fv({ branch: "claude/live2d-98f128", label: "Live2D 交互角色可行性评估", sessions: [blocked("s1", "Live2D 交互角色可行性评估", LONG_NEED)] }),
-  fv({ branch: "claude/no-need-111111", label: "没写待办的会话", sessions: [blocked("s2", "没写待办的会话", null)] }),
-  fv({ branch: "claude/merged-222222", mergedState: "in_main", label: "已进主线的也照样提醒", vsIntegration: { ahead: 0, behind: 50 }, sessions: [blocked("s3", "已进主线的也照样提醒", "拔掉 USB 再插回")] }),
-  ...Array.from({ length: 7 }, (_, i) => fv({ branch: `claude/old-${i}-abcdef`, label: `老分支 ${i}` })),
+  fv({ branch: "claude/live2d-98f128", label: "Live2D 交互角色可行性评估", sessions: [blocked("s0", "Live2D 交互角色可行性评估", LONG_NEED)] }),
+  fv({ branch: "claude/merged-222222", mergedState: "in_main", label: "已进主线的也照样提醒", vsIntegration: { ahead: 0, behind: 50 }, sessions: [blocked("s1", "已进主线的也照样提醒", "拔掉 USB 再插回")] }),
+  ...Array.from({ length: 10 }, (_, i) => fv({ branch: `claude/old-${i}-abcdef`, label: `老分支 ${i}`, sessions: [blocked(`w${i}`, `老分支 ${i}`, `第 ${i} 件要你定的事`)] })),
   ...Array.from({ length: 3 }, (_, i) => fv({ branch: `claude/in-integ-${i}`, mergedState: "in_integration", vsIntegration: { ahead: 0, behind: 9 } })),
 ];
-const sessions: SessionView[] = [
-  {
-    sessionId: "s2", cliSessionId: null, title: "没写待办的会话", repo: "docs", branch: "claude/no-need-111111", worktreeName: null, worktreePath: null,
-    cwd: null, status: "blocked", statusCategory: "blocked", statusDetail: "等你确认是否继续", needsAction: null, isArchived: false, running: null,
-    createdAt: null, lastActivityAt: "2026-10-25T10:00:00.000Z", completedTurns: 1, model: null, spawnedFrom: null, prs: [],
-  },
-];
+// App 仓：无集成分支；8 条独立未合并，其中 6 条落后主线（不是全集 → 列前 5 条）
+const appBranches: FeatureView[] = Array.from({ length: 8 }, (_, i) =>
+  fv({ branch: `feat/app-${i}`, label: `App 功能 ${i}`, vsIntegration: null, vsMain: { ahead: 1, behind: i < 6 ? 40 + i : 0 } }),
+);
+const docs = repo({ branches: docsBranches, hygiene: [{ kind: "orphan_admin_dir", severity: "warn", message: "x", path: "/x", branch: null, count: null }] });
+const app = repo({ id: "app", label: "App 仓", integration: null, health: { ...repo({}).health!, integration: null, mainVsRemote: { remoteRef: "refs/remotes/github/rel", ahead: 34, behind: 0, note: null } }, branches: appBranches });
+const gone = repo({ id: "gone", label: "缺失仓", reachable: false, error: "路径不存在", counts: null, health: null });
 const WIDTH = 80;
-const rep = report([
-  repo({ branches }),
-  repo({ id: "app", label: "App 仓", integration: null, health: { ...repo({}).health!, integration: null }, branches: [fv({ branch: "feat/x", label: "X", vsIntegration: null, vsMain: { ahead: 2, behind: 47 } })] }),
-  repo({ id: "gone", label: "缺失仓", reachable: false, error: "路径不存在", counts: null, health: null }),
-]);
-const text = renderStatusSummary(rep, { width: WIDTH, sessions });
+const rep = report([docs, app, gone]);
+const text = renderStatusSummary(rep, { width: WIDTH });
 const lines = text.split("\n");
+const section = (from: string, to: string) => {
+  const a = lines.findIndex((l) => l.startsWith(from));
+  const b = lines.findIndex((l, i) => i > a && l.startsWith(to));
+  return lines.slice(a + 1, b);
+};
 
-describe("status 默认：行动摘要", () => {
+describe("status 默认：一屏行动摘要", () => {
+  test("一屏：100 列下，3 个仓库、12 个等你（含一条长文案）、19 条独立分支也不超过 45 行", () => {
+    // 行数随待办文案长度与终端宽度变化，无法对任意输入保证；这里固定 100 列（非 TTY 默认宽度）
+    expect(renderStatusSummary(rep, { width: 100 }).split("\n").length).toBeLessThanOrEqual(45);
+  });
+
   test("图例在健康条上方，健康条末尾有远端口径括注，措辞改为「本地无远端引用」", () => {
     expect(lines[1]).toBe(LEGEND);
-    expect(lines.indexOf("健康条")).toBeGreaterThan(1);
+    expect(lines[2]).toBe("健康条");
     expect(text).toContain(`  ${REMOTE_NOTE}`);
     expect(text).toContain("本地无远端引用 7");
     expect(text).not.toContain("从未推送");
+    expect(text).toContain("✗ 路径不存在");
     expect(lines[lines.length - 1]).toBe(FULL_HINT);
   });
 
+  test("现在最该做的：按严重度取前 3 句", () => {
+    const acts = section("现在最该做的", "①");
+    expect(acts.length).toBe(3);
+    expect(acts[0]).toContain("文档仓集成分支领先主线 102 提交、3 天未并回 → 先把它并回 main");
+    expect(acts[1]).toContain("12 个会话在等你拍板");
+    expect(acts[2]).toContain("19 条独立分支未进任何版本（文档仓 11 / App 仓 8），M2 起可预约");
+    expect(text).not.toContain("孤儿"); // 第 5 条规则被前 3 条挤掉
+    const quiet = repo({ branches: [], hygiene: docs.hygiene });
+    quiet.health = { ...quiet.health!, integration: null };
+    const t = topActions(report([quiet]), 0);
+    expect(t).toEqual(["文档仓主线与 origin/main 分叉（↑7 ↓5）→ 先对齐远端", "文档仓有 1 个孤儿 worktree 条目（heliu hygiene 查看，人工确认后清理）"]);
+  });
+
   test("四组按顺序出现", () => {
-    const docsStart = lines.findIndex((l) => l.startsWith("■ 文档仓"));
-    const idx = ["① 等你处理", "② 独立未合并", "③ 已进集成分支待回主线", "④ 落后需同步"].map((k) => lines.findIndex((l, i) => i > docsStart && l.includes(k)));
-    expect(idx.every((i) => i > docsStart)).toBe(true);
+    const idx = ["① 等你处理", "② 独立未合并", "③ 已进集成分支待回主线", "④ 落后需同步"].map((k) => lines.findIndex((l) => l.startsWith(k)));
+    expect(idx.every((i) => i > 0)).toBe(true);
     expect([...idx].sort((a, b) => a - b)).toEqual(idx);
   });
 
-  test("① 等你处理：needs_action 全文、不截断、按宽度折行；缺文案时用 status_detail", () => {
-    expect(text).toContain("① 等你处理（3）");
-    const start = lines.findIndex((l) => l.includes("需要你：确认："));
-    const block: string[] = [];
-    for (let i = start; i < lines.length && (i === start || lines[i]!.startsWith("              ")); i++) block.push(lines[i]!);
-    expect(block.length).toBeGreaterThan(1); // 确实折行了
-    const joined = block.map((l, i) => (i === 0 ? l.replace(/^\s*需要你：/, "") : l.trim())).join("");
-    expect(joined.replace(/\s/g, "")).toBe(LONG_NEED.replace(/\s/g, ""));
-    expect(text).not.toContain("…" + "（建议）");
-    expect(text).toContain("需要你：等你确认是否继续");
-    expect(text).toContain("需要你：拔掉 USB 再插回"); // 已进主线的分支也提醒
+  test("① 最多 8 条、全文折行不截断，超出给一行提示", () => {
+    const block = section("① 等你处理", "② 独立未合并");
+    expect(lines.find((l) => l.startsWith("① 等你处理"))).toBe("① 等你处理（12，均在文档仓）");
+    expect(block.filter((l) => l.startsWith("  - ")).length).toBe(8);
+    expect(block[block.length - 1]).toBe("  …还有 4 条，`heliu sessions` 查看");
+    const start = block.findIndex((l) => l.includes("Live2D"));
+    const wrapped = [block[start]!];
+    for (let i = start + 1; block[i]!.startsWith("    "); i++) wrapped.push(block[i]!);
+    expect(wrapped.length).toBeGreaterThan(1);
+    expect(wrapped.join("").replace(/\s/g, "")).toContain(LONG_NEED.replace(/\s/g, ""));
+    for (const l of block) expect(width(l)).toBeLessThanOrEqual(WIDTH);
   });
 
-  test("① 与 ④ 的条目行都不超过输出宽度（折行/截断生效；② 是表格、健康条是单行，不在此列）", () => {
-    let inBlock = false;
-    let checked = 0;
-    for (const l of lines) {
-      if (l.includes("① 等你处理") || l.includes("④ 落后需同步")) inBlock = true;
-      else if (l.includes("② 独立未合并") || l.startsWith("■ ") || l === "") inBlock = false;
-      else if (inBlock) {
-        expect(width(l)).toBeLessThanOrEqual(WIDTH);
-        checked++;
-      }
-    }
-    expect(checked).toBeGreaterThan(10);
+  test("② 最多 8 条、按最后提交倒序、跨仓库带仓库列，超出给一行提示", () => {
+    const block = section("② 独立未合并", "③");
+    expect(lines.find((l) => l.startsWith("② 独立未合并"))).toBe("② 独立未合并（19：文档仓 11 · App 仓 8）");
+    expect(block[0]).toContain("仓库");
+    const rows = block.slice(2, -1);
+    expect(rows.length).toBe(8);
+    const dates = rows.map((l) => /\d{4}-\d{2}-\d{2}$/.exec(l)?.[0] ?? "");
+    expect([...dates].sort().reverse()).toEqual(dates);
+    expect(block[block.length - 1]).toBe("  …还有 11 条，`--full` 查看");
+    expect(text).not.toContain("claude/in-integ-0"); // 已进集成的不进 ②
   });
 
-  test("② 独立未合并：只含未进主线也未进集成的功能分支，列出标签/分支/领先落后/最后提交", () => {
-    expect(text).toContain("② 独立未合并（9）");
-    const hdr = lines.find((l) => l.includes("标签") && l.includes("最后提交"))!;
-    expect(hdr).toContain("主线↑/↓");
-    expect(hdr).toContain("集成↑/↓");
-    expect(text).not.toContain("claude/in-integ-0  "); // 已进集成的不进 ②
+  test("③ 只给计数 + 一句话", () => {
+    expect(text).toContain("③ 已进集成分支待回主线：文档仓 3 条（集成分支领先主线 102，3 天未并回）");
   });
 
-  test("③ 只给计数 + 一句话；未配置集成分支时说明", () => {
-    expect(text).toContain("③ 已进集成分支待回主线：3 条 · 集成分支领先主线 102，3 天未并回");
-    expect(text).toContain("③ 已进集成分支待回主线：未配置集成分支");
-  });
-
-  test("④ 落后需同步：计数 + 前 5 条，按落后数倒序；无集成分支时相对主线", () => {
-    expect(text).toContain("④ 落后需同步（相对集成分支，9 条），落后最多的 5 条：");
-    const start = lines.findIndex((l) => l.includes("④ 落后需同步（相对集成分支"));
-    const items = lines.slice(start + 1, start + 7).filter((l) => l.startsWith("    - "));
+  test("④ 全部落后时只给一句话；否则最多 5 条", () => {
+    const block = section("④ 落后需同步", "提示：");
+    expect(block[0]).toBe("  文档仓 11 条独立分支全部落后集成分支（最少 ↓3），合并前需同步基线");
+    expect(block[1]).toBe("  App 仓 6 条落后主线，落后最多的 5 条：");
+    const items = block.slice(2);
     expect(items.length).toBe(5);
-    const nums = items.map((l) => Number(/↓(\d+)$/.exec(l)?.[1]));
-    expect([...nums].sort((a, b) => b - a)).toEqual(nums);
-    expect(text).toContain("④ 落后需同步（相对主线，1 条）：");
-    expect(text).toContain("X · feat/x · ↓47");
-  });
-
-  test("App 仓无集成分支时不显示集成列；不可达仓库给原因", () => {
-    const appStart = lines.findIndex((l) => l.startsWith("■ App 仓"));
-    const hdr = lines.slice(appStart).find((l) => l.includes("标签") && l.includes("最后提交"))!;
-    expect(hdr).not.toContain("集成↑/↓");
-    expect(text).toContain("✗ 路径不存在，已跳过");
+    expect(items[0]).toContain("feat/app-5 · ↓45");
+    expect(text).not.toContain("feat/app-0 · ↓40"); // 第 6 条不列
   });
 
   test("--full 仍是全部分支长表", () => {
@@ -192,6 +192,17 @@ describe("status 默认：行动摘要", () => {
     expect(full).toContain("会话（状态·标题）");
     expect(full).toContain("claude/in-integ-0");
     expect(full).toContain("合并状态");
+  });
+
+  test("有会话明细时 ① 按会话列，缺 needs_action 时用 status_detail", () => {
+    const sv: SessionView = {
+      sessionId: "x", cliSessionId: null, title: "没写待办的会话", repo: "docs", branch: null, worktreeName: null, worktreePath: null,
+      cwd: null, status: "blocked", statusCategory: "blocked", statusDetail: "等你确认是否继续", needsAction: null, isArchived: false, running: null,
+      createdAt: null, lastActivityAt: "2026-10-25T10:00:00.000Z", completedTurns: 1, model: null, spawnedFrom: null, prs: [],
+    };
+    const t = renderStatusSummary(rep, { width: WIDTH, sessions: [sv] });
+    expect(t).toContain("① 等你处理（1，均在文档仓）");
+    expect(t).toContain("  - 没写待办的会话：等你确认是否继续");
   });
 });
 
@@ -221,6 +232,17 @@ describe("sessions 默认只列等你 + 运行中", () => {
     expect(t).not.toContain("会话 e");
     expect(t).toContain("--all 显示其余 3 条（待验收 1 · 已完成 1 · 已归档 1）");
     for (const l of t.split("\n")) expect(width(l)).toBeLessThanOrEqual(WIDTH);
+  });
+
+  test("默认最多 8 条等你，其余提示 --all；--all 全列", () => {
+    const many = Array.from({ length: 11 }, (_, i) => mk(`w${i}`, "blocked", { needsAction: `事 ${i}` }));
+    const t = renderSessions("演示", [...many, mk("r", "running")], { width: WIDTH });
+    expect(t).toContain("■ 等你处理（11）");
+    expect(t.split("\n").filter((l) => l.startsWith("    需要你：")).length).toBe(8);
+    expect(t).toContain("…还有 3 条等你，`heliu sessions --all` 查看");
+    expect(t).toContain("■ 运行中（1，含在线空闲）");
+    const all = renderSessions("演示", many, { width: WIDTH, all: true });
+    expect(all.split("\n").filter((l) => l.startsWith("    需要你：")).length).toBe(11);
   });
 
   test("--all：追加其余会话表", () => {

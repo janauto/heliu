@@ -71,6 +71,9 @@ export function renderTable(columns: Column[], rows: string[][], opts: { wide?: 
   return out.join("\n");
 }
 
+/** 不能出现在行首的收尾标点 */
+const CLOSING = /[，。、；：？！）》」』”’,.;:?!)\]}]/;
+
 /**
  * 按显示宽度折行：中文逐字可断，英文优先在空格处断；保留原文换行，丢弃空行。
  * 不截断任何内容。
@@ -89,6 +92,12 @@ export function wrapText(text: string, maxWidth: number): string[] {
         if (/[\x21-\x7e]/.test(ch) && sp > 0 && width(line.slice(0, sp)) > limit / 2) {
           out.push(line.slice(0, sp));
           line = line.slice(sp + 1);
+        } else if (CLOSING.test(ch) && [...line].length > 1) {
+          // 避头：收尾标点不放行首，把上一字一起带到下一行
+          const chars = [...line];
+          const last = chars.pop() ?? "";
+          out.push(chars.join(""));
+          line = last;
         } else {
           out.push(line);
           line = "";
