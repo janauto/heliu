@@ -3,7 +3,10 @@
  *
  * - frontmatter 是机器段（以它为准）：里程碑、各仓库集成分支与 base_sha、每一项的 decision / 执行结果、refs_moved（回滚依据）。
  * - 正文是人读的勾选表（每次 preview 重新生成）+「## 执行记录」「## 发布说明」（执行时追加，preview 刷新时原样保留）。
- * - 用户只需要改 frontmatter 里某项的 decision（并入 / 顺延 / 等它 / 不并）；preview 刷新时保留与默认值不同的 decision。
+ * - 用户只需要改 frontmatter 里某项的 decision（并入 / 顺延 / 等它 / 不并 / 待定）；preview 刷新时保留与默认值不同的 decision。
+ * - 「未能试合」（沙箱建不起来 / 超时 / 出错，没有得到试合结果）单列一档，绝不算作有冲突；默认「待定」，run 跳过、不并入也不顺延。
+ * - 看板（M3）也会在同一路径写「草稿」（schema 1，逐条 tier/bindings）。本模块写 schema 2；读到看板草稿时标 format=board，
+ *   run / set 拒绝执行，preview 先备份到 releases/.history/ 再生成可执行合并单。
  * - 多仓库：任务卡只写了单个 integration_branch / base_sha；这里按仓库存一份（repos[]），顶层两个字段镜像主仓库，便于一眼看。
  * 本模块只做格式与纯函数，不碰 git。
  */
@@ -12,15 +15,37 @@ import { dirname, join } from "node:path";
 import YAML from "yaml";
 import { splitFrontmatter } from "./ledger.ts";
 
-export const DECISIONS = ["并入", "顺延", "等它", "不并"] as const;
+export const DECISIONS = ["并入", "顺延", "等它", "不并", "待定"] as const;
 export type Decision = (typeof DECISIONS)[number];
 
-/** 预演时的状态（决定排序与默认 decision） */
-export const ITEM_STATES = ["已进集成", "无冲突", "有冲突", "未完成", "无法合并"] as const;
+/** 预演时的状态（决定排序与默认 decision）：已进集成 → 无冲突 → 有冲突 → 未能试合 → 未完成 → 无法合并 */
+export const ITEM_STATES = ["已进集成", "无冲突", "有冲突", "未能试合", "未完成", "无法合并"] as const;
 export type ItemState = (typeof ITEM_STATES)[number];
 
+/**
+ * 档位（前五个与看板 src/board/api-types.ts 的 ReleaseTier 同名同义）+ 建议动作。
+ * unmergeable = 分支不存在 / 仓库没配集成分支等，M4 无法执行。
+ */
+export type PlanTier = "in_integration" | "clean" | "conflict" | "precheck_failed" | "unfinished" | "unmergeable";
+export const TIER_OF: Record<ItemState, PlanTier> = {
+  已进集成: "in_integration",
+  无冲突: "clean",
+  有冲突: "conflict",
+  未能试合: "precheck_failed",
+  未完成: "unfinished",
+  无法合并: "unmergeable",
+};
+export const ACTION_TEXT: Record<ItemState, string> = {
+  已进集成: "跳过（已在集成分支）",
+  无冲突: "合入",
+  有冲突: "合入（需解冲突）",
+  未能试合: "重新试合或人工确认",
+  未完成: "顺延",
+  无法合并: "先补分支/配置（默认顺延）",
+};
+
 /** 执行结果 */
-export type ItemResult = "已合入" | "已在集成" | "失败·待处理" | "未执行" | "未演练";
+export type ItemResult = "已合入" | "已在集成" | "失败·待处理" | "未执行" | "未演练" | "跳过·待定";
 
 export type PlanStatus = "草稿" | "执行中" | "待续" | "已发布" | "已回滚";
 
@@ -67,6 +92,8 @@ export interface PlanItem {
   /** 落后集成分支提交数 */
   behind: number | null;
   precheck: { conflicts: string[]; union: string[]; other: string[] } | null;
+  /** 试合三态（复用 src/core/todo.ts precheckStateOf）：checked / failed / skipped；不需要试合为 null */
+  precheck_state?: "checked" | "failed" | "skipped" | null;
   /* 执行后填写 */
   result?: ItemResult | null;
   result_detail?: string | null;
@@ -98,6 +125,10 @@ export interface LedgerChange {
 }
 
 export interface ReleasePlan {
+  /** m4 = 本模块写的可执行合并单（schema 2）；board = 看板生成的草稿（schema 1，不能直接执行） */
+  format: "m4" | "board";
+  /** format=board 时：看板草稿里各卡的决定（只用于提示，不导入） */
+  boardDecisions?: Array<{ feature: string; decision: string }>;
   milestone: string;
   project: string;
   status: PlanStatus;
@@ -152,6 +183,7 @@ export function parseDecision(raw: string): Decision {
     顺延: "顺延", 下一版: "顺延", defer: "顺延", next: "顺延", n: "顺延",
     等它: "等它", 等: "等它", wait: "等它", w: "等它",
     不并: "不并", 不要: "不并", skip: "不并", drop: "不并",
+    待定: "待定", pending: "待定", 未定: "待定", "?": "待定",
   };
   const d = map[t] ?? map[raw.trim()];
   if (!d) throw new Error(`决定只能是：${DECISIONS.join(" / ")}`);
@@ -186,6 +218,10 @@ function parseItem(v: unknown): PlanItem | null {
     behind: n(o.behind),
     precheck: pc ? { conflicts: arr(pc.conflicts), union: arr(pc.union), other: arr(pc.other) } : null,
   };
+  if ("precheck_state" in o) {
+    const ps = s(o.precheck_state);
+    item.precheck_state = ps === "checked" || ps === "failed" || ps === "skipped" ? ps : null;
+  }
   if (o.result !== undefined) item.result = (s(o.result) as ItemResult | null) ?? null;
   if (o.result_detail !== undefined) item.result_detail = s(o.result_detail);
   if (o.old_sha !== undefined) item.old_sha = s(o.old_sha);
@@ -233,16 +269,49 @@ function parseChange(v: unknown): LedgerChange | null {
   return { feature, from: side(o.from), to: side(o.to), note: s(o.note) ?? "", rolled_back: s(o.rolled_back) };
 }
 
+/** 看板草稿：schema ≠ 2，且条目用 bindings[] 而不是 repo/branch/state */
+function isBoardDraft(d: Record<string, unknown>): boolean {
+  if (Number(d.schema) === 2) return false;
+  const items = Array.isArray(d.items) ? d.items : [];
+  return items.some((x) => !!x && typeof x === "object" && "bindings" in (x as object) && !("state" in (x as object)));
+}
+
 export function parsePlan(text: string, file: string): ReleasePlan {
   const doc = splitFrontmatter(text);
   if (!doc) throw new Error(`${file} 不是合并单（缺 frontmatter）`);
   const d = doc.data;
   const milestone = s(d.milestone);
   if (!milestone) throw new Error(`${file} 缺 milestone`);
+  if (isBoardDraft(d)) {
+    const raw = (Array.isArray(d.items) ? d.items : []) as Array<Record<string, unknown>>;
+    return {
+      format: "board",
+      boardDecisions: raw.map((x) => ({ feature: String(x.feature ?? ""), decision: String(x.decision ?? "") })).filter((x) => x.feature),
+      milestone,
+      project: s(d.project) ?? "",
+      status: "草稿",
+      created: s(d.generated_at) ?? "",
+      updated: s(d.generated_at) ?? "",
+      executed_at: null,
+      finalized_at: null,
+      rolled_back_at: null,
+      integration_branch: null,
+      base_sha: null,
+      milestone_status_before: null,
+      repos: [],
+      items: [],
+      refs_moved: [],
+      ledger_changes: [],
+      resolver_cost_usd: 0,
+      tail: "",
+      file,
+    };
+  }
   const idx = Math.min(...[EXEC_HEADING, NOTES_HEADING].map((h) => doc.body.indexOf(`\n${h}`)).filter((i) => i >= 0), Number.MAX_SAFE_INTEGER);
   const tail = idx === Number.MAX_SAFE_INTEGER ? "" : doc.body.slice(idx + 1);
   const status = s(d.status) as PlanStatus | null;
   return {
+    format: "m4",
     milestone,
     project: s(d.project) ?? "",
     status: status && ["草稿", "执行中", "待续", "已发布", "已回滚"].includes(status) ? status : "草稿",
@@ -277,6 +346,8 @@ function itemYaml(i: PlanItem): Record<string, unknown> {
     decision: i.decision,
     default_decision: i.default_decision,
     state: i.state,
+    tier: TIER_OF[i.state],
+    action: ACTION_TEXT[i.state],
     detail: i.detail,
     repo: i.repo,
     branch: i.branch,
@@ -284,6 +355,7 @@ function itemYaml(i: PlanItem): Record<string, unknown> {
     behind: i.behind,
     precheck: i.precheck,
   };
+  if (i.precheck_state !== undefined) o.precheck_state = i.precheck_state;
   if (i.result !== undefined) o.result = i.result;
   if (i.result_detail) o.result_detail = i.result_detail;
   if (i.old_sha) o.old_sha = i.old_sha;
@@ -296,6 +368,8 @@ function itemYaml(i: PlanItem): Record<string, unknown> {
 
 export function serializePlan(p: ReleasePlan, opts: { projectLabel?: string } = {}): string {
   const fm = {
+    heliu: "release-plan",
+    schema: 2,
     milestone: p.milestone,
     project: p.project,
     status: p.status,
@@ -325,16 +399,58 @@ export function savePlan(p: ReleasePlan): void {
   renameSync(tmp, p.file);
 }
 
+/* ───────────── 汇总 ───────────── */
+
+export interface PlanCounts {
+  /** 决定并入、且不是已进集成/有冲突/无法合并（主要是试合无冲突的） */
+  newMerge: number;
+  inIntegration: number;
+  conflict: number;
+  precheckFailed: number;
+  unchecked: number;
+  deferred: number;
+  waiting: number;
+  dropped: number;
+  /** 待定且不属于「未能试合」档 */
+  otherPending: number;
+}
+
+export function planCounts(p: Pick<ReleasePlan, "items">): PlanCounts {
+  const it = p.items;
+  return {
+    newMerge: it.filter((i) => i.decision === "并入" && !["已进集成", "有冲突", "无法合并"].includes(i.state)).length,
+    inIntegration: it.filter((i) => i.state === "已进集成").length,
+    conflict: it.filter((i) => i.state === "有冲突").length,
+    precheckFailed: it.filter((i) => i.state === "未能试合").length,
+    unchecked: it.filter((i) => i.precheck_state === "skipped").length,
+    deferred: it.filter((i) => i.decision === "顺延").length,
+    waiting: it.filter((i) => i.decision === "等它").length,
+    dropped: it.filter((i) => i.decision === "不并").length,
+    otherPending: it.filter((i) => i.decision === "待定" && i.state !== "未能试合").length,
+  };
+}
+
+/** 新增待合 N · 已在集成 M · 有冲突 C · 未能试合 F · 未检查 U · 顺延 D（另有等它/不并/待定时追加） */
+export function planCountsLine(p: Pick<ReleasePlan, "items">): string {
+  const c = planCounts(p);
+  const parts = [`新增待合 ${c.newMerge}`, `已在集成 ${c.inIntegration}`, `有冲突 ${c.conflict}`, `未能试合 ${c.precheckFailed}`, `未检查 ${c.unchecked}`, `顺延 ${c.deferred}`];
+  if (c.waiting) parts.push(`等它 ${c.waiting}`);
+  if (c.dropped) parts.push(`不并 ${c.dropped}`);
+  if (c.otherPending) parts.push(`待定 ${c.otherPending}`);
+  return parts.join(" · ");
+}
+
 /* ───────────── 人读勾选表 ───────────── */
 
 const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : "—");
 const cell = (x: string) => x.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 
 export function conflictText(i: PlanItem): string {
+  if (i.state === "未能试合") return "未能试合";
   if (!i.precheck) return "—";
   if (!i.precheck.conflicts.length) return "无";
   const parts: string[] = [];
-  if (i.precheck.union.length) parts.push(`union：${i.precheck.union.join("、")}`);
+  if (i.precheck.union.length) parts.push(`union（两边内容都保留、新日期在前）：${i.precheck.union.join("、")}`);
   if (i.precheck.other.length) parts.push(`需解冲突：${i.precheck.other.join("、")}`);
   return parts.join("；");
 }
@@ -362,8 +478,7 @@ export function renderPlanBody(p: ReleasePlan, opts: { projectLabel?: string } =
     .join(" · ");
   lines.push(`- 集成分支（预演时）：${repoLine || "—"}`);
   lines.push(`- 状态：${p.status} · 生成 ${p.created}${p.updated && p.updated !== p.created ? ` · 更新 ${p.updated}` : ""}${p.executed_at ? ` · 执行 ${p.executed_at}` : ""}`);
-  const count = (d: Decision) => p.items.filter((i) => i.decision === d).length;
-  lines.push(`- 共 ${p.items.length} 项：并入 ${count("并入")} · 顺延 ${count("顺延")} · 等它 ${count("等它")} · 不并 ${count("不并")}`);
+  lines.push(`- 共 ${p.items.length} 项：${planCountsLine(p)}`);
   lines.push("");
   lines.push("## 勾选表");
   lines.push("");
@@ -374,13 +489,13 @@ export function renderPlanBody(p: ReleasePlan, opts: { projectLabel?: string } =
     const box = i.decision === "并入" ? "[x] 并入" : `[ ] ${i.decision}`;
     const mark = i.decision !== i.default_decision ? "（你改的）" : "";
     const where = i.repo && i.branch ? `${labelOf.get(i.repo) ?? i.repo} · \`${i.branch}\`` : "—";
-    const state = i.state === "已进集成" ? "已进集成（跳过）" : i.state;
+    const state = i.state === "已进集成" ? "已进集成（跳过）" : `${i.state} → ${ACTION_TEXT[i.state]}`;
     const info = [i.detail, i.behind ? `落后集成 ${i.behind}` : null, resultText(i) || null].filter(Boolean).join(" · ");
     lines.push(`| ${k + 1} | ${box}${mark} | ${cell(`${i.feature} ${i.title}`)} | ${cell(where)} | ${cell(state)} | ${cell(conflictText(i))} | ${cell(info || "—")} |`);
   });
   lines.push("");
-  lines.push("图例：顺序 = 已进集成（跳过）→ 无冲突 → 有冲突（union 文件优先）→ 未完成 → 无法合并。");
-  lines.push("决定：并入 = 本次合入；顺延 = 不合，功能卡改到下一版并记 rolled_from；等它 = 本次不合也不顺延，本版先不收尾（不打 tag），等它好了重新预演再执行；不并 = 不合、改为未预约。");
+  lines.push("图例：顺序 = 已进集成（跳过）→ 无冲突 → 有冲突（union 文件优先）→ 未能试合 → 未完成 → 无法合并。「未能试合」= 没有得到试合结果（沙箱建不起来 / 超时 / 出错），不等于有冲突，也不等于无冲突。");
+  lines.push("决定：并入 = 本次合入；顺延 = 不合，功能卡改到下一版并记 rolled_from；等它 = 本次不合也不顺延，本版先不收尾（不打 tag），等它好了重新预演再执行；不并 = 不合、改为未预约；待定 = 还没决定（「未能试合」的默认），执行时跳过、不并入也不顺延、留在本版，本版先不收尾。");
   lines.push("");
   return lines.join("\n");
 }

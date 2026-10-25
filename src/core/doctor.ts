@@ -3,7 +3,8 @@
  */
 import { accessSync, constants, existsSync } from "node:fs";
 import type { DoctorCheck } from "../types.ts";
-import { gitVersion, lines, runGit, versionAtLeast } from "./git.ts";
+import { gitVersion, lines, runGit, sandboxAvailable, versionAtLeast } from "./git.ts";
+import { probeResolver } from "./resolver.ts";
 import { looksLikeICloud, type HeliuPaths } from "./paths.ts";
 import { listProjectNames, loadProject, type ProjectConfig } from "./project.ts";
 import { loadDesktopSessions, loadDesktopWorktrees, loadRunningSessions } from "./sessions.ts";
@@ -32,6 +33,24 @@ export async function runDoctor(paths: HeliuPaths, projectName: string | undefin
   }
   const bunOk = versionAtLeast(Bun.version.split(".").map(Number), [1, 3]);
   out.push(check("bun", bunOk ? "ok" : "warn", `bun ${Bun.version}${bunOk ? "" : "（建议 ≥ 1.3）"}`));
+
+  // M4：写保护沙箱（试合 / 合并 / 演练都依赖它）
+  if (sandboxAvailable()) out.push(check("sandbox", "ok", "sandbox-exec 可用：试合在写保护沙箱里进行，合并执行与演练也包在沙箱里"));
+  else {
+    out.push(check("sandbox", "warn", `sandbox-exec 不可用${process.env.HELIU_NO_SANDBOX === "1" ? "（HELIU_NO_SANDBOX=1）" : "（非 macOS，或已处在不允许嵌套的沙箱里）"}：预演会把待合项标为「未能试合」，演练会拒绝执行，真实合并只靠白名单约束`));
+  }
+  // M4：无头 claude（解冲突子代理）
+  if (process.env.HELIU_DOCTOR_SKIP_CLAUDE === "1") out.push(check("headless-claude", "warn", "无头 claude：未检查（HELIU_DOCTOR_SKIP_CLAUDE=1）"));
+  else {
+    const pr = await probeResolver({ timeoutMs: 20_000 });
+    out.push(
+      check(
+        "headless-claude",
+        pr.available ? "ok" : "warn",
+        `无头 claude（解冲突子代理，${pr.binary}）：${pr.message}${pr.available ? "" : "。不影响无冲突合并与 union 索引文件；普通冲突会判「失败·待处理」并顺延"}`,
+      ),
+    );
+  }
 
   // 数据目录
   const ds = loadDesktopSessions(paths);
@@ -86,6 +105,10 @@ export async function runDoctor(paths: HeliuPaths, projectName: string | undefin
         else if (!(await has(`refs/remotes/${r.remote}/${r.main}`))) problems.push(`本地没有 ${r.remote}/${r.main}（只用已有引用，不会 fetch）`);
       }
       out.push(check(id, problems.length ? "warn" : "ok", `${tag} 可达：${r.path}${problems.length ? "；" + problems.join("；") : ""}`));
+      // M4：合并目标
+      if (!r.integration) out.push(check(`${id}:integration`, "warn", `${tag} 未配置集成分支：heliu 合并不会合入该仓库的分支（这些项默认顺延）；需要时在 project.yaml 给该仓库加 integration`));
+      else if (problems.some((x) => x.startsWith("集成分支"))) out.push(check(`${id}:integration`, "warn", `${tag} 集成分支 ${r.integration} 不存在：heliu 合并会把该仓库的项标「无法合并」`));
+      else out.push(check(`${id}:integration`, "ok", `${tag} 集成分支 ${r.integration}（heliu 合并的目标）`));
       const icloudPath = looksLikeICloud(r.path);
       if (icloudPath || r.icloud) {
         out.push(check(`${id}:icloud`, "warn", `${tag} 在 iCloud 上：工作区脏检查默认跳过（--dirty 才做，单个 worktree 可能超时）${icloudPath && !r.icloud ? "；project.yaml 未标 icloud: true" : ""}`));

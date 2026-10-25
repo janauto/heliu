@@ -4,7 +4,8 @@
  *   heliu 合并 <版本>          = release run（可加 --dry-run / --yes / --to-main）
  *   heliu 演练 <版本>          = release rehearse
  *   heliu 回滚 <版本>          = release rollback
- * 执行类命令无 --yes 时逐条确认（需要终端）；输出边执行边写（同步写 stdout），--json 时进度写 stderr、结果写 stdout。
+ * 执行类命令无 --yes 时先打印执行前摘要，再要求输入 yes（直接回车 = 取消；需要终端）；
+ * 输出边执行边写（同步写 stdout），--json 时进度写 stderr、结果写 stdout。
  * 只在 src/cli/index.ts 里 import 并调用 registerReleaseCommands(program)。
  */
 import type { Command } from "commander";
@@ -12,7 +13,7 @@ import { writeSync } from "node:fs";
 import { heliuPaths } from "../core/paths.ts";
 import { resolveProject, type ProjectConfig } from "../core/project.ts";
 import { previewRelease, setPlanDecision } from "../core/release.ts";
-import { rollbackRelease, runRelease, type AskFn } from "../core/release-run.ts";
+import { isYes, rollbackRelease, runRelease, type ConfirmFn } from "../core/release-run.ts";
 import { rehearseRelease } from "../core/rehearse.ts";
 import { SCHEMA_VERSION } from "../types.ts";
 import { renderPreview, renderRehearsal, renderRollback, renderRunReport, renderSetDecision } from "./render-release.ts";
@@ -48,19 +49,15 @@ function emitJson(command: string, p: ProjectConfig, data: unknown): void {
   writeAll(1, JSON.stringify({ schemaVersion: SCHEMA_VERSION, command, generatedAt: new Date().toISOString(), project: { name: p.name, source: p.source }, data }, null, 2));
 }
 
-/** 终端里逐条确认；非终端返回 undefined（执行类命令会要求 --yes） */
-function terminalAsk(): AskFn | undefined {
+/** 终端确认：只有输入 yes 才执行，直接回车 / 其他输入 = 取消；非终端返回 undefined（执行类命令会要求 --yes） */
+function terminalConfirm(): ConfirmFn | undefined {
   if (!process.stdin.isTTY) return undefined;
   const ask = (globalThis as { prompt?: (m?: string) => string | null }).prompt;
   if (!ask) return undefined;
-  return async (q, choices, def) => {
-    const keys = choices.map((c) => `[${c.key}] ${c.label}`).join(" / ");
-    for (;;) {
-      const a = ask(`${q}\n  ${keys}（回车 = ${def}）`);
-      const k = (a ?? "").trim().toLowerCase() || def;
-      if (choices.some((c) => c.key === k)) return k;
-      writeAll(2, `  请输入 ${choices.map((c) => c.key).join(" / ")}`);
-    }
+  return async (q) => {
+    const ok = isYes(ask(`${q}\n>`));
+    if (!ok) writeAll(2, "  已取消（只有输入 yes 才会执行）");
+    return ok;
   };
 }
 
@@ -88,13 +85,13 @@ async function runAction(ms: string, o: RunOpts, g: G): Promise<void> {
     yes: !!o.yes,
     toMain: !!o.toMain,
     allowCheckedOut: !!o.allowCheckedOut,
-    ask: terminalAsk(),
+    confirm: terminalConfirm(),
     log: progress(g),
     resolverBudgetUsd: budgetOf(o.budget),
   });
   if (g.json) emitJson("release.run", p, r);
   else writeAll(1, renderRunReport(r, p));
-  if (r.aborted.length || r.failed.length) process.exitCode = 1;
+  if (r.aborted.length || r.failed.length || r.cancelled) process.exitCode = 1;
 }
 
 async function rehearseAction(ms: string, o: { report?: string; budget?: string }, g: G): Promise<void> {
@@ -107,7 +104,7 @@ async function rehearseAction(ms: string, o: { report?: string; budget?: string 
 
 async function rollbackAction(ms: string, o: { yes?: boolean; allowCheckedOut?: boolean }, g: G): Promise<void> {
   const p = await project(g);
-  const r = await rollbackRelease(p, ms, { yes: !!o.yes, ask: terminalAsk(), log: progress(g), allowCheckedOut: !!o.allowCheckedOut });
+  const r = await rollbackRelease(p, ms, { yes: !!o.yes, confirm: terminalConfirm(), log: progress(g), allowCheckedOut: !!o.allowCheckedOut });
   if (g.json) emitJson("release.rollback", p, r);
   else writeAll(1, renderRollback(r, p));
   if (!r.complete) process.exitCode = 1;
@@ -118,7 +115,7 @@ const globals = (cmd: Command): G => cmd.optsWithGlobals() as G;
 function runOptions(c: Command): Command {
   return c
     .option("--dry-run", "只演示每一项会怎么处理，不移动任何引用")
-    .option("--yes", "不逐条确认，按合并单执行")
+    .option("--yes", "不再确认，按合并单执行（不加时：先看摘要，输入 yes 才执行）")
     .option("--to-main", "发布后若主线能快进到集成分支，就快进主线（否则列出来问你）")
     .option("--allow-checked-out", "集成分支/主线在某个 worktree 里检出时仍继续（那个目录需你自己同步）")
     .option("--budget <美元>", "本次解冲突器总预算（默认 10；每次调用另有 --max-budget-usd 2）");

@@ -42,11 +42,11 @@ export function registerReleaseTools(server: McpServer, deps: ReleaseToolDeps): 
     "heliu_release_plan_set_decision",
     {
       title: "改合并单里某项的决定",
-      description: `改合并单中一项的决定（${DECISIONS.join(" / ")}）。用户说「F-0012 这版先不合，顺延」「等 F-0003 好了一起发」（= 等它）「这个不要了」（= 不并）时用。只改台账里的合并单，不碰仓库。`,
+      description: `改合并单中一项的决定（${DECISIONS.join(" / ")}）。用户说「F-0012 这版先不合，顺延」「等 F-0003 好了一起发」（= 等它）「这个不要了」（= 不并）「试合没结果的那几个我看过了，可以合」（未能试合 → 并入）时用。只改台账里的合并单，不碰仓库。`,
       inputSchema: {
         milestone: z.string().describe("版本，如「v1.2」"),
         item: z.string().describe("功能卡号（如「F-0012」「12」）或勾选表序号（如「#3」）"),
-        decision: z.enum(DECISIONS).describe("并入 = 本次合入；顺延 = 改到下一版；等它 = 本版先不收尾；不并 = 不合、改为未预约"),
+        decision: z.enum(DECISIONS).describe("并入 = 本次合入；顺延 = 改到下一版；等它 = 本版先不收尾；不并 = 不合、改为未预约；待定 = 还没决定（执行时跳过、留在本版）"),
         repo: z.string().optional().describe("卡片绑了多个分支时，只改这个仓库的那一条"),
         branch: z.string().optional().describe("只改这个分支的那一条"),
         ...deps.common,

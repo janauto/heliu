@@ -2,14 +2,18 @@
  * M4 合并单：preview（只读仓库，只写合并单草稿）与改决定。
  *
  * preview：预约到该版的功能卡 × 绑定分支 → 对账（含 merge-tree 试合，在对象隔离区 + 沙箱内）→ 每项的状态与默认决定 →
- * <台账>/releases/<里程碑>.md。顺序：已进集成（跳过）→ 无冲突 → 有冲突（union 文件优先）→ 未完成 → 无法合并。
- * 默认决定：可合的「并入」，未完成 / 无法合并的「顺延」（未完成可改「等它」）。刷新时保留用户改过的决定。
+ * <台账>/releases/<里程碑>.md。顺序：已进集成（跳过）→ 无冲突 → 有冲突（union 文件优先）→ 未能试合 → 未完成 → 无法合并。
+ * 默认决定：可合的「并入」；未能试合「待定」（重新试合或人工确认，绝不算作有冲突）；未完成 / 无法合并「顺延」（未完成可改「等它」）。
+ * 试合三态复用 src/core/todo.ts 的 precheckStateOf（与看板、CLI 待办同一口径）。刷新时保留用户改过的决定。
  */
 import type { LedgerFeature, LedgerMilestone, SessionView } from "../types.ts";
 import { Ledger, LedgerError, normalizeFeatureId } from "./ledger.ts";
 import type { HeliuPaths } from "./paths.ts";
 import { primaryRepo, type ProjectConfig } from "./project.ts";
 import { reconcile } from "./reconcile.ts";
+import { precheckStateOf } from "./todo.ts";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import {
   ITEM_STATES,
   itemKey,
@@ -74,6 +78,7 @@ export function sortItems(items: PlanItem[], repoOrder: string[]): PlanItem[] {
 }
 
 export function defaultDecision(state: ItemState): Decision {
+  if (state === "未能试合") return "待定";
   return state === "未完成" || state === "无法合并" ? "顺延" : "并入";
 }
 
@@ -86,6 +91,8 @@ export interface PreviewResult {
   plan: ReleasePlan;
   kept: number;
   previous: ReleasePlan | null;
+  /** 原文件是看板生成的草稿：已备份到这里；它的决定与新默认不同的项列在 differing（未导入，请核对） */
+  boardDraft: { backup: string; differing: Array<{ feature: string; board: string; now: string }> } | null;
   milestone: LedgerMilestone;
   file: string;
 }
@@ -95,7 +102,17 @@ export async function previewRelease(project: ProjectConfig, paths: HeliuPaths, 
   const now = opts.now ?? new Date();
   const ledger = Ledger.of(project);
   const m = resolveReleaseMilestone(ledger, ref);
-  const previous = loadPlan(ledger.dir, m.id);
+  const loaded = loadPlan(ledger.dir, m.id);
+  // 看板草稿（schema 1）不是可执行合并单：先备份，再按本次预演重新生成；它的决定不导入，只列出差异
+  let boardBackup: string | null = null;
+  if (loaded?.format === "board") {
+    const hist = join(ledger.dir, "releases", ".history");
+    mkdirSync(hist, { recursive: true });
+    const p2 = (x: number) => String(x).padStart(2, "0");
+    boardBackup = join(hist, `${m.id.replace(/[/\\:]/g, "-")}-看板草稿-${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}${p2(now.getSeconds())}.md`);
+    if (existsSync(loaded.file)) copyFileSync(loaded.file, boardBackup);
+  }
+  const previous = loaded?.format === "board" ? null : loaded;
   if (previous?.status === "已发布") {
     throw new ReleaseError(`${m.id} 已于 ${previous.finalized_at ?? "之前"} 发布（tag 已打）。要重来请先 heliu 回滚 ${m.id}`);
   }
@@ -123,6 +140,7 @@ export async function previewRelease(project: ProjectConfig, paths: HeliuPaths, 
   const primary = primaryRepo(project);
   const pr = repos.find((r) => r.repo === primary.id) ?? null;
   const fresh: ReleasePlan = {
+    format: "m4",
     milestone: m.id,
     project: project.name,
     status: previous?.status === "待续" ? "待续" : "草稿",
@@ -145,12 +163,21 @@ export async function previewRelease(project: ProjectConfig, paths: HeliuPaths, 
   const { plan, kept } = mergeWithPrevious(fresh, previous);
   if (previous?.status === "已回滚") plan.status = "草稿";
   savePlan(plan);
-  return { plan, kept, previous, milestone: m, file: plan.file };
+  let boardDraft: PreviewResult["boardDraft"] = null;
+  if (loaded?.format === "board" && boardBackup) {
+    const differing: Array<{ feature: string; board: string; now: string }> = [];
+    for (const b of loaded.boardDecisions ?? []) {
+      const mine = [...new Set(plan.items.filter((i) => i.feature === b.feature).map((i) => i.decision))].join("/");
+      if (mine && mine !== b.decision) differing.push({ feature: b.feature, board: b.decision, now: mine });
+    }
+    boardDraft = { backup: boardBackup, differing };
+  }
+  return { plan, kept, previous, milestone: m, file: plan.file, boardDraft };
 }
 
 function mkItem(f: LedgerFeature, repo: string | null, branch: string | null, sha: string | null, state: ItemState, detail: string | null): PlanItem {
   const d = defaultDecision(state);
-  return { feature: f.id, title: f.title, decision: d, default_decision: d, state, detail, repo, branch, branch_sha: sha, behind: null, precheck: null };
+  return { feature: f.id, title: f.title, decision: d, default_decision: d, state, detail, repo, branch, branch_sha: sha, behind: null, precheck: null, precheck_state: null };
 }
 
 function itemFor(
@@ -177,7 +204,6 @@ function itemFor(
     const it = mkItem(f, repoId, branch, fv.sha, "已进集成", fv.mergedState === "in_main" ? "已进主线" : null);
     return it;
   }
-  // 未完成：会话等你回答 / 正在运行，或功能卡还是 想法 / 开发中
   const sess: SessionView[] = [];
   if (cardSession && sessionsById.get(cardSession)) sess.push(sessionsById.get(cardSession) as SessionView);
   for (const s of fv.sessions) {
@@ -187,30 +213,34 @@ function itemFor(
   }
   const blocked = sess.find((s) => s.status === "blocked");
   const running = sess.find((s) => s.status === "running");
-  let unfinished: string | null = null;
-  if (blocked) unfinished = `会话等你回答：${(blocked.needsAction ?? blocked.statusDetail ?? "").trim().slice(0, 80) || "见 heliu sessions"}`;
-  else if (running) unfinished = "会话正在运行";
-  else if (f.status === "想法" || f.status === "开发中") unfinished = `功能卡状态「${f.status}」（做完后改为「待合并」或把决定改成「并入」）`;
+  // 优先级：会话等你回答/运行中 → 未完成；试合没得到结果 → 未能试合（与看板同口径）；卡片 想法/开发中 → 未完成；再看冲突
   const behind = fv.vsIntegration?.behind ?? null;
+  const ps = precheckStateOf(fv, true);
   const p = fv.precheck;
-  const precheck = p && p.conflictFiles !== null
+  const precheck = ps.state === "checked" && p
     ? { conflicts: p.conflicts, union: p.conflicts.filter((c) => isUnionFile(project, c)), other: p.conflicts.filter((c) => !isUnionFile(project, c)) }
     : null;
   let state: ItemState;
   let detail: string | null = null;
-  if (unfinished) {
+  if (blocked) {
     state = "未完成";
-    detail = unfinished;
-  } else if (!precheck) {
-    state = "有冲突";
-    detail = `试合未完成（${p?.timedOut ? "超时" : (p?.error ?? "未知")}），执行时重新计算`;
+    detail = `会话等你回答：${(blocked.needsAction ?? blocked.statusDetail ?? "").trim().slice(0, 80) || "见 heliu sessions"}`;
+  } else if (running) {
+    state = "未完成";
+    detail = "会话正在运行";
+  } else if (ps.state === "failed" || !precheck) {
+    state = "未能试合";
+    detail = `未能试合：${ps.error ?? "没有得到试合结果"}（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延）`;
+  } else if (f.status === "想法" || f.status === "开发中") {
+    state = "未完成";
+    detail = `功能卡状态「${f.status}」（做完后改为「待合并」或把决定改成「并入」）`;
   } else if (precheck.conflicts.length) state = "有冲突";
   else {
     state = "无冲突";
     if (p?.contentEquivalent) detail = "内容已等价（只补合并历史）";
   }
   const d = defaultDecision(state);
-  return { feature: f.id, title: f.title, decision: d, default_decision: d, state, detail, repo: repoId, branch, branch_sha: fv.sha, behind, precheck };
+  return { feature: f.id, title: f.title, decision: d, default_decision: d, state, detail, repo: repoId, branch, branch_sha: fv.sha, behind, precheck, precheck_state: ps.state };
 }
 
 /* ───────────── 改决定（CLI release set / MCP heliu_release_plan_set_decision） ───────────── */
@@ -229,6 +259,7 @@ export function setPlanDecision(project: ProjectConfig, ref: string, target: str
   const m = resolveReleaseMilestone(ledger, ref);
   const plan = loadPlan(ledger.dir, m.id);
   if (!plan) throw new ReleaseError(`还没有 ${m.id} 的合并单：先 heliu 合并 ${m.id} --预演`);
+  if (plan.format === "board") throw new ReleaseError(boardDraftMessage(m.id, plan.file));
   if (plan.status === "已发布" || plan.status === "执行中") throw new ReleaseError(`合并单状态「${plan.status}」，不能再改决定`);
   let decision: Decision;
   try {
@@ -259,6 +290,11 @@ export function setPlanDecision(project: ProjectConfig, ref: string, target: str
   plan.updated = stamp(opts.now ?? new Date());
   savePlan(plan);
   return { plan, changed };
+}
+
+/** 看板草稿不能直接执行 / 改决定 */
+export function boardDraftMessage(ms: string, file: string): string {
+  return `${file} 是看板生成的合并单草稿（格式不同，不能直接执行）。请先运行 heliu 合并 ${ms} --预演：会把草稿备份到 releases/.history/，再生成可执行合并单（看板草稿里的决定不自动导入，会列出差异供你核对）`;
 }
 
 /** 对外：项的人读描述 */

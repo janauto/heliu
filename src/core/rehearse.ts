@@ -17,9 +17,9 @@ import { ledgerDir, Ledger } from "./ledger.ts";
 import { heliuCacheDir, type HeliuPaths } from "./paths.ts";
 import { primaryRepo, type ProjectConfig } from "./project.ts";
 import { previewRelease, ReleaseError, resolveReleaseMilestone, stamp, type PreviewResult } from "./release.ts";
-import { auditFile, conflictText, resultText } from "./release-plan.ts";
+import { auditFile, conflictText, planCountsLine, resultText } from "./release-plan.ts";
 import { runRelease, type RunReport } from "./release-run.ts";
-import { diffCount, diffSnapshots, snapshotRepo, type SnapshotDiff } from "./snapshot.ts";
+import { diffCount, diffSnapshots, snapshotRepo, type Snapshot, type SnapshotDiff } from "./snapshot.ts";
 
 export interface RehearseOptions {
   log?: (line: string) => void;
@@ -41,8 +41,10 @@ export interface RehearseResult {
   totalMs: number;
   preview: PreviewResult;
   run: RunReport;
-  snapshots: Array<{ id: string; label: string; items: number; diff: SnapshotDiff }>;
+  snapshots: Array<{ id: string; label: string; items: number; diff: SnapshotDiff; before: string; after: string }>;
   zeroWrite: boolean;
+  /** 演练全程是否在写保护沙箱里（演练要求必须是；记录在报告里） */
+  sandboxed: boolean;
   reportText: string;
   reportFiles: string[];
 }
@@ -119,11 +121,18 @@ export async function rehearseRelease(project: ProjectConfig, paths: HeliuPaths,
   });
   const runMs = Math.round(performance.now() - tr);
 
-  // 快照（后）
+  // 快照（后）；前后原始快照存进演练目录（报告里给相对路径）
+  const snapDir = join(root, "snapshots");
+  mkdirSync(snapDir, { recursive: true });
+  const dump = (snap: Snapshot, file: string) => writeFileSync(join(root, file), [...snap].map(([k, v]) => `${k}\t${v}`).sort().join("\n") + "\n", "utf8");
   const snapshots = project.repos.map((r) => {
     const after = snapshotRepo(r.path, commons.get(r.id));
     const b = before.get(r.id) as Map<string, string>;
-    return { id: r.id, label: r.label, items: b.size, diff: diffSnapshots(b, after) };
+    const bf = `snapshots/before-${r.id}.tsv`;
+    const af = `snapshots/after-${r.id}.tsv`;
+    dump(b, bf);
+    dump(after, af);
+    return { id: r.id, label: r.label, items: b.size, diff: diffSnapshots(b, after), before: bf, after: af };
   });
   const zeroWrite = snapshots.every((s) => diffCount(s.diff) === 0);
   const totalMs = Math.round(performance.now() - t0);
@@ -135,6 +144,7 @@ export async function rehearseRelease(project: ProjectConfig, paths: HeliuPaths,
     primary: { id: primary.id, label: primary.label, path: primary.path },
     notRehearsed: project.repos.filter((r) => r.id !== primary.id).map((r) => r.label),
     cloneMs, previewMs, runMs, totalMs, preview, run, snapshots, zeroWrite,
+    sandboxed: sandboxAvailable(),
     reportText: "",
     reportFiles: [],
   };
@@ -159,9 +169,11 @@ export function renderRehearsalReport(project: ProjectConfig, r: RehearseResult,
   L.push("## 结论");
   L.push(`- 主仓库 ${r.primary.label} 克隆上执行：合入 **${r.run.merged.length}** · 已在集成 ${r.run.alreadyIn.length} · 失败·待处理 ${r.run.failed.length} · 顺延 **${r.run.rolled.length}** · 未演练 ${r.run.unrehearsed.length}`);
   L.push(`- tag：${r.run.tags.map((t) => `${t.label} ${t.tag} → ${short(t.target)}`).join("；") || "未打（" + (r.run.finalized ? "失败" : "本版未收尾") + "）"}${r.run.tagErrors.length ? `；${r.run.tagErrors.join("；")}` : ""}`);
+  L.push(`- 合并单：${planCountsLine(p)}`);
   L.push(`- 解冲突器（Opus）花费：$${r.run.costUsd.toFixed(2)}`);
   L.push(`- 耗时：克隆 ${sec(r.cloneMs)} · 预演 ${sec(r.previewMs)} · 执行 ${sec(r.runMs)} · 合计 ${sec(r.totalMs)}`);
   L.push(`- 真仓库零写入：${r.zeroWrite ? "**一致**（三仓库 stat 快照前后完全相同）" : "**有差异**（见下文，需逐条核实来源）"}`);
+  L.push(`- 写保护沙箱：${r.sandboxed ? "**已启用**（sandbox-exec；克隆、试合、合并、解冲突器、checks 全部 deny 真实仓库的根目录与 .git）" : "**未启用**（不应出现：演练在沙箱不可用时会拒绝执行）"}`);
   L.push(`- 未推送：${r.run.unpushed.join("；") || "无"}（演练克隆上的引用，不影响真仓库）`);
   if (r.run.aborted.length) L.push(`- **中止**：${r.run.aborted.join("；")}`);
   for (const w of r.run.warnings) L.push(`- 提示：${w}`);
@@ -177,7 +189,7 @@ export function renderRehearsalReport(project: ProjectConfig, r: RehearseResult,
   const ci = p.items.filter((i) => i.union_resolved?.length || i.resolver);
   if (!ci.length) L.push("- 本次没有需要处理的冲突。");
   for (const i of ci) {
-    if (i.union_resolved?.length) L.push(`- ${i.feature}：union（两边都保留、新日期在前）${i.union_resolved.join("、")}`);
+    if (i.union_resolved?.length) L.push(`- ${i.feature}：union（两边内容都保留、新日期在前）${i.union_resolved.join("、")}`);
     if (i.resolver) L.push(`- ${i.feature}：解冲突器 ${i.resolver.files.join("、")}，${i.resolver.rounds} 轮、${i.resolver.turns ?? "?"} 步、$${i.resolver.cost_usd.toFixed(2)}，${i.resolver.ok ? "解完" : "未解完"}。报告：${cell(i.resolver.summary || "（无）").slice(0, 600)}`);
   }
   L.push("");
@@ -186,9 +198,10 @@ export function renderRehearsalReport(project: ProjectConfig, r: RehearseResult,
   for (const x of r.run.rolled) L.push(`- ${x.feature} ${x.title} → ${x.to}（${x.reason}）`);
   L.push("");
   L.push("## 真仓库零写入（stat 快照比对）");
-  L.push("| 仓库 | 快照项 | 新增 | 删除 | 变化 |");
-  L.push("|---|---|---|---|---|");
-  for (const s of r.snapshots) L.push(`| ${s.label} | ${s.items} | ${s.diff.added.length} | ${s.diff.removed.length} | ${s.diff.changed.length} |`);
+  L.push("| 仓库 | 快照项 | 新增 | 删除 | 变化 | 原始快照（相对演练目录） |");
+  L.push("|---|---|---|---|---|---|");
+  for (const s of r.snapshots) L.push(`| ${s.label} | ${s.items} | ${s.diff.added.length} | ${s.diff.removed.length} | ${s.diff.changed.length} | \`${s.before}\` → \`${s.after}\` |`);
+  L.push(`- 每行「相对路径<TAB>mtime毫秒|大小」，可直接 \`diff\` 两个文件复核；演练目录：\`${r.root}\`。`);
   for (const s of r.snapshots) {
     const all = [...s.diff.added.map((x) => `+ ${x}`), ...s.diff.removed.map((x) => `- ${x}`), ...s.diff.changed.map((x) => `~ ${x}`)];
     if (all.length) L.push(`- ${s.label} 差异（前 20 条）：${all.slice(0, 20).map((x) => `\`${x}\``).join("、")}`);

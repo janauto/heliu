@@ -173,7 +173,8 @@ export function buildFixture(): Fixture {
     claudeApp,
     claudeHome,
     heliuHome,
-    env: { HELIU_HOME: heliuHome, HELIU_CLAUDE_APP_DIR: claudeApp, HELIU_CLAUDE_HOME: claudeHome },
+    // HELIU_DOCTOR_SKIP_CLAUDE：doctor 的无头 claude 探测会真的启动 claude，测试里跳过
+    env: { HELIU_HOME: heliuHome, HELIU_CLAUDE_APP_DIR: claudeApp, HELIU_CLAUDE_HOME: claudeHome, HELIU_DOCTOR_SKIP_CLAUDE: "1" },
     wt,
     cleanup: () => rmSync(root, { recursive: true, force: true }),
   };
