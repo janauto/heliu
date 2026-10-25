@@ -24,7 +24,7 @@ rm -rf "$SNAP" "$HOMECOPY"; git worktree prune; git worktree add --detach -q "$S
 ln -s "$ROOT/node_modules.nosync" "$SNAP/node_modules"
 mkdir -p "$HOMECOPY"; [ -d "$REAL_HOME" ] && cp -R "$REAL_HOME/." "$HOMECOPY/"
 # 把 project.yaml 里指向真实 heliu 目录的绝对路径改写到副本（ledger 等）
-find "$HOMECOPY/projects" -name project.yaml -print0 2>/dev/null | xargs -0 -I{} sed -i '' "s#${REAL_HOME}#${HOMECOPY}#g" {} 2>/dev/null || true
+find "$HOMECOPY/projects" -name project.yaml -print0 2>/dev/null | xargs -0 -I{} sed -i '' -e "s#${REAL_HOME}#${HOMECOPY}#g" -e "s#~/Library/Application Support/heliu#${HOMECOPY}#g" {} 2>/dev/null || true
 export HELIU_HOME="$HOMECOPY"
 export PATH="$HOME/.bun/bin:$PATH"
 SERVER_PID=""
