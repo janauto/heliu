@@ -25,3 +25,5 @@
 - Bun 1.3 + TypeScript strict；`bun test`；`bun run bin/heliu <命令>`。
 - `node_modules` → `node_modules.nosync` 软链（iCloud 不同步）。
 - 提交信息：说清改了什么、为什么；末尾 `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`。
+- **多个工程师共用一个工作树时**：只 `git add <精确路径>`，并用 `git commit -- <路径>` 提交（否则会把别人暂存的改动一起带走）；遇到 `index.lock` 等 2 秒重试；大块独立功能用独立 worktree 开发再合回 main。
+- Codex 验收在冻结快照上跑（`scripts/codex-accept.sh M<N> <轮次> --ref <提交>`），开发可同时继续。
