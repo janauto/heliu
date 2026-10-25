@@ -165,7 +165,7 @@ export function ReleasePage({ tick }: { tick: number }) {
             ) : (
               <p class="muted">无</p>
             )}
-            <p class="muted small">顺延 = 合并时没合完的功能挪到下一版并标「从 {d.milestone.id} 顺延」（由 M4 执行，不会静默丢弃）。</p>
+            <p class="muted small">顺延 = 合并时没合完的功能挪到下一版并标「从 {d.milestone.id} 顺延」（由终端 heliu 合并 执行，不会静默丢弃）。</p>
           </div>
           {d.suggestions.length ? (
             <>

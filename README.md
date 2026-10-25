@@ -19,7 +19,7 @@
 ## 安装（三步）
 
 1. **装 bun**（已有可跳过）：`curl -fsSL https://bun.sh/install | bash`
-2. **跑安装脚本**：`scripts/install.sh`（想先看会做什么：`scripts/install.sh --dry-run`）。它会：`bun install`（`node_modules` 软链到 `node_modules.nosync`，iCloud 不同步）→ 注册 user 级 MCP `heliu` → 把本仓库加成本地 marketplace `heliu-local` 并安装插件 `heliu@heliu-local`（带 `/heliu` Skill、hooks、MCP）。卸载：`scripts/uninstall.sh`（不删台账与缓存）。
+2. **跑安装脚本**：`scripts/install.sh`（想先看会做什么：`scripts/install.sh --dry-run`）。它会：`bun install`（`node_modules` 软链到 `node_modules.nosync`，iCloud 不同步）→ 把本仓库加成本地 marketplace `heliu-local` 并安装插件 `heliu@heliu-local`（带 `/heliu` Skill、hooks、MCP）。默认只装插件；想额外注册 user 级 MCP 加 `--with-mcp`。卸载：`scripts/uninstall.sh`（不删台账与缓存）。
 3. **接入你的项目**：`bin/heliu project add <仓库路径>`，向导会猜主线、集成分支、远端、是否在 iCloud，打一张中文摘要等你确认，然后建台账。再 `bin/heliu board --project <项目名>` 打开看板。
 
 想在任何目录直接敲 `heliu`：把 `bin/heliu` 链到你 PATH 里的某个目录，例如 `ln -s "$PWD/bin/heliu" /usr/local/bin/heliu`。`bin/heliu` 是个 sh 包装，自己找 bun，不依赖 PATH 里有 bun。
@@ -74,7 +74,7 @@
 - iCloud 仓库默认不做工作区脏检查（会触发文件下载），`--dirty` 才查。
 - 桌面应用的会话 JSON 没有官方文档：字段变了会逐项降级为「缺失」；目前会话记录里没有 `claude://` 链接，看板的「打开会话」按钮置灰，改为复制会话 ID。
 - 合并遇到普通文件冲突时交给 Claude 子代理解，需要本机 `claude` CLI 已登录；真实 Opus 解冲突还没有端到端验证过（见 M4 实现说明）。仓库没配集成分支的项不会被合并（默认顺延）。
-- 同时注册 user 级 MCP 和插件时，会话里 heliu 工具会出现两份（插件自带同名 MCP）；只想要一份：`scripts/install.sh --no-mcp`。
+- 用 `--with-mcp` 额外注册 user 级 MCP 后，会话里 heliu 工具会出现两份（插件自带同名 MCP）；默认安装只有插件那一份。
 - 注册表里有多个项目后，在项目目录之外运行命令需要加 `--project <名>`。
 - 看板一次服务一个项目；拖拽改预约只支持桌面浏览器，手机上用卡片展开后的下拉。
 - 仓库放在 iCloud Drive 时，Claude 桌面应用的「预览」（`.claude/launch.json`）启动器拿不到 iCloud 目录的访问权（报 `Operation not permitted`），看板请在终端用 `bin/heliu board` 启动。

@@ -169,7 +169,7 @@ export function renderTodo(projectName: string, t: TodoReport, opts: RenderOpts 
     const why = s.failed ? `（${s.firstError ?? "原因未知"}；这些卡不能当成无冲突）` : "";
     out.push(...hangingWrap("试合：", `${state} · 冲突 ${s.conflicts ?? 0} 张 · 未能试合 ${s.failed} 张${why}`, W));
   }
-  out.push(...hangingWrap("顺延：", "某版合并时没合完的功能自动挪到下一版，标「从 vX 顺延」排在组内最前（M4 执行，不会静默丢弃）", W));
+  out.push(...hangingWrap("顺延：", "某版合并时没合完的功能自动挪到下一版，标「从 vX 顺延」排在组内最前（终端 heliu 合并 执行时处理，不会静默丢弃）", W));
   const empty = t.groups.filter((g) => g.count === 0).map((g) => g.title);
   for (const g of t.groups) {
     if (g.count === 0) continue;

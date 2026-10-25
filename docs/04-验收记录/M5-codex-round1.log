@@ -1,0 +1,2284 @@
+快照：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M5-r1-0d7dedb（0d7dedb）
+HELIU_HOME 副本：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M5-r1-0d7dedb-heliu-home
+看板已在沙箱外启动：http://127.0.0.1:7797/
+Reading additional input from stdin...
+OpenAI Codex v0.164.0-alpha.11.1
+--------
+workdir: /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR] (network access enabled)
+reasoning effort: high
+reasoning summaries: none
+session id: 01a17506-982c-76b0-87c5-c9a898ea5d91
+--------
+user
+你是「合流（heliu）」的第一位真实用户：个人开发者，在 Claude 桌面应用里同时开十几个会话（每个会话一个 git worktree）开发磁吸背夹项目，痛点是合并一版时漏功能、分支基线落后、没有大版本待办。这是全项目的终验，请以"明天能不能直接用"为唯一标准，不做压力测试、不做异常注入、不对真实仓库执行任何合并。
+
+对照 docs/02-产品定义/产品定义_v0.1.md 第 9 节的 6 条"怎么算做成"：
+1. 打开看板 10 秒内看懂：磁吸背夹下一版还欠哪几项、哪几项能合、哪几项在等我（看板由验收脚本在你的沙箱外启动，地址见提示末尾；curl 接口 + 读首页 HTML；能开浏览器就看）。
+2. 新开一个会话随口说"做个 X"，不做任何额外动作，看板上出现 X 的卡片并预约到下一版（用 `echo '{...SessionStart...}' | bin/heliu-hook` 模拟注入，再用 MCP 冒烟脚本或 CLI `新点子` 模拟 Agent 登记，检查卡片出现在 `待办 下一版`）。
+3. 说"合并 vX"，先看到预演（顺序、冲突、顺延），确认后合完，发布说明和顺延清单自动生成（只在 fixture 或 rehearse 克隆上做，读实现说明的演练报告）。
+4. 一条老分支能一眼看出落后主线多少，并一键同步基线（预演即可）。
+5. 全程没有一次自动 push / 删除；iCloud 仓库扫描不卡死（status 用时）。
+6. 安装：按 README 的三步装进一个新项目（可用临时 git 仓库），`claude plugin` / MCP 是否可被识别（实现说明给了验证命令）。
+
+按 schema 输出：verdict、summary（3 句内：明天能不能用）、solved（三个痛点各一档）、blocking_issues（会让用户明天用不起来的问题）、suggestions（≤5，面向 1.0 之后）。
+
+【验收脚本补充】看板已由脚本在沙箱外启动：http://127.0.0.1:7797/ （不要自己再启动服务，你的沙箱不能监听端口）。台账与注册表是副本（HELIU_HOME 已指向副本），PATCH / POST 可以放心做，不会影响真实台账；被管理的磁吸背夹仓库仍然不得写入。
+warning: Under-development features enabled: chronicle. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Users/linxiansheng/.codex/config.toml.
+codex
+我会按“明天能否直接用”走完六条验收，核对看板、会话登记、合并演练和新项目安装；真实磁吸背夹仓库只读检查。
+
+exec
+/bin/zsh -lc "pwd; git status --short; rg --files -g 'AGENTS.md' -g '*实现*' -g '*演练*' -g 'README*' -g '*产品定义*'; rg -n 'heliu|合流' /Users/linxiansheng/.codex/memories/MEMORY.md" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ exited 1 in 0ms:
+/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+README.md
+docs/03-架构/M1-实现说明.md
+docs/03-架构/M2-实现说明.md
+docs/03-架构/M3-实现说明.md
+docs/03-架构/M5-实现说明.md
+docs/03-架构/M4-实现说明.md
+docs/02-产品定义/产品定义_v0.1.md
+docs/04-验收记录/M4-演练报告.md
+
+exec
+/bin/zsh -lc "curl -sS --max-time 30 -w '\\nTIME:%{time_total}\\n' http://127.0.0.1:7797/" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 0ms:
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>合流看板</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="app"><p class="boot">合流看板加载中…（如果一直停在这里，请确认是用 heliu board 启动的）</p></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
+
+TIME:0.003027
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (failed)
+exec
+/bin/zsh -lc "cat package.json src/core/paths.ts bin/heliu bin/heliu-hook; sed -n '1,240p' scripts/codex-accept.sh; sed -n '1,250p' src/board/server.ts; cat scripts/mcp-smoke.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 0ms:
+{
+  "name": "heliu",
+  "version": "0.2.0",
+  "description": "合流（heliu）：分支 × worktree × 桌面会话对账单 + 功能卡/里程碑台账（CLI · MCP · hooks · Skill）",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "heliu": "./bin/heliu"
+  },
+  "scripts": {
+    "heliu": "bun run bin/heliu",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "commander": "15.0.0",
+    "hono": "4.13.14",
+    "preact": "11.0.2",
+    "string-width": "8.3.0",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  }
+}
+/**
+ * 本机数据位置（ADR-3）。全部可用环境变量覆盖，测试用它指向 fixture。
+ * - HELIU_HOME：heliu 注册表与缓存根目录
+ * - HELIU_CLAUDE_APP_DIR：Claude 桌面应用数据目录（会话 JSON、git-worktrees.json）
+ * - HELIU_CLAUDE_HOME：~/.claude（运行中会话 sessions/<pid>.json）
+ */
+import { existsSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
+export interface HeliuPaths {
+  heliuHome: string;
+  projectsDir: string;
+  claudeAppDir: string;
+  desktopSessionsDir: string;
+  gitWorktreesJson: string;
+  claudeHome: string;
+  runningSessionsDir: string;
+}
+
+export function heliuPaths(env: NodeJS.ProcessEnv = process.env): HeliuPaths {
+  const home = homedir();
+  const heliuHome = env.HELIU_HOME || join(home, "Library", "Application Support", "heliu");
+  const claudeAppDir = env.HELIU_CLAUDE_APP_DIR || join(home, "Library", "Application Support", "Claude");
+  const claudeHome = env.HELIU_CLAUDE_HOME || join(home, ".claude");
+  return {
+    heliuHome,
+    projectsDir: join(heliuHome, "projects"),
+    claudeAppDir,
+    desktopSessionsDir: join(claudeAppDir, "claude-code-sessions"),
+    gitWorktreesJson: join(claudeAppDir, "git-worktrees.json"),
+    claudeHome,
+    runningSessionsDir: join(claudeHome, "sessions"),
+  };
+}
+
+/** 是否位于 iCloud Drive（按路径判断） */
+export function looksLikeICloud(p: string): boolean {
+  return p.includes("/Library/Mobile Documents/");
+}
+
+const realCache = new Map<string, string>();
+/**
+ * 规范化路径用于比较：realpath（不存在则 resolve）+ Unicode NFC。
+ * realpath 只 stat 不读内容，不会触发 iCloud 下载。
+ */
+export function canonicalPath(p: string): string {
+  const cached = realCache.get(p);
+  if (cached !== undefined) return cached;
+  let out: string;
+  try {
+    out = existsSync(p) ? realpathSync(p) : resolve(p);
+  } catch {
+    out = resolve(p);
+  }
+  out = out.normalize("NFC").replace(/\/+$/, "");
+  realCache.set(p, out);
+  return out;
+}
+
+/** child 是否等于 parent 或位于其下 */
+export function isUnder(child: string, parent: string): boolean {
+  return child === parent || child.startsWith(parent + "/");
+}
+
+/**
+ * M4 合并执行的临时目录根（非 iCloud）：~/.cache/heliu（HELIU_CACHE_DIR 可覆盖，测试用）。
+ * 下设 worktrees/<项目>/<里程碑>/<仓库>（解冲突用的临时 worktree）、rehearsal/<项目>/<时间>/（演练克隆）、tmp/。
+ * 写模式 git 只允许在这里做 checkout / merge / reset 等会动工作区的操作。
+ */
+export function heliuCacheDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.HELIU_CACHE_DIR || join(homedir(), ".cache", "heliu");
+}
+#!/bin/sh
+':' //; # 合流（heliu）CLI 入口。本文件既是 POSIX sh 脚本，也是 bun 能直接跑的 JS 模块：
+':' //; #  - 直接执行（./bin/heliu、plugin 的 .mcp.json、PATH 上的 heliu）：sh 自己找 bun 再 exec 到 src/cli/main.ts，不依赖 PATH 里有 bun；
+':' //; #  - bun run bin/heliu（验收提示词与旧文档的用法）：bun 当 JS 读，每行开头的 ':' 是无害的字符串语句、// 之后是注释，最后一行 import 入口。
+':' //; # 找 bun 的顺序：command -v bun → ~/.bun/bin/bun → /opt/homebrew/bin/bun → /usr/local/bin/bun → $BUN_BIN；找不到打印一行中文错误、退出 1。
+':' //; SELF=$0
+':' //; while [ -L "$SELF" ]; do L=$(readlink "$SELF"); case $L in /*) SELF=$L ;; *) SELF=$(dirname "$SELF")/$L ;; esac; done
+':' //; ROOT=$(cd "$(dirname "$SELF")/.." && pwd)
+':' //; BUN=
+':' //; for c in "$(command -v bun 2>/dev/null)" "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun "$BUN_BIN"; do if [ -n "$c" ] && [ -x "$c" ]; then BUN=$c; break; fi; done
+':' //; if [ -z "$BUN" ]; then echo "heliu：找不到 bun（已找过 PATH、~/.bun/bin、/opt/homebrew/bin、/usr/local/bin、BUN_BIN）。请安装 bun（https://bun.sh），或设置环境变量 BUN_BIN=<bun 的路径>" >&2; exit 1; fi
+':' //; exec "$BUN" "$ROOT/src/cli/main.ts" "$@"
+import "../src/cli/main.ts";
+#!/bin/sh
+':' //; # 合流（heliu）Claude Code hook 入口（plugin hooks/hooks.json 调用）。本文件既是 POSIX sh 脚本，也是 bun 能直接跑的 JS 模块：
+':' //; #  - 直接执行：sh 自己找 bun 再 exec 到 src/hooks/main.ts（stdin 原样传过去），不依赖 PATH 里有 bun；
+':' //; #  - bun run bin/heliu-hook：bun 当 JS 读，最后一行 import 入口。
+':' //; # 找 bun 的顺序同 bin/heliu；找不到时静默 exit 0（hook 绝不阻塞会话）。
+':' //; SELF=$0
+':' //; while [ -L "$SELF" ]; do L=$(readlink "$SELF"); case $L in /*) SELF=$L ;; *) SELF=$(dirname "$SELF")/$L ;; esac; done
+':' //; ROOT=$(cd "$(dirname "$SELF")/.." && pwd)
+':' //; BUN=
+':' //; for c in "$(command -v bun 2>/dev/null)" "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun "$BUN_BIN"; do if [ -n "$c" ] && [ -x "$c" ]; then BUN=$c; break; fi; done
+':' //; if [ -z "$BUN" ]; then exit 0; fi
+':' //; exec "$BUN" "$ROOT/src/hooks/main.ts" "$@"
+import "../src/hooks/main.ts";
+#!/usr/bin/env bash
+# 用本机 Codex（ChatGPT）以普通用户视角做里程碑二次验收。
+# 用法：scripts/codex-accept.sh <里程碑 如 M1> <轮次 如 2> [--ref <提交，默认 HEAD>] [--serve <端口>] [提示词文件]
+# 行为：
+#   1) 为 --ref 建临时 git worktree（冻结快照），node_modules 软链到本仓库 node_modules.nosync；
+#   2) 把 ~/Library/Application Support/heliu 复制一份作为 HELIU_HOME（注册表 + 台账副本），
+#      并把 project.yaml 里指向真实 heliu 目录的绝对路径改写到副本 → Codex 的任何写操作只落在副本；
+#   3) --serve <端口>：在沙箱外用快照 + 副本启动看板（只监听 127.0.0.1），Codex 只连接不监听，
+#      并给 codex 打开 sandbox_workspace_write.network_access；结束后关闭服务；
+#   4) 结论写回本仓库 docs/04-验收记录/<里程碑>-codex-round<轮次>.json 与 .log。
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
+MS="${1:?里程碑，如 M1}"; ROUND="${2:?轮次，如 1}"; shift 2
+REF="HEAD"; PROMPT_FILE=""; SERVE_PORT=""
+while [ $# -gt 0 ]; do case "$1" in --ref) REF="$2"; shift 2;; --serve) SERVE_PORT="$2"; shift 2;; *) PROMPT_FILE="$1"; shift;; esac; done
+PROMPT_FILE="${PROMPT_FILE:-docs/04-验收记录/prompts/${MS}.md}"
+[ -f "$PROMPT_FILE" ] || { echo "缺少提示词文件：$PROMPT_FILE" >&2; exit 2; }
+OUT="$ROOT/docs/04-验收记录/${MS}-codex-round${ROUND}.json"; LOG="$ROOT/docs/04-验收记录/${MS}-codex-round${ROUND}.log"
+SCRATCH="${HELIU_ACCEPT_DIR:-${TMPDIR:-/tmp}/heliu-accept}"; mkdir -p "$SCRATCH"
+SHORT="$(git rev-parse --short "$REF")"
+SNAP="$SCRATCH/${MS}-r${ROUND}-${SHORT}"; HOMECOPY="$SCRATCH/${MS}-r${ROUND}-${SHORT}-heliu-home"
+REAL_HOME="$HOME/Library/Application Support/heliu"
+rm -rf "$SNAP" "$HOMECOPY"; git worktree prune; git worktree add --detach -q "$SNAP" "$REF"
+ln -s "$ROOT/node_modules.nosync" "$SNAP/node_modules"
+mkdir -p "$HOMECOPY"; [ -d "$REAL_HOME" ] && cp -R "$REAL_HOME/." "$HOMECOPY/"
+# 把 project.yaml 里指向真实 heliu 目录的绝对路径改写到副本（ledger 等）
+find "$HOMECOPY/projects" -name project.yaml -print0 2>/dev/null | xargs -0 -I{} sed -i '' -e "s#${REAL_HOME}#${HOMECOPY}#g" -e "s#~/Library/Application Support/heliu#${HOMECOPY}#g" {} 2>/dev/null || true
+export HELIU_HOME="$HOMECOPY"
+export PATH="$HOME/.bun/bin:$PATH"
+SERVER_PID=""
+cleanup(){ [ -n "$SERVER_PID" ] && kill "$SERVER_PID" >/dev/null 2>&1 || true; git -C "$ROOT" worktree remove --force "$SNAP" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+{ echo "快照：$SNAP（$SHORT）"; echo "HELIU_HOME 副本：$HOMECOPY"; } | tee "$LOG"
+CODEX_EXTRA=()
+if [ -n "$SERVE_PORT" ]; then
+  ( cd "$SNAP" && HELIU_HOME="$HOMECOPY" nohup bun run bin/heliu board --project 磁吸背夹 --port "$SERVE_PORT" --no-open >"$SCRATCH/${MS}-r${ROUND}-board.log" 2>&1 & echo $! > "$SCRATCH/${MS}-r${ROUND}-board.pid" )
+  SERVER_PID="$(cat "$SCRATCH/${MS}-r${ROUND}-board.pid")"
+  for i in $(seq 1 20); do lsof -nP -iTCP:"$SERVE_PORT" -sTCP:LISTEN >/dev/null 2>&1 && break; sleep 1; done
+  if lsof -nP -iTCP:"$SERVE_PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo "看板已在沙箱外启动：http://127.0.0.1:$SERVE_PORT/" | tee -a "$LOG"; else echo "看板启动失败，见 $SCRATCH/${MS}-r${ROUND}-board.log" | tee -a "$LOG"; fi
+  CODEX_EXTRA+=(-c "sandbox_workspace_write.network_access=true")
+fi
+PROMPT="$(cat "$PROMPT_FILE")"
+[ -n "$SERVE_PORT" ] && PROMPT="$PROMPT
+
+【验收脚本补充】看板已由脚本在沙箱外启动：http://127.0.0.1:${SERVE_PORT}/ （不要自己再启动服务，你的沙箱不能监听端口）。台账与注册表是副本（HELIU_HOME 已指向副本），PATCH / POST 可以放心做，不会影响真实台账；被管理的磁吸背夹仓库仍然不得写入。"
+codex exec -s workspace-write --ephemeral -C "$SNAP" ${CODEX_EXTRA[@]+"${CODEX_EXTRA[@]}"} \
+  --output-schema "$ROOT/docs/04-验收记录/verdict.schema.json" -o "$OUT" \
+  "$PROMPT" >> "$LOG" 2>&1 || true
+if [ -s "$OUT" ]; then jq . "$OUT"; else echo "未得到结构化结论，见 $LOG" >&2; tail -20 "$LOG"; exit 1; fi
+/**
+ * heliu board：本机看板服务（Hono on Bun，只监听 127.0.0.1）。
+ *
+ * - /api/*：JSON，外壳 = JsonEnvelope + meta（数据时间/用时/是否命中缓存）。
+ * - 写接口只动台账（features/*.md、milestones.yaml、releases/*.md 草稿），绝不动被管理仓库；
+ *   合并只预演（merge-tree 在对象隔离区 + 沙箱里试合），执行留给 M4。
+ * - 防 DNS rebinding：Host 必须是 127.0.0.1 / localhost / [::1]；写接口必须是 application/json（浏览器跨站表单发不出来）。
+ * - createBoardApp 不监听端口，测试直接用 app.request()；runBoard 才起服务。
+ */
+import { existsSync, writeSync } from "node:fs";
+import { join } from "node:path";
+import { Hono, type Context } from "hono";
+import { SCHEMA_VERSION } from "../types.ts";
+import type { HeliuPaths } from "../core/paths.ts";
+import { Ledger } from "../core/ledger.ts";
+import { ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
+import type { BoardEnvelope, BoardMeta } from "./api-types.ts";
+import { DIST_DIR, ensureWebBuild } from "./build.ts";
+import { BoardService } from "./data.ts";
+
+export const DEFAULT_PORT = 7788;
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+
+export interface BoardAppOptions {
+  paths: HeliuPaths;
+  project: ProjectConfig;
+  ttlMs?: number;
+  now?: () => Date;
+  distDir?: string;
+}
+
+function hostAllowed(host: string | undefined): boolean {
+  if (!host) return true; // 非浏览器客户端（curl 总会带 Host；app.request 测试可能不带）
+  const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : (host.split(":")[0] ?? "");
+  return LOCAL_HOSTS.has(name.toLowerCase());
+}
+
+const truthy = (v: string | undefined) => v === "1" || v === "true" || v === "yes";
+
+export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: BoardService } {
+  const service = new BoardService({ paths: opts.paths, project: opts.project, ttlMs: opts.ttlMs, now: opts.now });
+  const dist = opts.distDir ?? DIST_DIR;
+  const app = new Hono();
+
+  const send = <T>(c: Context, command: string, data: T, meta: BoardMeta | null = null, status: 200 | 201 = 200) => {
+    const p = service.project;
+    const body: BoardEnvelope<T> = {
+      schemaVersion: SCHEMA_VERSION,
+      command,
+      generatedAt: new Date().toISOString(),
+      project: { name: p.name, source: p.source },
+      data,
+      meta,
+    };
+    c.header("Cache-Control", "no-store");
+    return c.json(body, status);
+  };
+
+  const body = async (c: Context): Promise<Record<string, unknown>> => {
+    const text = await c.req.text();
+    if (!text.trim()) return {};
+    try {
+      const v = JSON.parse(text) as unknown;
+      if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+    } catch {
+      /* 落到下面的报错 */
+    }
+    throw new ProjectError("请求体必须是 JSON 对象");
+  };
+
+  app.use("*", async (c, next) => {
+    if (!hostAllowed(c.req.header("host"))) return c.json({ error: "只接受本机访问（Host 必须是 127.0.0.1 / localhost）" }, 403);
+    if (c.req.method !== "GET" && c.req.method !== "HEAD") {
+      const ct = c.req.header("content-type") ?? "";
+      if (!ct.toLowerCase().startsWith("application/json")) return c.json({ error: "写接口只接受 Content-Type: application/json" }, 415);
+    }
+    await next();
+  });
+
+  app.onError((err, c) => {
+    const status = err instanceof ProjectError ? 400 : 500;
+    if (status === 500) console.error(`heliu board：${err.stack ?? err}`);
+    return c.json({ error: err.message }, status);
+  });
+
+  /* ───────────── 只读 ───────────── */
+
+  app.get("/api/status", async (c) => {
+    const r = await service.status(truthy(c.req.query("precheck")), truthy(c.req.query("fresh")));
+    return send(c, "status", r.data, r.meta);
+  });
+  app.get("/api/sessions", async (c) => {
+    const r = await service.sessions();
+    return send(c, "sessions", r.data, r.meta);
+  });
+  app.get("/api/hygiene", async (c) => {
+    const r = await service.hygiene();
+    return send(c, "hygiene", r.data, r.meta);
+  });
+  app.get("/api/milestones", (c) => send(c, "milestone.list", service.milestones()));
+  app.get("/api/features", async (c) => {
+    // 版本列默认试合（灯色要分出「有冲突」）；precheck=0 时冲突「未检查」
+    const pc = c.req.query("precheck");
+    const r = await service.features(c.req.query("milestone") ?? null, pc === undefined ? true : truthy(pc));
+    return send(c, "feature.list", r.data, r.meta);
+  });
+  app.get("/api/features/:id/baseline", async (c) => send(c, "feature.baseline", await service.baseline(c.req.param("id"))));
+  app.get("/api/todo", async (c) => {
+    const r = await service.todo(c.req.query("milestone") ?? "下一版", truthy(c.req.query("precheck")));
+    return send(c, "milestone.todo", r.data, r.meta);
+  });
+  app.get("/api/overview", async (c) => {
+    const r = await service.overview(truthy(c.req.query("precheck")));
+    return send(c, "overview", r.data, r.meta);
+  });
+  app.get("/api/release/preview", async (c) => {
+    const r = await service.releasePreview(c.req.query("milestone") ?? "下一版");
+    return send(c, "release.preview", r.data, r.meta);
+  });
+
+  /* ───────────── 写台账 ───────────── */
+
+  app.post("/api/features", async (c) => send(c, "feature.add", service.addFeature(await body(c)), null, 201));
+  app.patch("/api/features/:id", async (c) => send(c, "feature.update", service.patchFeature(c.req.param("id"), await body(c))));
+  app.post("/api/sync", async (c) => {
+    const b = await body(c);
+    const dry = b.dry_run ?? b.dryRun;
+    return send(c, "sync", await service.sync(dry === true || dry === "true" || dry === 1));
+  });
+  app.post("/api/release/plan", async (c) => {
+    const b = await body(c);
+    const ms = typeof b.milestone === "string" && b.milestone.trim() ? b.milestone : "下一版";
+    return send(c, "release.plan", await service.releasePlan(ms), null, 201);
+  });
+
+  app.all("/api/*", (c) => c.json({ error: `没有这个接口：${c.req.method} ${c.req.path}` }, 404));
+
+  /* ───────────── 前端静态文件 ───────────── */
+
+  const file = (name: string, type: string) => (c: Context) => {
+    const p = join(dist, name);
+    if (!existsSync(p)) return c.text("看板前端还没有打包：请用 heliu board 启动（会自动打包）", 503);
+    return new Response(Bun.file(p), { headers: { "Content-Type": type, "Cache-Control": "no-cache" } });
+  };
+  app.get("/", file("index.html", "text/html; charset=utf-8"));
+  app.get("/index.html", file("index.html", "text/html; charset=utf-8"));
+  app.get("/app.js", file("app.js", "text/javascript; charset=utf-8"));
+  app.get("/app.css", file("app.css", "text/css; charset=utf-8"));
+
+  return { app, service };
+}
+
+export interface RunBoardOptions {
+  paths: HeliuPaths;
+  projectName?: string;
+  cwd: string;
+  port?: number;
+  open?: boolean;
+  log?: (line: string) => void;
+}
+
+/**
+ * HELIU_DEBUG=1 时逐步往 stderr 打点（同步写，进程卡住也能看到最后一步）：
+ * 用来定位桌面应用 launch.json 启动时「进程在、端口没监听、连横幅都没打」的挂起（M5 排查）。
+ */
+export function debugLogger(env: NodeJS.ProcessEnv = process.env): (step: string) => void {
+  if (env.HELIU_DEBUG !== "1") return () => undefined;
+  const t0 = performance.now();
+  return (step: string) => {
+    try {
+      writeSync(2, `[heliu board +${Math.round(performance.now() - t0)}ms] ${step}\n`);
+    } catch {
+      /* stderr 不可写就算了 */
+    }
+  };
+}
+
+/** 起服务并一直运行到 Ctrl+C（main.ts 在 main() 返回后会 process.exit，所以这里不能提前返回） */
+export async function runBoard(opts: RunBoardOptions): Promise<void> {
+  // 无论是否 HELIU_DEBUG，先往 stderr 打一行：桌面 launch.json 预览下至少能看到进程活着（M5）
+  try {
+    writeSync(2, "合流看板启动中…（HELIU_DEBUG=1 可看详细阶段）\n");
+  } catch {
+    /* stderr 不可写就算了 */
+  }
+  const dbg = debugLogger();
+  dbg(`开始：pid=${process.pid} cwd=${opts.cwd} bun=${Bun.version} HELIU_HOME=${opts.paths.heliuHome}`);
+  const log = opts.log ?? ((l: string) => console.log(l));
+  dbg(`加载项目…（--project=${opts.projectName ?? "未指定，按目录识别"}）`);
+  const project = await resolveProject(opts.paths, opts.projectName, opts.cwd);
+  dbg(`项目已加载：${project.name}（${project.repos.length} 个仓库，${project.source}）`);
+  dbg("读台账…");
+  try {
+    const ledger = Ledger.of(project);
+    const ms = ledger.listMilestones().length;
+    const n = ledger.load().features.length;
+    dbg(`台账可读：${ledger.dir}（${ms} 个里程碑、${n} 张卡）`);
+  } catch (e) {
+    dbg(`台账读取失败（不影响启动，页面里会报错）：${(e as Error).message}`);
+  }
+  dbg("检查前端打包…");
+  const build = await ensureWebBuild();
+  dbg(`前端${build.built ? `已重新打包（${build.ms} ms）` : "沿用已有打包"}：${build.dir}`);
+  const { app, service } = createBoardApp({ paths: opts.paths, project });
+  const port = opts.port ?? DEFAULT_PORT;
+  dbg(`监听 127.0.0.1:${port}…`);
+  let server: ReturnType<typeof Bun.serve>;
+  try {
+    server = Bun.serve({ hostname: "127.0.0.1", port, fetch: app.fetch, idleTimeout: 120 });
+  } catch (e) {
+    const msg = String((e as Error).message ?? e);
+    dbg(`监听失败：${msg}`);
+    if (/EADDRINUSE|in use/i.test(msg)) throw new ProjectError(`端口 ${port} 已被占用：换一个端口（heliu board --port ${port + 1}），或先关掉占用它的程序`);
+    throw e;
+  }
+  dbg(`已监听 127.0.0.1:${server.port}`);
+  dbg("预热开始（后台扫描：不预检 + 预检）");
+  service.warm();
+  const url = `http://127.0.0.1:${server.port}/`;
+  const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
+  log(`合流看板 · ${project.name}`);
+  log(`  地址：${url}（只监听本机）`);
+  log(`  前端：${build.built ? `已重新打包（${build.ms} ms）` : "沿用已有打包"} · app.js ${kb(build.sizes["app.js"] ?? 0)} · app.css ${kb(build.sizes["app.css"] ?? 0)}`);
+  log("  只读为主：改预约/改名/放弃只写台账；合并只预演，不执行（M4）。按 Ctrl+C 退出。");
+  if (opts.open !== false) {
+    try {
+      Bun.spawn({ cmd: ["open", url], stdout: "ignore", stderr: "ignore" });
+    } catch {
+      log(`  （没能自动打开浏览器，请手动打开 ${url}）`);
+    }
+  }
+  await new Promise<void>((resolve) => {
+    const stop = () => {
+      server.stop(true);
+      resolve();
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+  });
+}
+#!/usr/bin/env bun
+/**
+ * MCP 冒烟：在临时 fixture 上起 `bin/heliu mcp` 子进程，按 JSON-RPC 依次发
+ *   initialize → notifications/initialized → tools/list → tools/call heliu_feature_add → tools/call heliu_milestone_todo
+ * 打印每一步的结果。不碰任何真实项目：HELIU_HOME / 桌面会话目录全部指向临时目录。
+ *
+ * 用法：bun run scripts/mcp-smoke.ts        （--keep 保留临时目录便于查看台账文件）
+ */
+import { join } from "node:path";
+import { buildFixture } from "../tests/helpers/fixture.ts";
+
+const BIN = join(import.meta.dir, "..", "bin", "heliu");
+const keep = process.argv.includes("--keep");
+const fx = buildFixture();
+const env = { ...process.env, ...fx.env };
+
+// 1) 注册项目（只写临时 HELIU_HOME）
+const reg = Bun.spawnSync({ cmd: [process.execPath, "run", BIN, "project", "add", fx.repo, "--name", "演示", "--integration", "integ"], env, stdout: "pipe", stderr: "pipe" });
+if (reg.exitCode !== 0) {
+  console.error("注册 fixture 项目失败：", reg.stderr.toString());
+  process.exit(1);
+}
+
+// 2) 起 MCP 子进程
+const child = Bun.spawn({ cmd: [process.execPath, "run", BIN, "mcp"], cwd: fx.repo, env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+const killer = setTimeout(() => {
+  console.error("超时：MCP 30 秒内没有完成全部请求");
+  child.kill();
+  process.exit(1);
+}, 30_000);
+
+const pending = new Map<number, (v: unknown) => void>();
+let buf = "";
+(async () => {
+  const reader = (child.stdout as ReadableStream<Uint8Array>).getReader();
+  const dec = new TextDecoder();
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!line) continue;
+      const msg = JSON.parse(line) as { id?: number };
+      if (typeof msg.id === "number") pending.get(msg.id)?.(msg);
+    }
+  }
+})();
+
+let seq = 0;
+function send(method: string, params?: unknown, notify = false): Promise<unknown> {
+  const msg: Record<string, unknown> = { jsonrpc: "2.0", method };
+  if (params !== undefined) msg.params = params;
+  if (notify) {
+    child.stdin.write(JSON.stringify(msg) + "\n");
+    child.stdin.flush();
+    return Promise.resolve(null);
+  }
+  const id = ++seq;
+  msg.id = id;
+  const p = new Promise((resolve) => pending.set(id, resolve));
+  child.stdin.write(JSON.stringify(msg) + "\n");
+  child.stdin.flush();
+  return p;
+}
+
+type CallResult = { result?: { content?: Array<{ text?: string }>; isError?: boolean }; error?: unknown };
+const textOf = (r: unknown) => ((r as CallResult).result?.content ?? []).map((c) => c.text ?? "").join("\n");
+
+let failed = false;
+try {
+  const init = (await send("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "heliu-smoke", version: "1" } })) as {
+    result?: { serverInfo?: { name: string; version: string }; instructions?: string };
+  };
+  console.log("① initialize →", JSON.stringify(init.result?.serverInfo));
+  await send("notifications/initialized", undefined, true);
+
+  const list = (await send("tools/list")) as { result?: { tools?: Array<{ name: string; description: string; inputSchema: { properties?: Record<string, unknown> } }> } };
+  const tools = list.result?.tools ?? [];
+  console.log(`② tools/list → ${tools.length} 个工具`);
+  for (const t of tools) console.log(`   - ${t.name}：${t.description.slice(0, 60)}…（参数：${Object.keys(t.inputSchema.properties ?? {}).join(", ")}）`);
+
+  const add = await send("tools/call", { name: "heliu_feature_add", arguments: { title: "让背夹支持闹钟", cwd: fx.wt.standalone } });
+  console.log("③ tools/call heliu_feature_add →");
+  console.log(textOf(add).replace(/^/gm, "   "));
+  if ((add as CallResult).result?.isError || !textOf(add).includes("已登记 F-0001")) failed = true;
+
+  const todo = await send("tools/call", { name: "heliu_milestone_todo", arguments: { milestone: "下一版", cwd: fx.wt.standalone } });
+  console.log("④ tools/call heliu_milestone_todo（下一版）→");
+  console.log(textOf(todo).replace(/^/gm, "   "));
+  if (!textOf(todo).includes("让背夹支持闹钟")) failed = true;
+} catch (e) {
+  console.error("冒烟失败：", e);
+  failed = true;
+} finally {
+  clearTimeout(killer);
+  child.stdin.end();
+  await Promise.race([child.exited, Bun.sleep(2000)]);
+  child.kill();
+  if (keep) console.log(`临时目录保留：${fx.root}`);
+  else fx.cleanup();
+}
+console.log(failed ? "结论：失败" : "结论：通过");
+process.exit(failed ? 1 : 0);
+
+codex
+首页和接口已能访问，演练报告也给出了合入与顺延结果。当前终端没有继承提示中的 HELIU_HOME，我会显式指定验收副本路径，再做登记测试，避免写到真实台账。
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "ls -ld ../M5-r1-0d7dedb-heliu-home; cat ../M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/project.yaml; cat src/board/baseline.ts src/hooks/handler.ts; sed -n '1,200p' scripts/install.sh; cat .claude-plugin/plugin.json .mcp.json hooks/hooks.json; command -v bun; command -v claude" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 0ms:
+drwxr-xr-x  4 linxiansheng  staff  128 Oct 26 05:45 ../M5-r1-0d7dedb-heliu-home
+# heliu 项目注册表：磁吸背夹（三仓库）
+# 正本位置：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/project.yaml
+# 主线/集成分支均于 2026-10-26 只读核实（symbolic-ref、branch --list、merge-base）。
+name: 磁吸背夹
+# 台账（功能卡 + 里程碑）放在 heliu 自己的数据目录：M2 起不往磁吸背夹三个仓库写任何文件。
+# 缺省是 <主仓库>/.heliu/（主仓库 = primary 或第一个仓库）。
+ledger: /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger
+# M4：合并时按 union 处理的索引文件（两边都保留、新日期在前；10-22 集成方案里三处冲突都在这三个文件）。
+# 路径相对仓库根，对项目内所有仓库生效（固件仓 README.md 若冲突也按 union 处理）。union_sort_by_date: false 可关闭排序。
+union_files:
+  - README.md
+  - 嵌入式/README.md
+  - 业务/AI-Coding业务与进度.md
+# M4：合并后在临时 worktree 里跑的检查（可空）。文档仓没有测试，暂不配置。
+# checks: []
+repos:
+  - id: docs
+    label: 文档仓
+    path: /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹
+    main: main
+    integration: claude/merge-features-refactor-143693
+    remote: github
+    icloud: true
+  - id: firmware
+    label: 固件仓
+    path: /Users/linxiansheng/.cache/backclip-web/esp_claw
+    # 产品主线是 release/backclip-1.1（本地 main 是上游 ESP-Claw 的 main）；1.1 是 feat/aios-entry 的祖先（0/100）
+    main: release/backclip-1.1
+    integration: feat/aios-entry
+    # github=janauto（release/backclip-1.0 的上游所在），origin=公司 GitLab；1.1 目前两边都没有
+    remote: github
+    icloud: false
+  - id: app
+    label: App 仓
+    path: /Users/linxiansheng/.cache/backclip-app-gitlab-20261015
+    # HEAD 与唯一的发布分支；上游 github/release/backclip-1.0
+    main: release/backclip-1.0
+    remote: github
+    icloud: false
+/**
+ * 「同步基线（预演）」：把主线 / 集成分支合入某个功能分支会冲突哪些文件——只试合、不执行。
+ * 复用 M1 的只读层：runGit 白名单 + precheckMerge（merge-tree --write-tree，对象隔离区 + 沙箱）。
+ * merge-tree 的冲突文件集合与合并方向无关，所以「主线合入本分支」与「本分支合入主线」冲突文件相同。
+ */
+import type { LedgerFeature } from "../types.ts";
+import { aheadBehind, precheckMerge, refExists } from "../core/branches.ts";
+import { createObjectQuarantine, lines, runGit, type RunGitOptions } from "../core/git.ts";
+import { canonicalPath } from "../core/paths.ts";
+import type { ProjectConfig } from "../core/project.ts";
+import type { BaselineBinding, BaselineCheck, BaselineData } from "./api-types.ts";
+
+export async function baselinePreview(project: ProjectConfig, feature: LedgerFeature, timeoutMs = 8000): Promise<BaselineData> {
+  const started = performance.now();
+  const bindings: BaselineBinding[] = [];
+  for (const b of feature.bindings) {
+    const cfg = project.repos.find((r) => r.id === b.repo);
+    const out: BaselineBinding = { repo: b.repo, repoLabel: cfg?.label ?? b.repo, branch: b.branch, exists: false, checks: [] };
+    bindings.push(out);
+    if (!cfg) continue;
+    const root = canonicalPath(cfg.path);
+    const opts: RunGitOptions = { timeoutMs, limitKey: root, protect: [root] };
+    const rp = await runGit(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"], opts);
+    if (!rp.ok) continue;
+    const common = canonicalPath(lines(rp.stdout)[0] ?? `${root}/.git`);
+    opts.protect = [root, common];
+    const ref = `refs/heads/${b.branch}`;
+    out.exists = await refExists(root, ref, opts);
+    if (!out.exists) continue;
+    const bases: Array<{ base: BaselineCheck["base"]; branch: string }> = [{ base: "main", branch: cfg.main }];
+    if (cfg.integration && cfg.integration !== b.branch) bases.push({ base: "integration", branch: cfg.integration });
+    const quarantine = createObjectQuarantine(common);
+    try {
+      for (const base of bases) {
+        if (base.branch === b.branch) continue;
+        const baseRef = `refs/heads/${base.branch}`;
+        if (!(await refExists(root, baseRef, opts))) {
+          out.checks.push({ base: base.base, baseBranch: base.branch, behind: null, conflictFiles: null, conflicts: [], error: "该分支在本地不存在" });
+          continue;
+        }
+        const [ab, pc] = await Promise.all([aheadBehind(root, baseRef, ref, opts), precheckMerge(root, base.branch, baseRef, null, ref, quarantine, opts)]);
+        out.checks.push({
+          base: base.base,
+          baseBranch: base.branch,
+          behind: ab?.behind ?? null,
+          conflictFiles: pc.conflictFiles,
+          conflicts: pc.conflicts,
+          error: pc.timedOut ? "试合超时" : pc.error,
+        });
+      }
+    } finally {
+      quarantine.dispose();
+    }
+  }
+  return { id: feature.id, title: feature.title, bindings, elapsedMs: Math.round(performance.now() - started) };
+}
+/**
+ * Claude Code hooks 处理（bin/heliu-hook 调用）。
+ *
+ * 约束（ADR-6）：<300ms 返回；任何错误静默（stderr 至多一行），退出码永远 0；不阻塞会话。
+ * - SessionStart：whereami → {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}；
+ *   顺带把「首次见到的 worktree」记进缓存（替代 WorktreeCreate，见下）。
+ * - Stop：会话 id → 最后活动写入缓存 sqlite（不写台账）。
+ * - WorktreeCreate：**plugin 不注册**。官方文档：配置 WorktreeCreate hook 会「替换」默认的 git worktree 创建，
+ *   hook 必须在 stdout 打印新 worktree 路径，否则创建失败。heliu 只读、不代建 worktree，所以不能挂这个事件。
+ *   这里保留分支只为兜底：万一被手工注册，只记录、不输出（此时创建会失败，hooks.json 里不要加它）。
+ */
+import { Cache } from "../core/cache.ts";
+import { canonicalPath, heliuPaths, type HeliuPaths } from "../core/paths.ts";
+import { detectProject } from "../core/project.ts";
+import { whereami, whereamiContext } from "../core/whereami.ts";
+
+export interface HookInput {
+  session_id?: string;
+  cwd?: string;
+  hook_event_name?: string;
+  source?: string;
+  name?: string;
+  [k: string]: unknown;
+}
+
+export interface HookResult {
+  /** 要写到 stdout 的内容（null = 不输出） */
+  stdout: string | null;
+  /** 调试信息（只在 HELIU_HOOK_DEBUG=1 时写 stderr） */
+  debug: string[];
+}
+
+/** hook 里 git 单条超时：给整体 300ms 预算留余量 */
+export const HOOK_GIT_TIMEOUT_MS = 180;
+
+export function parseHookInput(text: string): HookInput | null {
+  if (!text.trim()) return null;
+  try {
+    const v = JSON.parse(text) as unknown;
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as HookInput) : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeCache(paths: HeliuPaths, project: string, fn: (c: Cache) => void, debug: string[]): void {
+  let c: Cache | null = null;
+  try {
+    c = Cache.open(paths, project);
+    if (c) fn(c);
+  } catch (e) {
+    debug.push(`缓存写入失败：${(e as Error).message}`);
+  } finally {
+    c?.close();
+  }
+}
+
+export async function handleHook(input: HookInput, paths: HeliuPaths = heliuPaths(), now: number = Date.now()): Promise<HookResult> {
+  const debug: string[] = [];
+  const event = input.hook_event_name ?? "";
+  const cwd = typeof input.cwd === "string" && input.cwd ? input.cwd : process.cwd();
+  const sessionId = typeof input.session_id === "string" ? input.session_id : null;
+
+  if (event === "SessionStart") {
+    const w = await whereami(paths, cwd, { sessionId, timeoutMs: HOOK_GIT_TIMEOUT_MS });
+    debug.push(`whereami ${w.elapsedMs}ms`);
+    const ctx = whereamiContext(w);
+    if (w.project && w.repo && w.worktree && !w.isMainCheckout) {
+      const wt = w.worktree;
+      safeCache(paths, w.project.name, (c) => c.recordWorktree(wt, wt.split("/").pop() ?? null, sessionId, "SessionStart", now), debug);
+    }
+    if (!ctx) return { stdout: null, debug };
+    return { stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: ctx } }), debug };
+  }
+
+  if (event === "Stop") {
+    if (!sessionId) return { stdout: null, debug };
+    const project = await detectProject(paths, cwd);
+    if (!project) return { stdout: null, debug };
+    safeCache(paths, project.name, (c) => c.recordStop(sessionId, canonicalPath(cwd), now), debug);
+    return { stdout: null, debug };
+  }
+
+  if (event === "WorktreeCreate") {
+    // 不应被注册（见文件头）。只记录，不输出路径。
+    const project = await detectProject(paths, cwd);
+    if (project) {
+      const name = typeof input.name === "string" ? input.name : null;
+      safeCache(paths, project.name, (c) => c.recordWorktree(`${canonicalPath(cwd)}#${name ?? ""}`, name, sessionId, "WorktreeCreate", now), debug);
+    }
+    return { stdout: null, debug };
+  }
+
+  return { stdout: null, debug };
+}
+#!/usr/bin/env bash
+# 合流（heliu）安装脚本：bun → 依赖 → user 级 MCP → 本地 marketplace + 插件。
+#   scripts/install.sh            安装
+#   scripts/install.sh --dry-run  只打印每一步要执行的命令，什么都不改
+#   --no-mcp     不注册 user 级 MCP（插件自带同名 MCP，只想要一份时用）
+#   --no-plugin  不装插件（只注册 MCP）
+# 只改 Claude Code 的用户配置（~/.claude.json、插件设置）与本仓库的 node_modules；不碰任何被管理的仓库。
+# 兼容 macOS 自带 bash 3.2。
+set -euo pipefail
+
+DRY=0
+SKIP_MCP=0
+SKIP_PLUGIN=0
+usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; }
+for a in "$@"; do
+  case "$a" in
+    --dry-run | -n) DRY=1 ;;
+    --no-mcp) SKIP_MCP=1 ;;
+    --no-plugin) SKIP_PLUGIN=1 ;;
+    -h | --help) usage; exit 0 ;;
+    *) echo "未知参数：$a（--help 看用法）" >&2; exit 2 ;;
+  esac
+done
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MARKETPLACE="heliu-local" # 与 .claude-plugin/marketplace.json 的 name 一致
+PLUGIN="heliu"
+
+# 打印命令；非 dry-run 时执行。失败只警告不中断（例如已经注册过）。
+# 打印用的引号：含空格/特殊字符时用双引号包起来（中文原样显示，可直接复制到终端）
+q() {
+  case "$1" in
+    *[[:space:]\"\'\$\`\\\(\)\;\&\|\<\>\*\?\!]* | "") printf '"%s"' "$(printf '%s' "$1" | sed 's/[\\"$`]/\\&/g')" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+run() {
+  printf '  $'
+  for x in "$@"; do printf ' %s' "$(q "$x")"; done
+  printf '\n'
+  if [ "$DRY" = 0 ]; then
+    if ! "$@"; then echo "  ！上面这条没成功（可能已经装过）；继续下一步" >&2; fi
+  fi
+}
+step() { printf '\n【%s】%s\n' "$1" "$2"; }
+
+[ "$DRY" = 1 ] && echo "合流安装 · 演练模式（--dry-run）：只打印命令，不执行" || echo "合流安装：$ROOT"
+
+step "1/5" "检查 bun"
+BUN=""
+for c in "$(command -v bun 2>/dev/null || true)" "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun "${BUN_BIN:-}"; do
+  if [ -n "$c" ] && [ -x "$c" ]; then BUN="$c"; break; fi
+done
+if [ -z "$BUN" ]; then
+  echo "  没找到 bun。先安装：curl -fsSL https://bun.sh/install | bash   （或 brew install oven-sh/bun/bun），再重跑本脚本。"
+  if [ "$DRY" = 0 ]; then exit 1; fi
+  BUN="bun"
+else
+  echo "  bun：$BUN（$("$BUN" --version 2>/dev/null || echo 版本未知)）"
+fi
+
+step "2/5" "安装依赖（node_modules → node_modules.nosync 软链，iCloud 不同步）"
+if [ -L "$ROOT/node_modules" ]; then
+  echo "  node_modules 已是软链 → $(readlink "$ROOT/node_modules")"
+elif [ -e "$ROOT/node_modules" ]; then
+  echo "  node_modules 是普通目录（仓库不在 iCloud 时没关系；在 iCloud 里建议改成软链）"
+else
+  run mkdir -p "$ROOT/node_modules.nosync"
+  run ln -s node_modules.nosync "$ROOT/node_modules"
+fi
+run "$BUN" install --cwd "$ROOT"
+
+step "3/5" "找 Claude Code CLI（优先桌面应用内置的最高版本，其次 PATH 里的 claude）"
+CLAUDE=""
+DESKTOP="$(ls -d "$HOME/Library/Application Support/Claude/claude-code/"*/*/claude.app/Contents/MacOS/claude 2>/dev/null | sort -V | tail -1 || true)"
+if [ -n "$DESKTOP" ] && [ -x "$DESKTOP" ]; then
+  CLAUDE="$DESKTOP"
+  echo "  桌面内置：$CLAUDE"
+elif command -v claude >/dev/null 2>&1; then
+  CLAUDE="$(command -v claude)"
+  echo "  PATH：$CLAUDE"
+else
+  echo "  没找到 claude CLI：装好 Claude 桌面应用或 Claude Code 后重跑；下面的命令先用 claude 占位"
+  if [ "$DRY" = 0 ]; then SKIP_MCP=1; SKIP_PLUGIN=1; fi
+  CLAUDE="claude"
+fi
+
+step "4/5" "注册 user 级 MCP（任何会话都能用 heliu_* 工具）"
+if [ "$SKIP_MCP" = 1 ]; then
+  echo "  跳过（--no-mcp 或没有 claude CLI）"
+else
+  run "$CLAUDE" mcp add -s user heliu -- "$ROOT/bin/heliu" mcp
+fi
+
+step "5/5" "本地 marketplace + 插件（/heliu Skill、hooks、插件自带 MCP）"
+if [ "$SKIP_PLUGIN" = 1 ]; then
+  echo "  跳过（--no-plugin 或没有 claude CLI）"
+else
+  # 本仓库根就是 marketplace 根（.claude-plugin/marketplace.json，插件 source "./"），原地加载，改代码不用重装
+  run "$CLAUDE" plugin marketplace add "$ROOT"
+  run "$CLAUDE" plugin install "$PLUGIN@$MARKETPLACE"
+fi
+
+printf '\n完成%s。验证：\n' "$([ "$DRY" = 1 ] && echo "（演练，未执行）" || true)"
+printf '  %s mcp list       # 应看到 heliu ✔ Connected\n' "$(q "$CLAUDE")"
+printf '  %s plugin list    # 应看到 %s\n' "$(q "$CLAUDE")" "$PLUGIN@$MARKETPLACE"
+printf '  %s doctor         # 环境自检\n' "$(q "$ROOT/bin/heliu")"
+printf '打开看板：\n  %s board --project <项目名>\n' "$(q "$ROOT/bin/heliu")"
+printf '接入新项目：\n  %s project add <仓库路径>\n' "$(q "$ROOT/bin/heliu")"
+if [ "$SKIP_MCP" = 0 ] && [ "$SKIP_PLUGIN" = 0 ]; then
+  echo "说明：插件也自带同名 MCP（plugin:heliu:heliu），会话里 heliu 工具可能出现两份；只想要一份可用 --no-mcp 重装。"
+fi
+{
+  "name": "heliu",
+  "displayName": "合流",
+  "version": "0.2.0",
+  "description": "合流（heliu）：把 git 分支 × worktree × 桌面会话对上账，随口说的新点子自动变成功能卡并预约到下一版，一句话查「这一版还欠什么」。只读被管理仓库，永不 push、不删分支。",
+  "author": {
+    "name": "linxiansheng"
+  },
+  "license": "UNLICENSED",
+  "keywords": ["worktree", "milestone", "版本管理", "并行开发"]
+}
+{
+  "mcpServers": {
+    "heliu": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/heliu",
+      "args": ["mcp"]
+    }
+  }
+}
+{
+  "description": "合流：会话开始时注入「你在哪个分支、对应哪张功能卡、预约哪一版、落后多少」；会话每轮结束时把最后活动记进本机缓存。入口 bin/heliu-hook 是 sh 包装，自己找 bun，不依赖 PATH。不注册 WorktreeCreate（该事件会替换 Claude Code 默认的 worktree 创建，heliu 不代建 worktree）。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/heliu-hook",
+            "args": [],
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/heliu-hook",
+            "args": [],
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
+/Users/linxiansheng/.bun/bin/bun
+/Users/linxiansheng/.nvm/versions/node/v25.2.1/bin/claude
+
+exec
+/bin/zsh -lc "curl -sS --max-time 30 -o /tmp/heliu-M5-overview.json -w 'overview %{http_code} %{time_total}s\\n' http://127.0.0.1:7797/api/overview; curl -sS --max-time 30 -o /tmp/heliu-M5-todo.json -w 'todo %{http_code} %{time_total}s\\n' http://127.0.0.1:7797/api/todo; python3 - <<'PY'
+import json
+for name in ['overview','todo']:
+ d=json.load(open('/tmp/heliu-M5-'+name+'.json'))
+ print(name,json.dumps(d,ensure_ascii=False)[:15000])
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 803ms:
+overview 200 0.882919s
+todo 200 0.007187s
+overview {"schemaVersion": 1, "command": "overview", "generatedAt": "2026-10-25T21:45:55.983Z", "project": {"name": "磁吸背夹", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/project.yaml"}, "data": {"actions": ["集成分支未并回主线：文档仓（领先 102、3 天）、固件仓（领先 100、2 天） → 检查集成分支是否可并回主线（M4 提供预检）", "17 个会话在等你拍板（见「会话」页）", "46 条独立分支未被主线或集成分支包含（文档仓 38 / 固件仓 5 / App 仓 3；可在「版本列」预约到某一版）"], "waiting": 17, "neverPushed": 96, "integrations": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/merge-features-refactor-143693", "ahead": 102, "days": 3}, {"repo": "firmware", "repoLabel": "固件仓", "branch": "feat/aios-entry", "ahead": 100, "days": 2}], "hygieneWarnings": 13, "columns": [{"key": "vNext", "title": "vNext", "kind": "milestone", "isNext": true, "owed": 61, "mergeable": 22, "conflict": null, "precheckFailed": 0, "waiting": 11}, {"key": "__unreserved", "title": "未预约", "kind": "unreserved", "isNext": false, "owed": 0, "mergeable": 0, "conflict": null, "precheckFailed": 0, "waiting": 0}], "next": {"id": "vNext", "status": "规划中"}, "precheck": false, "precheckAt": null, "precheckSummary": {"requested": false, "status": "skipped", "conflicts": null, "failed": 0, "unchecked": 36, "firstError": null}}, "meta": {"scannedAt": "2026-10-25T21:45:55.194Z", "scanMs": 740, "cached": false, "precheck": false}}
+todo {"schemaVersion": 1, "command": "milestone.todo", "generatedAt": "2026-10-25T21:45:55.996Z", "project": {"name": "磁吸背夹", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/project.yaml"}, "data": {"milestone": {"id": "vNext", "title": "", "status": "规划中", "target_date": null, "integration_branch": null, "notes": ""}, "requested": "下一版", "precheck": false, "total": 61, "groups": [{"key": "blocked", "title": "等你回答", "hint": "绑定的会话停下来等你拍板（会话最后记录的请求，可能已过期）", "count": 11, "items": [{"id": "F-0041", "title": "AI电话助手来电路由与语气定制", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/ai-phone-assistant-routing-a16f5a", "exists": true, "mergedState": "unmerged", "behindMain": 0, "behindIntegration": 102, "conflictFiles": null, "sessionId": "local_b7ec8a51-a58e-4ef7-bdfc-e12ee36d9804", "sessionStatus": "blocked", "lastCommitAt": "2026-10-25T17:46:57.000Z", "noCommits": false, "precheck": "skipped", "precheckError": null}], "needsAction": "对6项拍板（可直接回“默认”采用推荐值）；另定方案文档推不推送到私有仓库", "lastActivityAt": "2026-10-25T17:51:14.970Z", "idleDays": 0, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0041-AI电话助手来电路由与语气定制.md", "note": null, "suggestion": null}, {"id": "F-0037", "title": "同步本地 main 与 GitHub main（解决三份总览冲突）", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/sync-main-github-20261019", "exists": true, "mergedState": "in_integration", "behindMain": 0, "behindIntegration": 96, "conflictFiles": null, "sessionId": "local_2173e07d-558e-47e8-afd5-e8991d6bc7fb", "sessionStatus": "blocked", "lastCommitAt": "2026-10-19T03:05:53.000Z", "noCommits": false, "precheck": null, "precheckError": null}], "needsAction": "决定先合并 PR #2 还是 #4（合完后本地 main 快进到 github/main）", "lastActivityAt": "2026-10-19T03:08:43.361Z", "idleDays": 6, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0037-同步本地-main-与-GitHub-main（.md", "note": null, "suggestion": null}, {"id": "F-0035", "title": "语音链路端到端闭环测试", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/voice-e2e-loop-testing-dee94b", "exists": true, "mergedState": "in_integration", "behindMain": 0, "behindIntegration": 87, "conflictFiles": null, "sessionId": "local_4264300b-5ffe-4df1-be46-fe62f7703a8a", "sessionStatus": "blocked", "lastCommitAt": "2026-10-16T15:14:12.000Z", "noCommits": false, "precheck": null, "precheckError": null}], "needsAction": "把背夹 USB 和手机 ADB 接回电脑", "lastActivityAt": "2026-10-18T16:02:00.412Z", "idleDays": 7, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0035-语音链路端到端闭环测试.md", "note": null, "suggestion": null}, {"id": "F-0032", "title": "评估系统首页落地路线：原生 C 重写 vs 主题外壳", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/elegant-gauss-1552b1", "exists": true, "mergedState": "in_integration", "behindMain": 0, "behindIntegration": 101, "conflictFiles": null, "sessionId": "local_76ea2a7a-2d88-4b7b-8363-7e59b4ccc6f5", "sessionStatus": "blocked", "lastCommitAt": "2026-10-16T14:38:18.000Z", "noCommits": false, "precheck": null, "precheckError": null}], "needsAction": "回答 Q1–Q12（建议先答 Q5、Q7、Q10）", "lastActivityAt": "2026-10-16T15:19:40.304Z", "idleDays": 9, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0032-评估系统首页落地路线：原生-C-重写-vs-主题.md", "note": null, "suggestion": null}, {"id": "F-0020", "title": "主题系统架构设计", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/theme-system-architecture-1cbb25", "exists": true, "mergedState": "unmerged", "behindMain": 14, "behindIntegration": 116, "conflictFiles": null, "sessionId": "local_8c79ee39-2046-4ef0-9d62-0d0cab978fa2", "sessionStatus": "blocked", "lastCommitAt": "2026-10-15T03:31:22.000Z", "noCommits": false, "precheck": "skipped", "precheckError": null}], "needsAction": "选要做哪几件：1 刷 c38a2762 语音固件；2 推送小家外壳；3 推送语音固件到公开仓库", "lastActivityAt": "2026-10-15T03:44:25.286Z", "idleDays": 10, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0020-主题系统架构设计.md", "note": null, "suggestion": null}, {"id": "F-0017", "title": "磁吸背夹 CLI 监听功能评估", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/magnetic-clip-cli-monitoring-577a21", "exists": true, "mergedState": "unmerged", "behindMain": 14, "behindIntegration": 116, "conflictFiles": null, "sessionId": "local_086688ec-b5bf-47bd-b663-47bf37ce8ffe", "sessionStatus": "blocked", "lastCommitAt": "2026-10-14T14:27:21.000Z", "noCommits": false, "precheck": "skipped", "precheckError": null}], "needsAction": "让另一个任务释放背夹，并用手机把背夹配到 esp-claw-D07132 的 2.4G 网络，然后告诉我", "lastActivityAt": "2026-10-14T14:27:49.152Z", "idleDays": 11, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0017-磁吸背夹-CLI-监听功能评估.md", "note": null, "suggestion": null}, {"id": "F-0014", "title": "Live2D 交互角色可行性评估", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/live2d-interactive-character-98f128", "exists": true, "mergedState": "unmerged", "behindMain": 14, "behindIntegration": 116, "conflictFiles": null, "sessionId": "local_3296d7dd-4585-491a-b192-91b604016b8b", "sessionStatus": "blocked", "lastCommitAt": "2026-10-14T13:24:44.000Z", "noCommits": false, "precheck": "skipped", "precheckError": null}], "needsAction": "确认：是否配置远端并合并 claude/live2d-interactive-character-98f128 到 main；以及“兼容MUSE”是要真接入Muse服务（走不通），还是搬进ESP-Claw固件（建议）", "lastActivityAt": "2026-10-14T13:35:57.380Z", "idleDays": 11, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0014-Live2D-交互角色可行性评估.md", "note": null, "suggestion": null}, {"id": "F-0013", "title": "磁吸背夹竖版触屏焦点错误", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/magnetic-clip-portrait-touch-focus-8bbfc2", "exists": true, "mergedState": "unmerged", "behindMain": 14, "behindIntegration": 116, "conflictFiles": null, "sessionId": "local_215c817d-bc88-46c0-ae99-2d5f08fa15ec", "sessionStatus": "blocked", "lastCommitAt": "2026-10-14T13:07:03.000Z", "noCommits": false, "precheck": "skipped", "precheckError": null}], "needsAction": "确认在 janauto 账号下建私有 GitHub 仓库并推送项目文档", "lastActivityAt": "2026-10-14T13:07:25.516Z", "idleDays": 11, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0013-磁吸背夹竖版触屏焦点错误.md", "note": null, "suggestion": null}, {"id": "F-0012", "title": "竖版背夹卸载功能UI (fork)", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/quirky-villani-bb2ba2", "exists": true, "mergedState": "unmerged", "behindMain": 15, "behindIntegration": 117, "conflictFiles": null, "sessionId": "local_43b793d2-041c-4398-ad0e-d2fb31f5f263", "sessionStatus": "blocked", "lastCommitAt": "2026-10-14T10:10:47.000Z", "noCommits": false, "precheck": "skipped", "precheckError": null}], "needsAction": "确认是否推送 feat/portrait-uninstall-drag 到 janauto/esp_claw", "lastActivityAt": "2026-10-14T10:13:23.352Z", "idleDays": 11, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0012-竖版背夹卸载功能UI-(fork).md", "note": null, "suggestion": null}, {"id": "F-0007", "title": "磁吸背夹 HTML 原型构建", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/magnetic-clip-html-prototype-1642f0", "exists": true, "mergedState": "unmerged", "behindMain": 41, "behindIntegration": 143, "conflictFiles": null, "sessionId": "local_362e8808-c5b9-4b0c-8aa3-1217a29c3d20", "sessionStatus": "blocked", "lastCommitAt": "2026-09-24T09:37:00.000Z", "noCommits": false, "precheck": "skipped", "precheckError": null}], "needsAction": "Do you want the AI canvas definition in the PRD (§4.2) updated to match \"voice → live Lua → hardware interfaces\"?", "lastActivityAt": "2026-09-24T09:41:03.985Z", "idleDays": 31, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0007-磁吸背夹-HTML-原型构建.md", "note": null, "suggestion": null}, {"id": "F-0006", "title": "AI背夹洞察同步", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "blocked", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/ai-backclip-insights-sync-52d9cf", "exists": true, "mergedState": "unmerged", "behindMain": 43, "behindIntegration": 145, "conflictFiles": null, "sessionId": "local_09200dd9-721f-45e1-b814-63bed6f7883d", "sessionStatus": "blocked", "lastCommitAt": "2026-09-23T12:59:09.000Z", "noCommits": false, "precheck": "skipped", "precheckError": null}], "needsAction": "confirm: push to GitHub remote? merge V2 branch? git init on USB folder? share as web link?", "lastActivityAt": "2026-09-23T13:01:08.312Z", "idleDays": 32, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0006-AI背夹洞察同步.md", "note": null, "suggestion": null}]}, {"key": "conflict", "title": "有冲突", "hint": "试合到集成分支（无集成分支则主线）有冲突文件", "count": null, "items": []}, {"key": "mergeable", "title": "可合并", "hint": "已进集成分支，或试合无冲突", "count": 22, "items": [{"id": "F-0058", "title": "timeline: 时间线 v2 数据层——每条事件带 lane（项目分支）与标签，加 journal_lanes", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "mergeable", "bindings": [{"repo": "firmware", "repoLabel": "固件仓", "branch": "feat/aios-timeline-lanes", "exists": true, "mergedState": "in_integration", "behindMain": 0, "behindIntegration": 5, "conflictFiles": null, "sessionId": null, "sessionStatus": null, "lastCommitAt": "2026-10-23T11:52:44.000Z", "noCommits": false, "precheck": null, "precheckError": null}], "needsAction": null, "lastActivityAt": "2026-10-23T11:52:44.000Z", "idleDays": 2, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0058-timeline-时间线-v2-数据层——每条.md", "note": "已进集成分支", "suggestion": "该分支已被集成分支包含，是否把 F-0058 标为已合入？（heliu feature status F-0058 已合入）"}, {"id": "F-0057", "title": "cards: 打开卡片流焦点回到第一张；按着卡片时推迟 30 s 同步引起的重建", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "mergeable", "bindings": [{"repo": "firmware", "repoLabel": "固件仓", "branch": "feat/aios-cards-fixes", "exists": true, "mergedState": "in_integration", "behindMain": 0, "behindIntegration": 5, "conflictFiles": null, "sessionId": null, "sessionStatus": null, "lastCommitAt": "2026-10-23T11:44:54.000Z", "noCommits": false, "precheck": null, "precheckError": null}], "needsAction": null, "lastActivityAt": "2026-10-23T11:44:54.000Z", "idleDays": 2, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0057-cards-打开卡片流焦点回到第一张；按着卡片.md", "note": "已进集成分支", "suggestion": "该分支已被集成分支包含，是否把 F-0057 标为已合入？（heliu feature status F-0057 已合入）"}, {"id": "F-0056", "title": "callsec: 通话卡 id 与时间线 ref 改用 Flash 纪要编号 call:<seq>", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "mergeable", "bindings": [{"repo": "firmware", "repoLabel": "固件仓", "branch": "feat/aios-fw-followups", "exists": true, "mergedState": "in_integration", "behindMain": 0, "behindIntegration": 13, "conflictFiles": null, "sessionId": null, "sessionStatus": null, "lastCommitAt": "2026-10-23T09:30:11.000Z", "noCommits": false, "precheck": null, "precheckError": null}], "needsAction": null, "lastActivityAt": "2026-10-23T09:30:11.000Z", "idleDays": 2, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0056-callsec-通话卡-id-与时间线-ref.md", "note": "已进集成分支", "suggestion": "该分支已被集成分支包含，是否把 F-0056 标为已合入？（heliu feature status F-0056 已合入）"}, {"id": "F-0055", "title": "speak: 首页回复朗读改流式合成 + 播放环形缓冲预攒，Wi-Fi 接收窗口放大", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "mergeable", "bindings": [{"repo": "firmware", "repoLabel": "固件仓", "branch": "feat/aios-stream-tts", "exists": true, "mergedState": "in_integration", "behindMain": 0, "behindIntegration": 21, "conflictFiles": null, "sessionId": null, "sessionStatus": null, "lastCommitAt": "2026-10-23T09:10:02.000Z", "noCommits": false, "precheck": null, "precheckError": null}], "needsAction": null, "lastActivityAt": "2026-10-23T09:10:02.000Z", "idleDays": 2, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0055-speak-首页回复朗读改流式合成-+-播放环.md", "note": "已进集成分支", "suggestion": "该分支已被集成分支包含，是否把 F-0055 标为已合入？（heliu feature status F-0055 已合入）"}, {"id": "F-0054", "title": "call_agent: 电话秘书对话像人、不重复问——已问清单、上两轮注入、话术轮换", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "mergeable", "bindings": [{"repo": "firmware", "repoLabel": "固件仓", "branch": "feat/callsec-humanize", "exists": true, "mergedState": "in_integration", "behindMain": 0, "behindIntegration": 43, "conflictFiles": null, "sessionId": null, "sessionStatus": null, "lastCommitAt": "2026-10-23T08:39:21.000Z", "noCommits": false, "precheck": null, "precheckError": null}], "needsAction": null, "lastActivityAt": "2026-10-23T08:39:21.000Z", "idleDays": 2, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0054-call_agent-电话秘书对话像人、不重复.md", "note": "已进集成分支", "suggestion": "该分支已被集成分支包含，是否把 F-0054 标为已合入？（heliu feature status F-0054 已合入）"}, {"id": "F-0053", "title": "timeline: 时间线日志核心与左拨面板（替换阶段 3 桩）", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "mergeable", "bindings": [{"repo": "firmware", "repoLabel": "固件仓", "branch": "feat/aios-timeline", "exists": true, "mergedState": "in_integration", "behindMain": 0, "behindIntegration": 45, "conflictFiles": null, "sessionId": null, "sessionStatus": null, "lastCommitAt": "2026-10-23T08:07:19.000Z", "noCommits": false, "precheck": null, "precheckError": null}], "needsAction": null, "lastActivityAt": "2026-10-23T08:07:19.000Z", "idleDays": 2, "file": "/var/folders/bw/xbf2cw9s1bz8_n
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc 'bun run scripts/mcp-smoke.ts --keep; HELIU_HOME="$PWD/../M5-r1-0d7dedb-heliu-home" bin/heliu status --project 磁吸背夹 --json > /tmp/heliu-M5-status.json; python3 - <<'"'PY'
+import json
+x=json.load(open('/tmp/heliu-M5-status.json'))
+print('status', list(x)); d=x['data']; print('summary',str(d)[:1000])
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 1846ms:
+① initialize → {"name":"heliu","version":"0.2.0"}
+② tools/list → 13 个工具
+   - heliu_whereami：看看当前会话在哪个仓库、哪个分支，对应哪张功能卡、预约到哪一版、落后主线/集成分支多少提交。用户问「我现在在做哪个功能」…（参数：cwd, project）
+   - heliu_status：一屏看懂整个项目：健康条、现在最该做的、等你处理的会话、独立未合并分支、已进集成分支待回主线、落后需同步。用户问「项目现…（参数：cwd, project）
+   - heliu_sessions：列出本项目的桌面会话：哪些在等你回答（附它要你做什么）、哪些在运行。用户问「哪些会话在等我」「还有谁在跑」时用。只读。…（参数：cwd, project, all）
+   - heliu_hygiene：检查哪些分支/目录该清理：已进主线但目录还在、目录名和分支名对不上、孤儿条目、残留锁文件、iCloud 冲突副本。只报告…（参数：cwd, project）
+   - heliu_feature_add：把用户的一句话需求登记成一张功能卡，默认预约到「下一版」，并自动绑定当前会话所在的分支。用户说「我有个新点子：让背夹支持…（参数：title, milestone, bind, session, body, cwd, project）
+   - heliu_feature_reserve：把某张功能卡预约到某一版。用户说「这个预约到 1.2」「这个不急，放 2.0」「挪到下一版」时用。版本不存在会自动新建（…（参数：id, milestone, cwd, project）
+   - heliu_feature_bind：把功能卡和一个分支（及其 worktree、会话、PR）绑定起来。为某张卡开了新会话后，用它把新会话的 id 回写到卡上…（参数：id, repo, branch, worktree, session, pr, cwd, project）
+   - heliu_feature_set_status：更新功能卡：状态（想法 / 开发中 / 待合并 / 已合入 / 已进主线 / 已发布 / 已放弃）、验收档位（未 / 已…（参数：id, status, acceptance, title, cwd, project）
+   - heliu_milestone_todo：列出预约到某一版、还没合入的功能（台账状态为 想法/开发中/待合并 的都算），按「等你回答 / 有冲突 / 可合并 / …（参数：milestone, precheck, cwd, project）
+   - heliu_milestone_list：列出所有版本（里程碑）：状态、目标日期、待办数，并指出「下一版」是哪个。用户问「有哪些版本」「下一版是哪个」时用。…（参数：cwd, project）
+   - heliu_sync：扫描本项目的会话与分支：在 worktree 里开发、还没有功能卡、也没进主线的分支，自动建草稿卡（标题取会话标题，预约…（参数：dry_run, cwd, project）
+   - heliu_release_preview：为某一版生成/刷新合并单草稿：每个功能分支是已进集成、无冲突、有冲突（哪些文件、是否 union 索引文件）还是未完成，…（参数：milestone, cwd, project）
+   - heliu_release_plan_set_decision：改合并单中一项的决定（并入 / 顺延 / 等它 / 不并 / 待定）。用户说「F-0012 这版先不合，顺延」「等 F-…（参数：milestone, item, decision, repo, branch, cwd, project）
+③ tools/call heliu_feature_add →
+   已登记 F-0001「让背夹支持闹钟」· 开发中 · 预约 vNext · 绑定 磁吸-仓库/claude/bold-shaw-cccccc
+     （还没有「规划中」的版本，已自动建 vNext 作为下一版；可改名：heliu milestone rename vNext v1.3）
+     卡片：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-fixture-ZaUvVX/磁吸 仓库/.heliu/features/F-0001-让背夹支持闹钟.md
+④ tools/call heliu_milestone_todo（下一版）→
+   合流 · 演示 · 待办 vNext（下一版 · 规划中）· 未合入 1 条
+   下一版 = vNext（规划中）
+   概览：等你回答 0 > 有冲突 未检查 > 可合并 0 > 落后需同步 1 > 停滞 0 > 开发中 0 > 尚未关联开发分支 0
+         （按优先级排，每张卡只进最靠前的一组）
+   顺延：某版合并时没合完的功能自动挪到下一版，标「从 vX 顺延」排在组内最前（M4 执行，不会静默丢弃）
+   
+   ■ 有冲突：未检查（加 --precheck 在临时对象区试合，不碰仓库）
+   
+   ■ 落后需同步（1）· 独立未合并，且落后集成分支（无集成分支看主线），合并前请评估是否同步基线
+     - F-0001 让背夹支持闹钟 · 开发中
+       磁吸 仓库 · claude/bold-shaw-cccccc · 落后集成分支 3 · 最后活动 10-28 10:00
+   
+   （暂无：等你回答、可合并、停滞、开发中、尚未关联开发分支）
+   
+   提示：heliu 预约 <卡号> <版本> 改预约 · heliu feature list 看全部卡 · --json 输出完整字段
+临时目录保留：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-fixture-ZaUvVX
+结论：通过
+status ['schemaVersion', 'command', 'generatedAt', 'project', 'data']
+summary {'schemaVersion': 1, 'generatedAt': '2026-10-25T21:46:07.171Z', 'elapsedMs': 519, 'project': {'name': '磁吸背夹', 'source': '/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/project.yaml'}, 'options': {'precheck': False, 'dirty': False, 'timeoutMs': 8000}, 'repos': [{'id': 'docs', 'label': '文档仓', 'path': '/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹', 'icloud': True, 'main': 'main', 'integration': 'claude/merge-features-refactor-143693', 'remote': 'github', 'reachable': True, 'error': None, 'warnings': [], 'counts': {'branches': 76, 'worktrees': 55, 'mergedIntoMain': 24, 'unmergedIntoMain': 52, 'inIntegration': 13, 'independent': 38, 'neverPushed': 60}, 'health': {'mainVsRemote': {'remoteRef': 'refs/remotes/github/main', 'ahead': 7, 'behind': 5, 'note': None}, 'integration': {'branch': 'claude/merge-features-refactor-143693', 'exists': True, 'mergedIntoMain': False, 'aheadOfMain': 102, 'behindMain': 0, 'si
+
+codex
+看板已在浏览器中实看：下一版有 61 项，能展开查看等待答复、冲突和分支落后数；三仓库 status 扫描约 0.52 秒。MCP 冒烟已完成建卡并默认预约下一版；我接着核验 hook 注入、基线预演和隔离安装。
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "cat tests/helpers/release-fixture.ts; sed -n '1,220p' src/cli/release.ts; sed -n '240,335p' src/core/whereami.ts; rg -n 'feature.*add|--cwd|--session' src/cli/index.ts; scripts/install.sh --dry-run" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+exec
+/bin/zsh -lc 'HELIU_HOME="$PWD/../M5-r1-0d7dedb-heliu-home" HELIU_HOOK_DEBUG=1 bin/heliu-hook <<'"'JSON'
+{\"hook_event_name\":\"SessionStart\",\"session_id\":\"heliu-M5-real-user-check\",\"cwd\":\"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/html-interactive-prototype-f39588\",\"source\":\"startup\"}
+JSON
+curl -sS --max-time 30 -o /tmp/heliu-M5-release-preview.json -w 'release preview %{http_code} %{time_total}s\\n' 'http://127.0.0.1:7797/api/release/preview'; python3 - <<'PY'
+import json
+x=json.load(open('/tmp/heliu-M5-release-preview.json'))['data'];print(json.dumps(x,ensure_ascii=False)[:3800])
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ exited 1 in 219ms:
+/**
+ * M4 合并执行 fixture：主线 main + 集成分支 integ；
+ *   feat/f1、f2、f3 无冲突 · feat/fu 与集成分支同处改 README.md（union 文件）· feat/fc 与集成分支同行改 src.txt（普通冲突）·
+ *   feat/fb 未完成（绑定会话 blocked）· feat/fi 已进集成分支。台账：v1.2（冻结，7 张卡）、v1.3（规划中）。
+ * 另附桩解冲突器（对冲突文件 checkout --ours + add，打印 claude 风格 JSON）。
+ */
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Ledger } from "../../src/core/ledger.ts";
+import { gitW } from "./fixture.ts";
+
+export interface RFx {
+  root: string;
+  repo: string;
+  ledger: string;
+  cache: string;
+  heliuHome: string;
+  claudeApp: string;
+  env: Record<string, string>;
+  sha: Record<string, string>;
+  ids: Record<string, string>;
+}
+
+function commit(repo: string, file: string, content: string, msg: string): void {
+  mkdirSync(join(repo, file, ".."), { recursive: true });
+  writeFileSync(join(repo, file), content);
+  gitW(repo, "add", file);
+  gitW(repo, "commit", "-q", "-m", msg);
+}
+
+export function buildReleaseFixture(opts: { checks?: string[] } = {}): RFx {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "heliu-release-")));
+  const repo = join(root, "仓 库");
+  mkdirSync(repo);
+  gitW(repo, "init", "-q", "-b", "main");
+  gitW(repo, "config", "commit.gpgsign", "false");
+  commit(repo, "README.md", "# 项目\n\n## 进度\n- 2026-10-01 建仓\n\n## 其他\n说明\n", "c1: 初始化");
+  commit(repo, "src.txt", "line1\nline2\nline3\n", "c2: 源码");
+  // 集成分支：README 进度追加一行 + 改 src.txt 第二行
+  gitW(repo, "checkout", "-q", "-b", "integ");
+  commit(repo, "README.md", "# 项目\n\n## 进度\n- 2026-10-01 建仓\n- 2026-10-20 集成：合入 A\n\n## 其他\n说明\n", "integ: 进度 10-20");
+  commit(repo, "src.txt", "line1\nline2 集成版\nline3\n", "integ: 改 src");
+  const mk = (b: string, file: string, content: string, msg: string, from = "main") => {
+    gitW(repo, "checkout", "-q", "-b", b, from);
+    commit(repo, file, content, msg);
+  };
+  mk("feat/f1", "a1.txt", "a1\n", "feat: 功能一");
+  mk("feat/f2", "a2.txt", "a2\n", "feat: 功能二");
+  mk("feat/f3", "dir/a3.txt", "a3\n", "feat: 功能三");
+  mk("feat/fu", "README.md", "# 项目\n\n## 进度\n- 2026-10-01 建仓\n- 2026-10-22 新功能 U\n\n## 其他\n说明\n", "feat: 进度 10-22");
+  mk("feat/fc", "src.txt", "line1\nline2 冲突分支版\nline3\n", "feat: 冲突地改 src");
+  mk("feat/fb", "b.txt", "b\n", "feat: 还没做完");
+  mk("feat/fi", "i.txt", "i\n", "feat: 已进集成");
+  gitW(repo, "checkout", "-q", "integ");
+  gitW(repo, "merge", "-q", "--no-ff", "-m", "merge fi", "feat/fi");
+  gitW(repo, "checkout", "-q", "main");
+  const sha: Record<string, string> = {};
+  for (const b of ["main", "integ", "feat/f1", "feat/f2", "feat/f3", "feat/fu", "feat/fc", "feat/fb", "feat/fi"]) sha[b] = gitW(repo, "rev-parse", b);
+
+  const heliuHome = join(root, "heliu-home");
+  const ledger = join(root, "台账");
+  const cache = join(root, "cache");
+  const claudeApp = join(root, "claude-app");
+  const claudeHome = join(root, "claude-home");
+  mkdirSync(join(heliuHome, "projects", "演示"), { recursive: true });
+  mkdirSync(join(claudeHome, "sessions"), { recursive: true });
+  const yaml = [
+    "name: 演示",
+    `ledger: ${JSON.stringify(ledger)}`,
+    "repos:",
+    "  - id: docs",
+    "    label: 文档仓",
+    `    path: ${JSON.stringify(repo)}`,
+    "    main: main",
+    "    integration: integ",
+    "union_files:",
+    "  - README.md",
+    ...(opts.checks?.length ? ["checks:", ...opts.checks.map((c) => `  - ${JSON.stringify(c)}`)] : []),
+    "",
+  ].join("\n");
+  writeFileSync(join(heliuHome, "projects", "演示", "project.yaml"), yaml);
+  // 会话：fb 等你回答
+  const sessDir = join(claudeApp, "claude-code-sessions", "acct", "org");
+  mkdirSync(sessDir, { recursive: true });
+  writeFileSync(
+    join(sessDir, "local_fb.json"),
+    JSON.stringify({
+      sessionId: "local_fb",
+      title: "还没做完的功能",
+      cwd: repo,
+      originCwd: repo,
+      branch: "feat/fb",
+      postTurnSummary: { status_category: "blocked", status_detail: "等确认", needs_action: "确认要不要做 B" },
+      isArchived: false,
+      lastActivityAt: 1792900000000,
+    }),
+  );
+  // 台账
+  const l = new Ledger(ledger);
+  l.addMilestone({ id: "v1.2" });
+  l.addMilestone({ id: "v1.3" });
+  const ids: Record<string, string> = {};
+  const add = (key: string, title: string, branch: string) => {
+    ids[key] = l.addFeature({ title, milestone: "v1.2", bindings: [{ repo: "docs", branch, worktree: null, session: null, pr: null }], status: "待合并" }).feature.id;
+  };
+  add("f1", "功能一", "feat/f1");
+  add("f2", "功能二", "feat/f2");
+  add("f3", "功能三", "feat/f3");
+  add("fu", "进度更新 U", "feat/fu");
+  add("fc", "冲突功能 C", "feat/fc");
+  add("fb", "还没做完的 B", "feat/fb");
+  add("fi", "已进集成 I", "feat/fi");
+  l.freezeMilestone("v1.2");
+  // 桩解冲突器：吃掉提示词，对冲突文件 checkout --ours + add，打印 claude 风格 JSON
+  const stub = join(root, "resolver-stub.sh");
+  writeFileSync(
+    stub,
+    [
+      "#!/bin/sh",
+      "cat > /dev/null",
+      'printf "%s\\n" "$HELIU_CONFLICT_FILES" | while IFS= read -r f; do [ -n "$f" ] && git checkout --ours -- "$f" && git add -- "$f"; done',
+      `printf '%s\\n' '{"type":"result","subtype":"success","is_error":false,"num_turns":3,"result":"src.txt：保留集成分支一侧（桩）","total_cost_usd":0.12}'`,
+      "",
+    ].join("\n"),
+  );
+  chmodSync(stub, 0o755);
+  return {
+    root,
+    repo,
+    ledger,
+    cache,
+    heliuHome,
+    claudeApp,
+    env: { HELIU_HOME: heliuHome, HELIU_CLAUDE_APP_DIR: claudeApp, HELIU_CLAUDE_HOME: claudeHome, HELIU_CACHE_DIR: cache, HELIU_RESOLVER_STUB: stub },
+    sha,
+    ids,
+  };
+}
+
+/**
+ * M4 CLI：heliu release preview|run|rehearse|rollback|set，以及中文别名
+ *   heliu 合并 <版本> --预演   = release preview
+ *   heliu 合并 <版本>          = release run（可加 --dry-run / --yes / --to-main）
+ *   heliu 演练 <版本>          = release rehearse
+ *   heliu 回滚 <版本>          = release rollback
+ * 执行类命令无 --yes 时先打印执行前摘要，再要求输入 yes（直接回车 = 取消；需要终端）；
+ * 输出边执行边写（同步写 stdout），--json 时进度写 stderr、结果写 stdout。
+ * 只在 src/cli/index.ts 里 import 并调用 registerReleaseCommands(program)。
+ */
+import type { Command } from "commander";
+import { writeSync } from "node:fs";
+import { heliuPaths } from "../core/paths.ts";
+import { resolveProject, type ProjectConfig } from "../core/project.ts";
+import { previewRelease, setPlanDecision } from "../core/release.ts";
+import { isYes, rollbackRelease, runRelease, type ConfirmFn } from "../core/release-run.ts";
+import { rehearseRelease } from "../core/rehearse.ts";
+import { SCHEMA_VERSION } from "../types.ts";
+import { renderPreview, renderRehearsal, renderRollback, renderRunReport, renderSetDecision } from "./render-release.ts";
+
+interface G {
+  project?: string;
+  cwd?: string;
+  json?: boolean;
+  timeout?: string;
+}
+
+function writeAll(fd: number, text: string): void {
+  const buf = Buffer.from(text.endsWith("\n") ? text : `${text}\n`, "utf8");
+  let off = 0;
+  while (off < buf.length) {
+    try {
+      off += writeSync(fd, buf, off, buf.length - off);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "EAGAIN") {
+        Bun.sleepSync(2);
+        continue;
+      }
+      return;
+    }
+  }
+}
+
+function project(g: G): Promise<ProjectConfig> {
+  return resolveProject(heliuPaths(), g.project, g.cwd ?? process.cwd());
+}
+
+function emitJson(command: string, p: ProjectConfig, data: unknown): void {
+  writeAll(1, JSON.stringify({ schemaVersion: SCHEMA_VERSION, command, generatedAt: new Date().toISOString(), project: { name: p.name, source: p.source }, data }, null, 2));
+}
+
+/** 终端确认：只有输入 yes 才执行，直接回车 / 其他输入 = 取消；非终端返回 undefined（执行类命令会要求 --yes） */
+function terminalConfirm(): ConfirmFn | undefined {
+  if (!process.stdin.isTTY) return undefined;
+  const ask = (globalThis as { prompt?: (m?: string) => string | null }).prompt;
+  if (!ask) return undefined;
+  return async (q) => {
+    const ok = isYes(ask(`${q}\n>`));
+    if (!ok) writeAll(2, "  已取消（只有输入 yes 才会执行）");
+    return ok;
+  };
+}
+
+const progress = (g: G) => (line: string) => writeAll(g.json ? 2 : 1, line);
+const budgetOf = (v?: string) => (v !== undefined && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined);
+
+async function previewAction(ms: string, g: G): Promise<void> {
+  const p = await project(g);
+  const r = await previewRelease(p, heliuPaths(), ms, { timeoutMs: g.timeout ? Number(g.timeout) : undefined });
+  if (g.json) emitJson("release.preview", p, { file: r.file, kept: r.kept, plan: r.plan });
+  else writeAll(1, renderPreview(r, p));
+}
+
+interface RunOpts {
+  dryRun?: boolean;
+  yes?: boolean;
+  toMain?: boolean;
+  allowCheckedOut?: boolean;
+  budget?: string;
+}
+async function runAction(ms: string, o: RunOpts, g: G): Promise<void> {
+  const p = await project(g);
+  const r = await runRelease(p, ms, {
+    dryRun: !!o.dryRun,
+    yes: !!o.yes,
+    toMain: !!o.toMain,
+    allowCheckedOut: !!o.allowCheckedOut,
+    confirm: terminalConfirm(),
+    log: progress(g),
+    resolverBudgetUsd: budgetOf(o.budget),
+  });
+  if (g.json) emitJson("release.run", p, r);
+  else writeAll(1, renderRunReport(r, p));
+  if (r.aborted.length || r.failed.length || r.cancelled) process.exitCode = 1;
+}
+
+async function rehearseAction(ms: string, o: { report?: string; budget?: string }, g: G): Promise<void> {
+  const p = await project(g);
+  const r = await rehearseRelease(p, heliuPaths(), ms, { log: progress(g), reportFile: o.report, resolverBudgetUsd: budgetOf(o.budget) });
+  if (g.json) emitJson("release.rehearse", p, r);
+  else writeAll(1, renderRehearsal(r));
+  if (!r.zeroWrite || r.run.aborted.length) process.exitCode = 1;
+}
+
+async function rollbackAction(ms: string, o: { yes?: boolean; allowCheckedOut?: boolean }, g: G): Promise<void> {
+  const p = await project(g);
+  const r = await rollbackRelease(p, ms, { yes: !!o.yes, confirm: terminalConfirm(), log: progress(g), allowCheckedOut: !!o.allowCheckedOut });
+  if (g.json) emitJson("release.rollback", p, r);
+  else writeAll(1, renderRollback(r, p));
+  if (!r.complete) process.exitCode = 1;
+}
+
+const globals = (cmd: Command): G => cmd.optsWithGlobals() as G;
+
+function runOptions(c: Command): Command {
+  return c
+    .option("--dry-run", "只演示每一项会怎么处理，不移动任何引用")
+    .option("--yes", "不再确认，按合并单执行（不加时：先看摘要，输入 yes 才执行）")
+    .option("--to-main", "发布后若主线能快进到集成分支，就快进主线（否则列出来问你）")
+    .option("--allow-checked-out", "集成分支/主线在某个 worktree 里检出时仍继续（那个目录需你自己同步）")
+    .option("--budget <美元>", "本次解冲突器总预算（默认 10；每次调用另有 --max-budget-usd 2）");
+}
+
+export function registerReleaseCommands(program: Command): void {
+  const rel = program.command("release").description("按里程碑合并：preview 合并单 → run 执行 → rollback 回滚；rehearse 在克隆上演练（唯一会写被管理仓库的命令组）");
+  rel
+    .command("preview <版本>")
+    .description("生成/刷新合并单草稿（只读仓库：试合在临时对象区）；保留你改过的决定")
+    .action(async (ms: string, _o, cmd: Command) => previewAction(ms, globals(cmd)));
+  runOptions(rel.command("run <版本>").description("按合并单合入集成分支 → tag → 顺延 → 发布说明；绝不 push")).action(async (ms: string, o: RunOpts, cmd: Command) =>
+    runAction(ms, o, globals(cmd)),
+  );
+  rel
+    .command("rehearse <版本>")
+    .description("把主仓库 clone --mirror --shared 到 ~/.cache/heliu/rehearsal/，在克隆上完整跑 preview + run --yes，并对真仓库做零写入比对")
+    .option("--report <文件>", "演练报告另存一份到这个文件")
+    .option("--budget <美元>", "解冲突器总预算（默认 10）")
+    .action(async (ms: string, o: { report?: string; budget?: string }, cmd: Command) => rehearseAction(ms, o, globals(cmd)));
+  rel
+    .command("rollback <版本>")
+    .description("按合并单 refs_moved 逆序把引用指回旧值（只回退 heliu 自己移动过的），删 heliu 打的 tag，恢复功能卡")
+    .option("--yes", "不再确认")
+    .option("--allow-checked-out", "引用在某个 worktree 里检出时仍继续")
+    .action(async (ms: string, o: { yes?: boolean; allowCheckedOut?: boolean }, cmd: Command) => rollbackAction(ms, o, globals(cmd)));
+  rel
+    .command("set <版本> <项> <决定>")
+    .description("改合并单里某项的决定：<项> = 卡号（F-0003）或 #序号；<决定> = 并入 / 顺延 / 等它 / 不并")
+    .option("--repo <id>", "卡片绑了多个分支时只改这个仓库的")
+    .option("--branch <分支>", "只改这个分支")
+    .action(async (ms: string, target: string, decision: string, o: { repo?: string; branch?: string }, cmd: Command) => {
+      const g = globals(cmd);
+      const p = await project(g);
+      const r = setPlanDecision(p, ms, target, decision, o);
+      if (g.json) emitJson("release.set", p, { file: r.plan.file, changed: r.changed });
+      else writeAll(1, renderSetDecision(r, p));
+    });
+
+  runOptions(
+    program
+      .command("合并 <版本>")
+      .description("= release run；加 --预演 = release preview（生成合并单）")
+      .option("--预演", "只生成/刷新合并单（= release preview）"),
+  ).action(async (ms: string, o: RunOpts & { 预演?: boolean }, cmd: Command) => {
+    const g = globals(cmd);
+    if (o.预演) return previewAction(ms, g);
+    return runAction(ms, o, g);
+  });
+  program
+    .command("演练 <版本>")
+    .description("= release rehearse：在主仓库克隆上完整演练一遍合并")
+    .option("--report <文件>", "演练报告另存一份到这个文件")
+    .option("--budget <美元>", "解冲突器总预算（默认 10）")
+    .action(async (ms: string, o: { report?: string; budget?: string }, cmd: Command) => rehearseAction(ms, o, globals(cmd)));
+  program
+    .command("回滚 <版本>")
+    .description("= release rollback")
+    .option("--yes", "不再确认")
+    .option("--allow-checked-out", "引用在某个 worktree 里检出时仍继续")
+    .action(async (ms: string, o: { yes?: boolean; allowCheckedOut?: boolean }, cmd: Command) => rollbackAction(ms, o, globals(cmd)));
+}
+
+  // 落后数 + 台账 + 会话并行
+  const protect = [top ?? cwd, commonDir ?? join(repo.path, ".git")];
+  const refs: string[] = [];
+  if (top && (res.branch || res.detached)) {
+    if (role !== "main") refs.push(`refs/heads/${repo.main}`);
+    if (repo.integration && role !== "integration") refs.push(`refs/heads/${repo.integration}`);
+  }
+  const behindJob = top ? behindCounts(top, refs, timeoutMs, protect) : Promise.resolve(new Map<string, number | null>());
+
+  if (res.branch && role === "feature") {
+    const { feature, others } = findFeatureForBranch(res.ledgerDir, repo.id, res.branch);
+    if (feature) {
+      res.feature = { id: feature.id, title: feature.title, status: feature.status, milestone: feature.milestone, acceptance: feature.acceptance, file: feature.file };
+      if (others.length) res.notes.push(`本分支还绑定在 ${others.join("、")} 上`);
+      if (feature.milestone) {
+        try {
+          const m = new Ledger(res.ledgerDir).findMilestone(feature.milestone);
+          if (m) res.milestone = { id: m.id, title: m.title, status: m.status };
+          else res.notes.push(`预约的里程碑 ${feature.milestone} 不在 milestones.yaml 里`);
+        } catch (e) {
+          res.notes.push((e as Error).message);
+        }
+      }
+    }
+  }
+  res.session = matchSession(paths, cwd, top, opts.sessionId);
+
+  const behind = await behindJob;
+  res.behindMain = role === "main" ? null : (behind.get(`refs/heads/${repo.main}`) ?? null);
+  res.behindIntegration = repo.integration && role !== "integration" ? (behind.get(`refs/heads/${repo.integration}`) ?? null) : null;
+  return done();
+}
+
+/** SessionStart 注入的中文上下文；不在项目内返回 null */
+export function whereamiContext(w: WhereAmI): string | null {
+  if (!w.project || !w.repo) return null;
+  const where = `${w.repo.label}/${w.branch ?? (w.detached ? "分离 HEAD" : "未知分支")}`;
+  const behindParts: string[] = [];
+  if (w.behindMain !== null) behindParts.push(`落后主线 ${w.behindMain} 提交`);
+  if (w.behindIntegration !== null) behindParts.push(`落后集成分支 ${w.behindIntegration}`);
+  const behind = behindParts.length ? `；${behindParts.join("、")}` : "";
+  const cwdHint = `调用 heliu 工具时请传 cwd="${w.cwd}"。`;
+  if (w.role === "main" || w.role === "integration") {
+    const what = w.role === "main" ? "主线" : "集成分支";
+    return `【合流】你在 ${where}（${what}）${behind}。主线/集成分支不建功能卡；若要做新功能，建议开新会话（独立 worktree）后用 heliu_feature_add 登记。${cwdHint}`;
+  }
+  if (w.feature) {
+    const ms = w.feature.milestone ? `预约 ${w.milestone?.id ?? w.feature.milestone}` : "未预约版本";
+    return `【合流】你在 ${where}，功能卡 ${w.feature.id}『${w.feature.title}』（${w.feature.status}）${ms}${behind}。${cwdHint}`;
+  }
+  return `【合流】你在 ${where}${behind}。本分支暂无功能卡；若本会话在做新功能，请在明确需求后调用 heliu_feature_add 登记（标题用用户的一句话），否则忽略。${cwdHint}`;
+}
+4: * M2（台账）：heliu init | feature add|list|reserve|bind|status|accept|rename | milestone add|list|todo|freeze|rename
+8: * 全局：--project <name>  --cwd <dir>  --json  --precheck  --dirty  --timeout <ms>  --wide
+109:  .option("--cwd <dir>", "按这个目录识别项目与当前分支（默认当前目录）")
+366:  emit(g, "feature.add", await opFeatureAdd(opCtx(g), { title: titleParts.join(" "), milestone, bind: o.bind, session: o.session ?? null, body: o.body }));
+374:    .option("--session <id>", "绑定的桌面会话 id（local_…）")
+379:addFeatureOptions(featureCmd.command("add <标题...>").description("登记一张功能卡（默认预约下一版，自动绑定当前分支）")).action(featureAddAction);
+380:addFeatureOptions(program.command("新点子 <标题...>").description("= feature add：把一句话需求登记成功能卡，默认预约下一版")).action(featureAddAction);
+405:  .option("--session <id>", "桌面会话 id")
+495:program.command("whereami").description("我在哪：当前目录的仓库/分支/功能卡/预约版本/落后数/会话（--cwd 指定目录）").action(whereamiAction);
+合流安装 · 演练模式（--dry-run）：只打印命令，不执行
+
+【1/5】检查 bun
+scripts/install.sh: line 59: BUN�: unbound variable
+
+ succeeded in 1720ms:
+{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"【合流】你在 文档仓/claude/html-interactive-prototype-f39588，功能卡 F-0001『HTML交互页面原型』（开发中）预约 vNext；落后主线 86 提交、落后集成分支 188。调用 heliu 工具时请传 cwd=\"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/html-interactive-prototype-f39588\"。"}}
+heliu-hook：whereami 70ms；总 113ms
+release preview 200 1.287024s
+{"milestone": {"id": "vNext", "title": "", "status": "规划中", "target_date": null, "integration_branch": null, "notes": ""}, "generatedAt": "2026-10-25T21:46:20.481Z", "scanMs": 936, "repos": [{"repo": "docs", "repoLabel": "文档仓", "main": "main", "mainSha": "0b6960f5dbd7a2f53abfa557db293ce0f78b5ef4", "integration": "claude/merge-features-refactor-143693", "integrationSha": "4329a384f567f57a44dda7cb2778d06f700510d4"}, {"repo": "firmware", "repoLabel": "固件仓", "main": "release/backclip-1.1", "mainSha": "16d0c04db7ab2cb36e4e3ca3c8cfcd0bd0a84cbc", "integration": "feat/aios-entry", "integrationSha": "a349aa5191e3f857fc614f3701268d4eb56428d2"}, {"repo": "app", "repoLabel": "App 仓", "main": "release/backclip-1.0", "mainSha": "9e14cca003d0474a85bba078cfbdd76da9ac9df2", "integration": null, "integrationSha": null}], "items": [{"order": 1, "id": "F-0019", "title": "语音对话应用思维框架", "status": "开发中", "tier": "in_integration", "tierText": "已进集成", "action": "skip", "actionText": "跳过（已在集成分支）", "reason": "绑定分支已被集成分支包含", "needsAction": null, "todoGroup": "mergeable", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/voice-dialogue-framework-499d60", "exists": true, "sha": "c305515e8c66a9ef423236e57af77c51ec0b4e1e", "mergedState": "in_integration", "precheckTarget": null, "conflictFiles": null, "conflicts": [], "precheckError": null, "precheckState": null, "behindIntegration": 110, "behindMain": 9}]}, {"order": 2, "id": "F-0023", "title": "推送卡片同步到背夹", "status": "待合并", "tier": "in_integration", "tierText": "已进集成", "action": "skip", "actionText": "跳过（已在集成分支）", "reason": "绑定分支已被集成分支包含", "needsAction": null, "todoGroup": "mergeable", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/push-card-sync-backclip-4c3877", "exists": true, "sha": "ee390362f0410e8fec8954dc5bcde1979a73b817", "mergedState": "in_integration", "precheckTarget": null, "conflictFiles": null, "conflicts": [], "precheckError": null, "precheckState": null, "behindIntegration": 107, "behindMain": 7}]}, {"order": 3, "id": "F-0026", "title": "首页设计与交互原型", "status": "待合并", "tier": "in_integration", "tierText": "已进集成", "action": "skip", "actionText": "跳过（已在集成分支）", "reason": "绑定分支已被集成分支包含", "needsAction": null, "todoGroup": "mergeable", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/homepage-design-prototype-619d11", "exists": true, "sha": "030257459c001621419fb8a772296bac258b89f0", "mergedState": "in_integration", "precheckTarget": null, "conflictFiles": null, "conflicts": [], "precheckError": null, "precheckState": null, "behindIntegration": 102, "behindMain": 1}]}, {"order": 4, "id": "F-0028", "title": "AI应用生成质量优化", "status": "待合并", "tier": "in_integration", "tierText": "已进集成", "action": "skip", "actionText": "跳过（已在集成分支）", "reason": "绑定分支已被集成分支包含", "needsAction": null, "todoGroup": "mergeable", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/ai-app-generation-quality-3c1c8b", "exists": true, "sha": "ee2924b232edf974912f2d5f0f91e9b201cfb859", "mergedState": "in_integration", "precheckTarget": null, "conflictFiles": null, "conflicts": [], "precheckError": null, "precheckState": null, "behindIntegration": 101, "behindMain": 0}]}, {"order": 5, "id": "F-0029", "title": "AI应用优化与功能迭代", "status": "待合并", "tier": "in_integration", "tierText": "已进集成", "action": "skip", "actionText": "跳过（已在集成分支）", "reason": "绑定分支已被集成分支包含", "needsAction": null, "todoGroup": "mergeable", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/ai-app-optimization-90536f", "exists": true, "sha": "37fca76a06d76b3e29e62d233d23616548cb34e4", "mergedState": "in_integration", "precheckTarget": null, "conflictFiles": null, "conflicts": [], "precheckError": null, "precheckState": null, "behindIntegration": 98, "behindMain": 0}]}, {"order": 6, "id": "F
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "command -v bash; bash --version | head -1; locale; /bin/bash scripts/install.sh --dry-run; rg -n 'bash|LANG|LC_' tests/onboard.test.ts; ls -d \""'$HOME/Library/Application Support/Claude/claude-code/"*/*/claude.app/Contents/MacOS/claude' in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 0ms:
+/bin/bash
+GNU bash, version 3.2.57(1)-release (arm64-apple-darwin26)
+LANG="C.UTF-8"
+LC_COLLATE="C.UTF-8"
+LC_CTYPE="C.UTF-8"
+LC_MESSAGES="C.UTF-8"
+LC_MONETARY="C.UTF-8"
+LC_NUMERIC="C.UTF-8"
+LC_TIME="C.UTF-8"
+LC_ALL="C.UTF-8"
+合流安装 · 演练模式（--dry-run）：只打印命令，不执行
+
+【1/5】检查 bun
+scripts/install.sh: line 59: BUN�: unbound variable
+112:    const r = Bun.spawnSync({ cmd: ["bash", join(ROOT, "scripts", "install.sh"), "--dry-run"], stdout: "pipe", stderr: "pipe" });
+124:    const r = Bun.spawnSync({ cmd: ["bash", join(ROOT, "scripts", "uninstall.sh"), "--dry-run"], stdout: "pipe", stderr: "pipe" });
+/Users/linxiansheng/Library/Application Support/Claude/claude-code/2.1.304/6bbba6adc37f/claude.app/Contents/MacOS/claude
+/Users/linxiansheng/Library/Application Support/Claude/claude-code/2.1.308/a93ded4b1b47/claude.app/Contents/MacOS/claude
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import subprocess,tempfile,pathlib,os,json
+p=pathlib.Path(tempfile.mkdtemp(prefix='heliu-M5-install-'))
+(p/'claude-config').mkdir();(p/'source').mkdir()
+archive=subprocess.check_output(['git','archive','HEAD'])
+subprocess.run(['tar','-x','-C',str(p/'source')],input=archive,check=True)
+(p/'project').mkdir();subprocess.run(['git','init','-q','-b','main',str(p/'project')],check=True)
+subprocess.run(['git','-C',str(p/'project'),'-c','user.name=Acceptance','-c','user.email=acceptance@localhost','commit','--allow-empty','-qm','Initialize acceptance fixture'],check=True)
+pathlib.Path('/tmp/heliu-M5-install-path').write_text(str(p))
+print(p)
+env=os.environ.copy();env['CLAUDE_CONFIG_DIR']=str(p/'claude-config')
+r=subprocess.run(['claude','plugin','list'],env=env,capture_output=True,text=True,timeout=30);print(r.returncode,r.stdout,r.stderr)
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 385ms:
+/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac
+0 No plugins installed. Use `claude plugin install` to install a plugin.
+ 
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import pathlib,os,subprocess
+p=pathlib.Path(pathlib.Path('/tmp/heliu-M5-install-path').read_text());env=os.environ.copy();env['CLAUDE_CONFIG_DIR']=str(p/'claude-config');env['HELIU_HOME']=str(p/'heliu-home')
+r=subprocess.run([str(p/'source/scripts/install.sh')],env=env,cwd=p/'source',capture_output=True,text=True,errors='replace',timeout=60)
+(p/'install-default.log').write_text(r.stdout+r.stderr);print('DEFAULT EXIT',r.returncode,r.stdout,r.stderr)
+env['LC_ALL']='C'
+r=subprocess.run([str(p/'source/scripts/install.sh')],env=env,cwd=p/'source',capture_output=True,text=True,errors='replace',timeout=60)
+(p/'install-locale-workaround.log').write_text(r.stdout+r.stderr);print('LOCALE WORKAROUND EXIT',r.returncode,r.stdout,r.stderr)
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import subprocess,os,json,pathlib
+s=json.load(open('/tmp/heliu-M5-status.json'))['data']
+for r in s['repos']:
+ print(r['id'],r['counts'])
+ print('keys',list(r))
+ if r['id']=='docs':
+  for w in r.get('worktrees',[])[:2]:print(w)
+PY
+sed -n '1,160p' src/app/ops.ts; sed -n '1,120p' tests/helpers/fixture.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 0ms:
+docs {'branches': 76, 'worktrees': 55, 'mergedIntoMain': 24, 'unmergedIntoMain': 52, 'inIntegration': 13, 'independent': 38, 'neverPushed': 60}
+keys ['id', 'label', 'path', 'icloud', 'main', 'integration', 'remote', 'reachable', 'error', 'warnings', 'counts', 'health', 'branches', 'worktrees', 'hygiene', 'elapsedMs', 'gitCalls', 'gitTimeouts']
+{'path': '/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹', 'dirName': '磁吸背夹', 'branch': 'main', 'head': '0b6960f5dbd7a2f53abfa557db293ce0f78b5ef4', 'isMain': True, 'detached': False, 'locked': False, 'prunable': False, 'managedByDesktop': False, 'leasedBy': None, 'dirty': 'skipped', 'dirtyCount': None, 'dirtyReason': 'iCloud 仓默认跳过（--dirty 才检查）'}
+{'path': '/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/ai-app-generation-quality-3c1c8b', 'dirName': 'ai-app-generation-quality-3c1c8b', 'branch': 'claude/ai-app-generation-quality-3c1c8b', 'head': 'ee2924b232edf974912f2d5f0f91e9b201cfb859', 'isMain': False, 'detached': False, 'locked': False, 'prunable': False, 'managedByDesktop': True, 'leasedBy': 'local_fc4b7327-233c-4e1a-b19a-4960f67d982a', 'dirty': 'skipped', 'dirtyCount': None, 'dirtyReason': 'iCloud 仓默认跳过（--dirty 才检查）'}
+firmware {'branches': 33, 'worktrees': 27, 'mergedIntoMain': 13, 'unmergedIntoMain': 20, 'inIntegration': 14, 'independent': 5, 'neverPushed': 28}
+keys ['id', 'label', 'path', 'icloud', 'main', 'integration', 'remote', 'reachable', 'error', 'warnings', 'counts', 'health', 'branches', 'worktrees', 'hygiene', 'elapsedMs', 'gitCalls', 'gitTimeouts']
+app {'branches': 10, 'worktrees': 7, 'mergedIntoMain': 7, 'unmergedIntoMain': 3, 'inIntegration': 0, 'independent': 3, 'neverPushed': 8}
+keys ['id', 'label', 'path', 'icloud', 'main', 'integration', 'remote', 'reachable', 'error', 'warnings', 'counts', 'health', 'branches', 'worktrees', 'hygiene', 'elapsedMs', 'gitCalls', 'gitTimeouts']
+/**
+ * CLI 与 MCP 共用的命令层：每个操作返回 { text（中文渲染）, data（--json / structured） }。
+ * 只做编排：项目解析 → 台账/对账 → 渲染。业务规则在 src/core/*。
+ */
+import type { FeatureBinding, FeatureSource, LedgerFeature, ProjectRef, TodoReport, WhereAmI } from "../types.ts";
+import { Cache } from "../core/cache.ts";
+import { Ledger, LedgerError, NEXT_ALIASES, parseAcceptance, parseFeatureStatus, VNEXT } from "../core/ledger.ts";
+import type { HeliuPaths } from "../core/paths.ts";
+import { loadProject, resolveProject, type ProjectConfig } from "../core/project.ts";
+import { reconcile } from "../core/reconcile.ts";
+import { syncLedger, type SyncResult } from "../core/sync.ts";
+import { sourceBranchIndex, zeroCommitBranches } from "../core/owncommits.ts";
+import { countsTowardTodo, groupTodo, todoFeatures } from "../core/todo.ts";
+import { whereami } from "../core/whereami.ts";
+import { renderFeatureLine, renderFeatureTable, renderMilestones, renderSync, renderTodo, renderWhereami, type RenderOpts } from "../cli/render-ledger.ts";
+
+export interface OpContext {
+  paths: HeliuPaths;
+  cwd: string;
+  /** --project / MCP project 参数 */
+  projectName?: string;
+  source: FeatureSource;
+  render?: RenderOpts;
+  now?: Date;
+}
+
+export interface OpResult<T = unknown> {
+  text: string;
+  data: T;
+  project: ProjectRef | null;
+}
+
+const ref = (p: ProjectConfig): ProjectRef => ({ name: p.name, source: p.source });
+
+export async function projectOf(ctx: OpContext): Promise<ProjectConfig> {
+  return resolveProject(ctx.paths, ctx.projectName, ctx.cwd);
+}
+
+/** 当前目录的位置；cwd 不在 --project 指定的项目里时 repo 为 null */
+async function locate(ctx: OpContext, project: ProjectConfig): Promise<WhereAmI> {
+  return whereami(ctx.paths, ctx.cwd, { project, timeoutMs: 3000 });
+}
+
+/* ───────────── init / whereami ───────────── */
+
+export async function opInit(ctx: OpContext): Promise<OpResult<{ dir: string; created: boolean }>> {
+  const p = await projectOf(ctx);
+  const ledger = Ledger.of(p);
+  const r = ledger.init();
+  const text = [
+    `${r.created ? "已建立" : "台账已存在"}：${r.dir}`,
+    `  milestones.yaml（里程碑）+ features/（功能卡，每张一个 .md）`,
+    `下一步：heliu 新点子 "<一句话需求>"（默认预约到下一版）`,
+  ].join("\n");
+  return { text, data: r, project: ref(p) };
+}
+
+export async function opWhereami(ctx: OpContext, opts: { sessionId?: string | null } = {}): Promise<OpResult<WhereAmI>> {
+  const project = ctx.projectName ? loadProject(ctx.paths, ctx.projectName) : undefined;
+  const w = await whereami(ctx.paths, ctx.cwd, { project, sessionId: opts.sessionId, timeoutMs: 3000 });
+  return { text: renderWhereami(w), data: w, project: w.project };
+}
+
+/* ───────────── 功能卡 ───────────── */
+
+export interface FeatureAddInput {
+  title: string;
+  milestone?: string | null;
+  /** 是否自动绑定当前目录所在分支（默认是） */
+  bind?: boolean;
+  session?: string | null;
+  body?: string;
+}
+
+export async function opFeatureAdd(ctx: OpContext, input: FeatureAddInput): Promise<OpResult<{ feature: LedgerFeature; milestoneCreated: string | null; boundHere: boolean; note: string | null }>> {
+  const p = await projectOf(ctx);
+  const ledger = Ledger.of(p);
+  const bindings: FeatureBinding[] = [];
+  let note: string | null = null;
+  if (input.bind !== false) {
+    const w = await locate(ctx, p);
+    if (w.repo && w.role === "feature" && w.branch) {
+      const owner = ledger.findByBinding(w.repo.id, w.branch);
+      if (owner) note = `当前分支已绑定在 ${owner.id}「${owner.title}」上，新卡未自动绑定（需要时：heliu feature bind <卡号> --branch ${w.branch}）`;
+      else {
+        bindings.push({
+          repo: w.repo.id,
+          branch: w.branch,
+          worktree: w.isMainCheckout ? null : w.worktree,
+          session: input.session ?? w.session?.sessionId ?? null,
+          pr: null,
+        });
+      }
+    } else if (w.repo && (w.role === "main" || w.role === "integration")) {
+      note = `当前在${w.role === "main" ? "主线" : "集成分支"} ${w.branch} 上，未自动绑定（功能卡绑定功能分支）`;
+    }
+  }
+  const { feature, milestoneCreated } = ledger.addFeature({
+    title: input.title,
+    milestone: input.milestone === undefined ? "next" : input.milestone,
+    bindings,
+    body: input.body,
+    source: ctx.source,
+    now: ctx.now,
+  });
+  const lines = [`已登记 ${renderFeatureLine(feature)}`];
+  if (milestoneCreated) {
+    lines.push(
+      milestoneCreated.id.startsWith(VNEXT)
+        ? `  （还没有「规划中」的版本，已自动建 ${milestoneCreated.id} 作为下一版；可改名：heliu milestone rename ${milestoneCreated.id} v1.3）`
+        : `  （新建里程碑 ${milestoneCreated.id}，状态 规划中）`,
+    );
+  }
+  if (note) lines.push(`  ${note}`);
+  lines.push(`  卡片：${feature.file}`);
+  return { text: lines.join("\n"), data: { feature, milestoneCreated: milestoneCreated?.id ?? null, boundHere: bindings.length > 0, note }, project: ref(p) };
+}
+
+export async function opFeatureList(ctx: OpContext, filter: { milestone?: string; status?: string }): Promise<OpResult<{ features: LedgerFeature[] }>> {
+  const p = await projectOf(ctx);
+  const ledger = Ledger.of(p);
+  const status = filter.status ? filter.status.split(/[,，、]/).map((s) => parseFeatureStatus(s)) : undefined;
+  const features = ledger.listFeatures({ milestone: filter.milestone, status });
+  const title = `合流 · ${p.name} · 功能卡 ${features.length} 张${filter.milestone ? ` · 预约 ${filter.milestone}` : ""}${filter.status ? ` · 状态 ${filter.status}` : ""}`;
+  return { text: renderFeatureTable(features, { ...ctx.render, title }), data: { features }, project: ref(p) };
+}
+
+export async function opFeatureReserve(ctx: OpContext, id: string, milestone: string): Promise<OpResult<{ feature: LedgerFeature; from: string | null; milestoneCreated: string | null }>> {
+  const p = await projectOf(ctx);
+  const r = Ledger.of(p).reserve(id, milestone, ctx.now);
+  const to = r.feature.milestone ?? "未预约";
+  const lines = [r.from === r.feature.milestone ? `${r.feature.id} 本来就预约在 ${to}，未改动` : `已改预约：${r.feature.id}「${r.feature.title}」${r.from ?? "未预约"} → ${to}`];
+  if (r.milestoneCreated) lines.push(`  （新建里程碑 ${r.milestoneCreated.id}，状态 规划中）`);
+  return { text: lines.join("\n"), data: { feature: r.feature, from: r.from, milestoneCreated: r.milestoneCreated?.id ?? null }, project: ref(p) };
+}
+
+export interface BindInput {
+  repo?: string;
+  branch?: string;
+  worktree?: string | null;
+  session?: string | null;
+  pr?: number | null;
+}
+
+export async function opFeatureBind(ctx: OpContext, id: string, input: BindInput): Promise<OpResult<{ feature: LedgerFeature; added: boolean; binding: FeatureBinding }>> {
+  const p = await projectOf(ctx);
+  const ledger = Ledger.of(p);
+  let binding: FeatureBinding;
+  if (input.branch) {
+    const repo = input.repo ?? p.repos[0]?.id;
+    if (!repo || !p.repos.some((r) => r.id === repo)) throw new LedgerError(`项目里没有仓库 ${repo}（可选：${p.repos.map((r) => r.id).join("、")}）`);
+    binding = { repo, branch: input.branch, worktree: input.worktree ?? null, session: input.session ?? null, pr: input.pr ?? null };
+  } else {
+    // 没给分支：绑定当前目录所在分支
+    const w = await locate(ctx, p);
+    if (!w.repo || !w.branch) throw new LedgerError(`当前目录（${ctx.cwd}）不在项目「${p.name}」的分支上；请用 --branch 指定分支`);
+    binding = {
+      repo: w.repo.id,
+      branch: w.branch,
+      worktree: input.worktree ?? (w.isMainCheckout ? null : w.worktree),
+/**
+ * 测试 fixture：在临时目录里造一个「主线 + 集成分支 + 三类分支 + worktree + 卫生问题」的仓库。
+ * 注意：fixture 搭建需要写操作（commit/merge/worktree add），这里直接 spawn git，
+ * 绝不经过 src/core/git.ts 的只读白名单（白名单会、也应该拒绝这些命令）。
+ */
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+let tick = 0;
+/** 写入型 git（仅限 fixture） */
+export function gitW(cwd: string, ...args: string[]): string {
+  tick++;
+  const date = `2026-10-${String(1 + Math.min(tick, 27)).padStart(2, "0")}T10:00:00+08:00`;
+  const r = Bun.spawnSync({
+    cmd: ["git", "-C", cwd, ...args],
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "fixture",
+      GIT_AUTHOR_EMAIL: "fixture@example.com",
+      GIT_COMMITTER_NAME: "fixture",
+      GIT_COMMITTER_EMAIL: "fixture@example.com",
+      GIT_AUTHOR_DATE: date,
+      GIT_COMMITTER_DATE: date,
+      GIT_CONFIG_NOSYSTEM: "1",
+      HOME: tmpdir(),
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (r.exitCode !== 0) throw new Error(`fixture git ${args.join(" ")} 失败：${r.stderr.toString()}`);
+  return r.stdout.toString().trim();
+}
+
+function commit(repo: string, file: string, content: string, msg: string): string {
+  writeFileSync(join(repo, file), content);
+  gitW(repo, "add", file);
+  gitW(repo, "commit", "-q", "-m", msg);
+  return gitW(repo, "rev-parse", "HEAD");
+}
+
+export interface Fixture {
+  root: string;
+  repo: string;
+  claudeApp: string;
+  claudeHome: string;
+  heliuHome: string;
+  env: Record<string, string>;
+  wt: Record<string, string>;
+  cleanup(): void;
+}
+
+export const B = {
+  main: "main",
+  integ: "integ",
+  mergedMain: "claude/merged-main-aaaaaa",
+  inInteg: "claude/in-integ-bbbbbb",
+  standalone: "claude/bold-shaw-cccccc",
+  behind: "claude/behind-dddddd",
+  conflict: "claude/conflict-ffffff",
+  atTip: "claude/at-tip-999999",
+} as const;
+
+export function buildFixture(): Fixture {
+  tick = 0;
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "heliu-fixture-")));
+  // 路径含中文与空格：覆盖 iCloud「Mobile Documents/磁吸背夹」这类真实路径的转义与沙箱匹配
+  const repo = join(root, "磁吸 仓库");
+  mkdirSync(repo);
+  gitW(repo, "init", "-q", "-b", "main");
+  gitW(repo, "config", "commit.gpgsign", "false");
+
+  // 主线 c1..c3
+  const c1 = commit(repo, "README.md", "# 项目\n\n第一版\n", "c1: 初始化");
+  commit(repo, "docs.md", "文档\n", "c2: 文档");
+  commit(repo, "plan.md", "计划\n", "c3: 计划");
+
+  // 已进主线：从 main 分出 → 一条提交 → --no-ff 合回 main
+  gitW(repo, "checkout", "-q", "-b", B.mergedMain);
+  commit(repo, "a.txt", "a\n", "feat: 已进主线的功能");
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "merge", "-q", "--no-ff", "-m", "merge: 合入 merged-main", B.mergedMain);
+
+  // 集成分支：从 main 分出，自己改 README
+  gitW(repo, "checkout", "-q", "-b", B.integ);
+  commit(repo, "README.md", "# 项目\n\n集成分支版本\n", "integ: 改 README");
+
+  // 已进集成分支：从 main 分出 → 一条提交 → --no-ff 合入 integ
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "checkout", "-q", "-b", B.inInteg);
+  commit(repo, "b.txt", "b\n", "feat: 已进集成的功能");
+  gitW(repo, "checkout", "-q", B.integ);
+  gitW(repo, "merge", "-q", "--no-ff", "-m", "merge: 合入 in-integ", B.inInteg);
+
+  // 独立未合并（随机名）：从 main 分出
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "checkout", "-q", "-b", B.standalone);
+  commit(repo, "c.txt", "c\n", "feat: EPP 网关首个提交");
+  commit(repo, "c2.txt", "c2\n", "feat: EPP 网关第二个提交");
+
+  // 冲突分支：与集成分支改同一行 README
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "checkout", "-q", "-b", B.conflict);
+  commit(repo, "README.md", "# 项目\n\n冲突分支版本\n", "feat: 冲突地改 README");
+
+  // 落后主线：从 c1 分出
+  gitW(repo, "checkout", "-q", "-b", B.behind, c1);
+  mkdirSync(join(repo, "legacy"), { recursive: true });
+  commit(repo, "legacy/old.md", "old\n", "docs: 老分支");
+
+  // 停在主线顶端、无提交
+  gitW(repo, "checkout", "-q", "main");
+  gitW(repo, "branch", B.atTip, "main");
+
+  // 远端跟踪引用：模拟 origin/main 落后、in-integ 已推送（远端地址不存在，heliu 也绝不会 fetch）
+  gitW(repo, "remote", "add", "origin", "/nonexistent/origin.git");
+  gitW(repo, "update-ref", "refs/remotes/origin/main", c1);
+  gitW(repo, "update-ref", `refs/remotes/origin/${B.inInteg}`, gitW(repo, "rev-parse", B.inInteg));
+
+  // worktree：三个桌面端风格目录 + 一个目录名≠分支名
+
+exec
+/bin/zsh -lc 'HELIU_HOME="$PWD/../M5-r1-0d7dedb-heliu-home" bun -e '"'import {loadProject} from \"./src/core/project.ts\"; import {heliuPaths} from \"./src/core/paths.ts\"; import {Ledger} from \"./src/core/ledger.ts\"; const p=loadProject(heliuPaths(),\"磁吸背夹\");const fs=Ledger.of(p).load().features;const s=await Bun.file(\"/tmp/heliu-M5-status.json\").json(); for(const r of s.data.repos) for(const w of r.worktrees) if(w.branch&&w.branch"'!==r.main&&w.branch!==r.integration&&!fs.some(f=>f.bindings.some(b=>b.repo===r.id&&b.branch===w.branch))) console.log(JSON.stringify({repo:r.id,path:w.path,branch:w.branch}));'"'" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 0ms:
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/backclip-homekit-feasibility-91c5e9","branch":"claude/backclip-homekit-feasibility-91c5e9"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/bluetooth-viewfinder-lua-app-124252","branch":"claude/bluetooth-viewfinder-lua-app-124252"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/embedded-gitlab-clone-d54afc","branch":"claude/embedded-gitlab-clone-d54afc"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/flash-latest-firmware-f6bf31","branch":"claude/flash-latest-firmware-f6bf31"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/inspiring-greider-dc4a37","branch":"claude/inspiring-greider-dc4a37"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/lucid-jackson-da9d6b","branch":"claude/lucid-jackson-da9d6b"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/magnetic-clip-interaction-prototype-467d2f","branch":"claude/magnetic-clip-interaction-prototype-467d2f"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/mcp-service-setup-e8078f","branch":"claude/mcp-service-setup-e8078f"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/muse-magnetic-clip-firmware-9694ac","branch":"claude/muse-magnetic-clip-firmware-9694ac"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/nice-franklin-9216f4","branch":"claude/nice-franklin-9216f4"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/qianwen-office-hardware-integration-923679","branch":"claude/qianwen-office-hardware-integration-923679"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/reverent-shamir-6aea9e","branch":"claude/reverent-shamir-6aea9e"}
+{"repo":"docs","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/upbeat-mendeleev-83c61c","branch":"claude/agent-logic-architecture-5a0132"}
+{"repo":"firmware","path":"/Users/linxiansheng/.cache/backclip-web/esp_claw","branch":"codex/media-hid-encryption"}
+{"repo":"firmware","path":"/Users/linxiansheng/.cache/backclip-web/esp_claw-aiopt","branch":"feat/ai-app-optimization"}
+{"repo":"firmware","path":"/Users/linxiansheng/.cache/backclip-web/esp_claw-callsec","branch":"feat/call-secretary"}
+{"repo":"firmware","path":"/Users/linxiansheng/.cache/backclip-web/esp_claw-e2e","branch":"fix/voice-e2e"}
+{"repo":"firmware","path":"/Users/linxiansheng/.cache/backclip-web/esp_claw-fix-imgsrc","branch":"feat/portrait-ui"}
+{"repo":"firmware","path":"/Users/linxiansheng/.cache/backclip-web/esp_claw-play","branch":"feat/voice-playback"}
+{"repo":"firmware","path":"/Users/linxiansheng/.cache/backclip-web/esp_claw-raw-touch","branch":"fix/portrait-raw-touch"}
+{"repo":"firmware","path":"/Users/linxiansheng/.cache/backclip-web/esp_claw-voice","branch":"release/backclip-1.0"}
+{"repo":"app","path":"/Users/linxiansheng/.cache/backclip-app-aiopt","branch":"feat/ai-app-optimization"}
+{"repo":"app","path":"/Users/linxiansheng/.cache/backclip-app-e2e","branch":"fix/voice-e2e"}
+{"repo":"app","path":"/Users/linxiansheng/.cache/backclip-app-merge","branch":"merge/voice-modes-20261016"}
+{"repo":"app","path":"/Users/linxiansheng/.cache/backclip-app-modes","branch":"feat/voice-app-modes"}
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import pathlib,json
+root=pathlib.Path.cwd()
+script='''import {buildReleaseFixture} from IMPORT_FIXTURE;
+import {writeFileSync} from 'node:fs';
+const fx=buildReleaseFixture();
+writeFileSync('/tmp/heliu-M5-release-fixture.json',JSON.stringify(fx));
+console.log('fixture',fx.root);
+const env={...process.env,...fx.env}; delete env.HELIU_RESOLVER_STUB;
+for(const args of [['合并','v1.2','--预演'],['release','set','v1.2',fx.ids.fc,'顺延'],['合并','v1.2','--dry-run']]){
+ const p=Bun.spawnSync({cmd:[BIN,...args],env,cwd:fx.repo,stdout:'pipe',stderr:'pipe'});
+ console.log('COMMAND',args.join(' '),'EXIT',p.exitCode);console.log(p.stdout.toString());console.log(p.stderr.toString()); if(p.exitCode)process.exit(1);
+}
+'''.replace('IMPORT_FIXTURE',json.dumps(str(root/'tests/helpers/release-fixture.ts'))).replace('BIN',json.dumps(str(root/'bin/heliu')))
+pathlib.Path('/tmp/heliu-M5-release.ts').write_text(script)
+PY
+bun /tmp/heliu-M5-release.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 1580ms:
+fixture /private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-ymJKFC
+COMMAND 合并 v1.2 --预演 EXIT 0
+合流 · 演示 · 合并单 v1.2（草稿）
+  文档仓：集成分支 integ @4a9b749
+
+已进集成（1）
+  #1   [x] 并入  F-0007 已进集成 I · 文档仓 feat/fi · 已进集成（跳过）
+
+未能试合（5）
+  #2   [ ] 待定  F-0001 功能一 · 文档仓 feat/f1 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+  #3   [ ] 待定  F-0002 功能二 · 文档仓 feat/f2 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+  #4   [ ] 待定  F-0003 功能三 · 文档仓 feat/f3 · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+  #5   [ ] 待定  F-0004 进度更新 U · 文档仓 feat/fu · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+  #6   [ ] 待定  F-0005 冲突功能 C · 文档仓 feat/fc · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+
+未完成（1）
+  #7   [ ] 顺延  F-0006 还没做完的 B · 文档仓 feat/fb · 未完成 → 顺延 · 会话等你回答：确认要不要做 B · 落后集成 4
+
+合计 7 项：新增待合 0 · 已在集成 1 · 有冲突 0 · 未能试合 5 · 未检查 0 · 顺延 1
+
+合并单：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-ymJKFC/台账/releases/v1.2.md
+未能试合 5 项（没有得到试合结果，不等于有冲突）：默认「待定」，执行时跳过、留在本版；建议重新试合（heliu doctor 看沙箱是否可用）或人工确认后 heliu release set v1.2 <卡号> 并入|顺延。
+下一步（建议）：核对决定（改：heliu release set v1.2 <卡号|#序号> 并入|顺延|等它|不并）→ heliu 合并 v1.2 --dry-run → heliu 合并 v1.2
+
+
+COMMAND release set v1.2 F-0005 顺延 EXIT 0
+已改 1 项：
+  #6   [ ] 顺延（你改的）  F-0005 冲突功能 C · 文档仓 feat/fc · 未能试合 → 重新试合或人工确认 · 未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延） · 落后集成 4
+合并单：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-ymJKFC/台账/releases/v1.2.md
+
+
+COMMAND 合并 v1.2 --dry-run EXIT 0
+合流 · 演示 · 合并 v1.2（--dry-run，只演示不执行）
+  执行前摘要 · v1.2（新增待合 0 · 已在集成 1 · 有冲突 0 · 未能试合 5 · 未检查 0 · 顺延 2）
+  新增合入 0 项：
+  已在集成分支 1 项（跳过）：F-0007
+  不在本次合入 6 项（按原因）：
+    - 未能试合 · 待定（跳过，不并入不顺延，留在本版）（4）：F-0001、F-0002、F-0003、F-0004
+    - 顺延到 v1.3 · 未能试合（1）：F-0005
+    - 顺延到 v1.3 · 等你回答（1）：F-0006
+  逐项：
+  文档仓：集成分支 integ @4a9b749 = 合并单 base_sha ✓
+  #1 F-0007「已进集成 I」 · 文档仓 feat/fi：跳过（已在集成分支）
+  #2 F-0001「功能一」 · 文档仓 feat/f1：跳过（待定：未能试合，重新试合或人工确认），不并入、不顺延，留在本版
+  #3 F-0002「功能二」 · 文档仓 feat/f2：跳过（待定：未能试合，重新试合或人工确认），不并入、不顺延，留在本版
+  #4 F-0003「功能三」 · 文档仓 feat/f3：跳过（待定：未能试合，重新试合或人工确认），不并入、不顺延，留在本版
+  #5 F-0004「进度更新 U」 · 文档仓 feat/fu：跳过（待定：未能试合，重新试合或人工确认），不并入、不顺延，留在本版
+  #6 F-0005「冲突功能 C」 · 文档仓 feat/fc：不合，顺延到 v1.3（未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延））
+  #7 F-0006「还没做完的 B」 · 文档仓 feat/fb：不合，顺延到 v1.3（会话等你回答：确认要不要做 B）
+  收尾：有「等它」或「待定」的项，本次不打 tag、不顺延、不改「已发布」（合并单记为待续）
+  （--dry-run：以上都没有执行，没有移动任何引用）
+  ! sandbox-exec 不可用：写操作只靠白名单约束（无操作系统级写保护）
+
+
+
+exec
+/bin/zsh -lc 'HELIU_HOME="$PWD/../M5-r1-0d7dedb-heliu-home" HELIU_HOOK_DEBUG=1 bin/heliu-hook <<'"'JSON'
+{\"hook_event_name\":\"SessionStart\",\"session_id\":\"heliu-M5-new-idea\",\"cwd\":\"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/backclip-homekit-feasibility-91c5e9\",\"source\":\"startup\"}
+JSON
+HELIU_HOME=\""'$PWD/../M5-r1-0d7dedb-heliu-home" bin/heliu 新点子 '"'做个背夹番茄钟（M5终验）' --cwd '/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/backclip-homekit-feasibility-91c5e9'
+HELIU_HOME=\""'$PWD/../M5-r1-0d7dedb-heliu-home" bin/heliu 待办 下一版 --project 磁吸背夹 --json > /tmp/heliu-M5-new-todo.json
+python3 - <<'"'PY'
+import json
+x=json.load(open('/tmp/heliu-M5-new-todo.json'))
+for g in x['data']['groups']:
+ for i in g['items']:
+  if 'M5终验' in i['title']:print(json.dumps(i,ensure_ascii=False))
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 1113ms:
+{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"【合流】你在 文档仓/claude/backclip-homekit-feasibility-91c5e9；落后主线 7 提交、落后集成分支 109。本分支暂无功能卡；若本会话在做新功能，请在明确需求后调用 heliu_feature_add 登记（标题用用户的一句话），否则忽略。调用 heliu 工具时请传 cwd=\"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/backclip-homekit-feasibility-91c5e9\"。"}}
+heliu-hook：whereami 44ms；总 101ms
+已登记 F-0062「做个背夹番茄钟（M5终验）」· 开发中 · 预约 vNext · 绑定 docs/claude/backclip-homekit-feasibility-91c5e9
+  卡片：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0062-做个背夹番茄钟（M5终验）.md
+{"id": "F-0062", "title": "做个背夹番茄钟（M5终验）", "status": "开发中", "acceptance": "未", "rolledFrom": [], "group": "active", "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/backclip-homekit-feasibility-91c5e9", "exists": true, "mergedState": "in_main", "behindMain": 7, "behindIntegration": 109, "conflictFiles": null, "sessionId": "local_44699b7a-2c55-4a90-a563-12b2e5976ff3", "sessionStatus": "completed", "lastCommitAt": "2026-10-15T03:16:34.000Z", "noCommits": true, "precheck": null, "precheckError": null}], "needsAction": null, "lastActivityAt": "2026-10-15T08:28:20.721Z", "idleDays": 10, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb-heliu-home/projects/磁吸背夹/ledger/features/F-0062-做个背夹番茄钟（M5终验）.md", "note": "尚无提交", "suggestion": null}
+
+codex
+发现一个会阻断 README 安装的实际问题：本机默认环境下，脚本在第 1 步报 `BUN…: unbound variable` 并退出。我正在隔离配置中核验后续安装能力；另已实测老分支落后主线 86、集成分支 188 个提交，基线预演正常返回。
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import pathlib,json,subprocess,os
+f=json.load(open('/tmp/heliu-M5-release-fixture.json'));env=os.environ.copy();env.update(f['env']);env.pop('HELIU_RESOLVER_STUB',None)
+bin=str(pathlib.Path.cwd()/'bin/heliu')
+for key in ['f1','f2','f3','fu']:
+ r=subprocess.run([bin,'release','set','v1.2',f['ids'][key],'并入'],env=env,cwd=f['repo'],capture_output=True,text=True)
+ print(key,r.returncode);assert r.returncode==0,r.stderr
+print('Fixture sources verified: 3 independent files and README union; ordinary conflict C explicitly deferred.')
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 232ms:
+f1 0
+f2 0
+f3 0
+fu 0
+Fixture sources verified: 3 independent files and README union; ordinary conflict C explicitly deferred.
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import os,json,pathlib
+f=json.load(open('/tmp/heliu-M5-release-fixture.json'));env=os.environ.copy();env.update(f['env']);env.pop('HELIU_RESOLVER_STUB',None);b=str(pathlib.Path.cwd()/'bin/heliu');os.chdir(f['repo']);os.execve(b,[b,'合并','v1.2'],env)
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ exited 2 in 47ms:
+heliu：执行需要确认：请在终端里运行（看完摘要后输入 yes），或确认合并单后加 --yes
+
+ succeeded in 38151ms:
+DEFAULT EXIT 1 合流安装：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source
+
+【1/5】检查 bun
+ /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source/scripts/install.sh: line 59: BUN�: unbound variable
+
+LOCALE WORKAROUND EXIT 0 合流安装：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source
+
+【1/5】检查 bun
+  bun：/Users/linxiansheng/.bun/bin/bun（1.3.4）
+
+【2/5】安装依赖（node_modules → node_modules.nosync 软链，iCloud 不同步）
+  $ mkdir -p /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source/node_modules.nosync
+  $ ln -s node_modules.nosync /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source/node_modules
+  $ /Users/linxiansheng/.bun/bin/bun install --cwd /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source
+bun install v1.3.4 (5eb2145b)
+
++ @types/bun@1.4.4
++ typescript@7.0.2
++ @modelcontextprotocol/sdk@1.32.2
++ commander@15.0.0
++ hono@4.13.14
++ preact@11.0.2
++ string-width@8.3.0
++ yaml@2.9.1
++ zod@4.6.7
+
+106 packages installed [93.00ms]
+
+【3/5】找 Claude Code CLI（优先桌面应用内置的最高版本，其次 PATH 里的 claude）
+  桌面内置：/Users/linxiansheng/Library/Application Support/Claude/claude-code/2.1.308/a93ded4b1b47/claude.app/Contents/MacOS/claude
+
+【4/5】注册 user 级 MCP（任何会话都能用 heliu_* 工具）
+  $ "/Users/linxiansheng/Library/Application Support/Claude/claude-code/2.1.308/a93ded4b1b47/claude.app/Contents/MacOS/claude" mcp add -s user heliu -- /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source/bin/heliu mcp
+Added stdio MCP server heliu with command: /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source/bin/heliu mcp to user config
+File modified: /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/claude-config/.claude.json
+
+【5/5】本地 marketplace + 插件（/heliu Skill、hooks、插件自带 MCP）
+  $ "/Users/linxiansheng/Library/Application Support/Claude/claude-code/2.1.308/a93ded4b1b47/claude.app/Contents/MacOS/claude" plugin marketplace add /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source
+Adding marketplace…✔ Successfully added marketplace: heliu-local (declared in user settings)
+  $ "/Users/linxiansheng/Library/Application Support/Claude/claude-code/2.1.308/a93ded4b1b47/claude.app/Contents/MacOS/claude" plugin install heliu@heliu-local
+Installing plugin "heliu@heliu-local"...✔ Successfully installed plugin: heliu@heliu-local (scope: user)
+
+完成。验证：
+  "/Users/linxiansheng/Library/Application Support/Claude/claude-code/2.1.308/a93ded4b1b47/claude.app/Contents/MacOS/claude" mcp list       # 应看到 heliu ✔ Connected
+  "/Users/linxiansheng/Library/Application Support/Claude/claude-code/2.1.308/a93ded4b1b47/claude.app/Contents/MacOS/claude" plugin list    # 应看到 heliu@heliu-local
+  /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source/bin/heliu doctor         # 环境自检
+打开看板：
+  /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source/bin/heliu board --project <项目名>
+接入新项目：
+  /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source/bin/heliu project add <仓库路径>
+说明：插件也自带同名 MCP（plugin:heliu:heliu），会话里 heliu 工具可能出现两份；只想要一份可用 --no-mcp 重装。
+ 
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "python3 -c 'import os,json,pathlib; f=json.load(open(\"/tmp/heliu-M5-release-fixture.json\")); env=os.environ.copy(); env.update(f[\"env\"]); env.pop(\"HELIU_RESOLVER_STUB\",None); b=str(pathlib.Path.cwd()/\"bin/heliu\"); os.chdir(f[\"repo\"]); os.execve(b,[b,\"合并\",\"v1.2\"],env)'" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import pathlib,subprocess,os,json
+p=pathlib.Path(pathlib.Path('/tmp/heliu-M5-install-path').read_text());env=os.environ.copy();env['CLAUDE_CONFIG_DIR']=str(p/'claude-config');env['HELIU_HOME']=str(p/'heliu-home')
+cli='/Users/linxiansheng/Library/Application Support/Claude/claude-code/2.1.308/a93ded4b1b47/claude.app/Contents/MacOS/claude'
+for args in [[cli,'plugin','list'],[cli,'mcp','list'],[str(p/'source/bin/heliu'),'project','add',str(p/'project'),'--yes'],[str(p/'source/bin/heliu'),'新点子','做个安装验收功能','--cwd',str(p/'project')],[str(p/'source/bin/heliu'),'待办','下一版','--cwd',str(p/'project')]]:
+ r=subprocess.run(args,cwd=p/'project',env=env,capture_output=True,text=True,errors='replace',timeout=45);print('CMD',args[1:],'EXIT',r.returncode,'\\n',r.stdout,r.stderr)
+file=pathlib.Path.home()/'.claude/plugins/installed_plugins.json'
+if file.exists():
+ data=json.loads(file.read_text());print('LIVE HELIU ENTRY',data.get('plugins',{}).get('heliu@heliu-local'))
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+ succeeded in 5129ms:
+CMD ['plugin', 'list'] EXIT 0 
+ Installed plugins:
+
+  ❯ heliu@heliu-local
+    Version: 0.2.0
+    Read from: /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source
+    Scope: user
+    Status: ✔ enabled
+
+ 
+CMD ['mcp', 'list'] EXIT 0 
+ Checking MCP server health…
+
+heliu: /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/source/bin/heliu mcp - ✔ Connected
+ 
+CMD ['project', 'add', '/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/project', '--yes'] EXIT 0 
+ 合流 · 接入仓库：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/project
+  项目：project（新建）· 仓库 id project · 显示名 project
+  主线：main（本地有 main）
+  远端：无（没有远端）· heliu 从不 fetch/push
+  集成分支：不设（没找到候选（名字含 merge/integration/release、或包含 ≥2 条未进主线分支的））
+  iCloud：否
+  规模：1 个本地分支 · 0 个 worktree（不含主目录） · 主目录在 main
+  台账：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/heliu-home/projects/project/ledger（放在 heliu 数据目录，不写进仓库；想放进仓库用 --ledger repo）
+  注册表：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/heliu-home/projects/project/project.yaml
+  以上全部来自 git 只读命令，没有改动仓库。
+已创建项目「project」：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/heliu-home/projects/project/project.yaml
+  + project（project）主线=main
+  台账：已建立 /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/heliu-home/projects/project/ledger
+下一步：heliu sync --project project --dry-run（看现有分支能建多少张草稿卡）→ heliu board --project project
+ 
+CMD ['新点子', '做个安装验收功能', '--cwd', '/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/project'] EXIT 0 
+ 已登记 F-0001「做个安装验收功能」· 想法 · 预约 vNext · 未绑定分支
+  （还没有「规划中」的版本，已自动建 vNext 作为下一版；可改名：heliu milestone rename vNext v1.3）
+  当前在主线 main 上，未自动绑定（功能卡绑定功能分支）
+  卡片：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/heliu-home/projects/project/ledger/features/F-0001-做个安装验收功能.md
+ 
+CMD ['待办', '下一版', '--cwd', '/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-M5-install-cw81qmac/project'] EXIT 0 
+ 合流 · project · 待办 vNext（下一版 · 规划中）· 未合入 1 条
+下一版 = vNext（规划中）
+概览：等你回答 0 > 有冲突 未检查 > 可合并 0 > 落后需同步 0 > 停滞 0 > 开发中 0 > 尚未关联开发分支 1
+      （按优先级排，每张卡只进最靠前的一组）
+顺延：某版合并时没合完的功能自动挪到下一版，标「从 vX 顺延」排在组内最前（M4 执行，不会静默丢弃）
+
+■ 有冲突：未检查（加 --precheck 在临时对象区试合，不碰仓库）
+
+■ 尚未关联开发分支（1）· 还没绑定分支（想法），或绑定的分支已不存在
+  - F-0001 做个安装验收功能 · 想法
+    （未绑定分支：heliu feature bind <卡号> 或在该分支的会话里登记）
+
+（暂无：等你回答、可合并、落后需同步、停滞、开发中）
+
+提示：heliu 预约 <卡号> <版本> 改预约 · heliu feature list 看全部卡 · --json 输出完整字段
+ 
+LIVE HELIU ENTRY [{'scope': 'user', 'installPath': '/Users/linxiansheng/.claude/plugins/cache/heliu-local/heliu/0.2.0', 'version': '0.2.0', 'installedAt': '2026-10-25T21:26:12.055Z', 'lastUpdated': '2026-10-25T21:26:12.055Z', 'gitCommitSha': 'c364cff157e240cc318566ef9e932a3477b5625b'}]
+
+ succeeded in 24154ms:
+执行前摘要 · v1.2（新增待合 4 · 已在集成 1 · 有冲突 0 · 未能试合 5 · 未检查 0 · 顺延 2）
+新增合入 4 项：
+  + F-0001 功能一（文档仓 feat/f1） · 未能试合，你改为并入（执行时重新试合）
+  + F-0002 功能二（文档仓 feat/f2） · 未能试合，你改为并入（执行时重新试合）
+  + F-0003 功能三（文档仓 feat/f3） · 未能试合，你改为并入（执行时重新试合）
+  + F-0004 进度更新 U（文档仓 feat/fu） · 未能试合，你改为并入（执行时重新试合）
+已在集成分支 1 项（跳过）：F-0007
+不在本次合入 2 项（按原因）：
+  - 顺延到 v1.3 · 未能试合（1）：F-0005
+  - 顺延到 v1.3 · 等你回答（1）：F-0006
+按上面的摘要执行 v1.2？输入 yes 执行，直接回车 = 取消
+> yes
+#2 F-0001「功能一」· 文档仓 feat/f1（未能试合）
+  无冲突：纯对象库合并
+  ✓ 已合入 → 15ead37
+#3 F-0002「功能二」· 文档仓 feat/f2（未能试合）
+  无冲突：纯对象库合并
+  ✓ 已合入 → b6007bd
+#4 F-0003「功能三」· 文档仓 feat/f3（未能试合）
+  无冲突：纯对象库合并
+  ✓ 已合入 → 70dfa64
+#5 F-0004「进度更新 U」· 文档仓 feat/fu（未能试合）
+  有冲突（README.md）：在临时 worktree 里合并
+  建临时 worktree：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-ymJKFC/cache/worktrees/演示/v1.2/docs
+  union：README.md（1 处按新日期在前排序）
+  ✓ 已合入 → f84e75f
+全部处理完：合入 4、失败 0。打 tag v1.2 并把里程碑标为已发布？输入 yes 发布，直接回车 = 先不收尾
+> yes
+合流 · 演示 · 合并 v1.2：已发布 · 用时 24.1s
+  合入 4 · 已在集成 1 · 失败·待处理 0 · 顺延 2 · 等它/未执行 0 · 待定跳过 0
+  ✓ F-0001 功能一（文档仓 feat/f1）→ 15ead37
+  ✓ F-0002 功能二（文档仓 feat/f2）→ b6007bd
+  ✓ F-0003 功能三（文档仓 feat/f3）→ 70dfa64
+  ✓ F-0004 进度更新 U（文档仓 feat/fu）→ f84e75f · union（两边内容都保留、新日期在前）README.md
+  → 顺延 F-0005 冲突功能 C → v1.3（未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延））
+  → 顺延 F-0006 还没做完的 B → v1.3（会话等你回答：确认要不要做 B）
+  tag 文档仓 v1.2 → f84e75f
+  ! sandbox-exec 不可用：写操作只靠白名单约束（无操作系统级写保护）
+  合并单与发布说明：/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-release-ymJKFC/台账/releases/v1.2.md
+
+未推送：文档仓：refs/heads/integ 与 refs/tags/v1.2（按仓库规矩，推送由你决定）
+需要撤回：heliu 回滚 v1.2
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import json,pathlib,subprocess
+f=json.load(open('/tmp/heliu-M5-release-fixture.json'))
+git=lambda *a: subprocess.check_output(['git','-C',f['repo'],*a],text=True).strip()
+print('FIXTURE original main/feature refs unchanged:',all(git('rev-parse',b)==s for b,s in f['sha'].items() if b"'!='"'integ'))
+print('tag at integration:',git('rev-parse','v1.2"'^{}'"')==git('rev-parse','integ'))
+for b in ['feat/f1','feat/f2','feat/f3','feat/fu']:
+ print(b,'in integration:',subprocess.run(['git','-C',f['repo'],'merge-base','--is-ancestor',b,'integ']).returncode==0)
+print('union content:',git('show','integ:README.md'))
+release=pathlib.Path(f['ledger'])/'releases/v1.2.md'
+text=release.read_text(); print('RELEASE NOTES',text[text.find('## 发布说明'):][-5000:])
+for x in (pathlib.Path(f['ledger'])/'features').glob('*.md'):
+ if x.name.startswith((f['ids']['fc'],f['ids']['fb'])): print(x.name,x.read_text()[:550])
+audit=(pathlib.Path(f['ledger'])/'releases/v1.2.log').read_text();print('audit push/fetch commands:',[l for l in audit.splitlines() if '\"push\"' in l or '\"fetch\"' in l])
+real=pathlib.Path('/Users/linxiansheng/.cache/heliu/rehearsal/磁吸背夹/20261026-054107')
+for repo in ['docs','firmware','app']:
+ b=real/f'snapshots/before-{repo}.tsv';a=real/f'snapshots/after-{repo}.tsv';print('REPORT snapshot',repo,b.exists() and a.exists() and b.read_bytes()==a.read_bytes())
+print('REAL REHEARSAL NOTES EXISTS',(real/'ledger/releases/vNext.md').exists())
+PY
+nl -ba scripts/install.sh | sed -n '52,63p'; git status --short" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M5-r1-0d7dedb
+ succeeded in 62ms:
+FIXTURE original main/feature refs unchanged: True
+tag at integration: True
+feat/f1 in integration: True
+feat/f2 in integration: True
+feat/f3 in integration: True
+feat/fu in integration: True
+union content: # 项目
+
+## 进度
+- 2026-10-01 建仓
+- 2026-10-22 新功能 U
+- 2026-10-20 集成：合入 A
+
+## 其他
+说明
+RELEASE NOTES ## 发布说明
+- 版本 v1.2 · 2026-10-26 05:47 · tag：文档仓 v1.2 → f84e75f（未推送）
+- 已合入（4）：
+  - F-0001 功能一（文档仓 `feat/f1` → 15ead37）
+  - F-0002 功能二（文档仓 `feat/f2` → b6007bd）
+  - F-0003 功能三（文档仓 `feat/f3` → 70dfa64）
+  - F-0004 进度更新 U（文档仓 `feat/fu` → f84e75f）
+- 已在集成分支（1）：
+  - F-0007 已进集成 I（文档仓 `feat/fi`）
+- 顺延（2）：
+  - F-0005 冲突功能 C → v1.3（未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延））
+  - F-0006 还没做完的 B → v1.3（会话等你回答：确认要不要做 B）
+- 冲突处理（1）：
+  - F-0004：union（两边内容都保留、新日期在前）README.md
+- 旧引用（可回滚：heliu 回滚 v1.2）：
+  - 文档仓 refs/heads/integ：4a9b749 → 15ead37（合入 F-0001）
+  - 文档仓 refs/heads/integ：15ead37 → b6007bd（合入 F-0002）
+  - 文档仓 refs/heads/integ：b6007bd → 70dfa64（合入 F-0003）
+  - 文档仓 refs/heads/integ：70dfa64 → f84e75f（合入 F-0004（解冲突））
+  - 文档仓 refs/tags/v1.2：（新建） → 0c3057a（打 tag（指向 f84e75f））
+- 未推送：文档仓 refs/heads/integ 与 refs/tags/v1.2（按仓库规矩，推送由你决定）
+
+F-0005-冲突功能-C.md ---
+id: F-0005
+title: 冲突功能 C
+status: 待合并
+milestone: v1.3
+acceptance: 未
+bindings:
+  - repo: docs
+    branch: feat/fc
+rolled_from:
+  - v1.2
+source: cli
+created: 2026-10-26
+updated: 2026-10-26
+---
+
+冲突功能 C
+
+<!-- 备注、验收证据链接写在这里；领先/落后/冲突等由 heliu 实时对账，不必手填 -->
+
+## 变更记录
+- 2026-10-26 release v1.2：顺延到 v1.3（未能试合：无法建立写保护沙箱（sandbox-exec 不可用），已跳过 merge-tree 预检（不等于有冲突；请重新试合或人工确认后把决定改为并入/顺延））
+
+F-0006-还没做完的-B.md ---
+id: F-0006
+title: 还没做完的 B
+status: 待合并
+milestone: v1.3
+acceptance: 未
+bindings:
+  - repo: docs
+    branch: feat/fb
+rolled_from:
+  - v1.2
+source: cli
+created: 2026-10-26
+updated: 2026-10-26
+---
+
+还没做完的 B
+
+<!-- 备注、验收证据链接写在这里；领先/落后/冲突等由 heliu 实时对账，不必手填 -->
+
+## 变更记录
+- 2026-10-26 release v1.2：顺延到 v1.3（会话等你回答：确认要不要做 B）
+
+audit push/fetch commands: []
+REPORT snapshot docs True
+REPORT snapshot firmware True
+REPORT snapshot app True
+REAL REHEARSAL NOTES EXISTS True
+    52	  if [ -n "$c" ] && [ -x "$c" ]; then BUN="$c"; break; fi
+    53	done
+    54	if [ -z "$BUN" ]; then
+    55	  echo "  没找到 bun。先安装：curl -fsSL https://bun.sh/install | bash   （或 brew install oven-sh/bun/bun），再重跑本脚本。"
+    56	  if [ "$DRY" = 0 ]; then exit 1; fi
+    57	  BUN="bun"
+    58	else
+    59	  echo "  bun：$BUN（$("$BUN" --version 2>/dev/null || echo 版本未知)）"
+    60	fi
+    61	
+    62	step "2/5" "安装依赖（node_modules → node_modules.nosync 软链，iCloud 不同步）"
+    63	if [ -L "$ROOT/node_modules" ]; then
+
+codex
+合并流程已在临时 fixture 中走完两次确认：4 项合入、2 项顺延，tag、发布说明和顺延标记均已核对，原主线和功能分支未改变。安装加上 `LC_ALL=C` 后，插件可识别、MCP 显示 Connected，新项目也能登记待办；但 README 原命令仍会失败，这是当前终验的阻断项。
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+codex
+{
+  "verdict": "不通过",
+  "summary": "明天可以用它管理待办、查看分支落后和预演合并，但还不能照 README 三步直接安装。已实看看板，跑通会话注入→新卡预约下一版，以及 fixture 中确认合并、自动发布说明和顺延；三仓库扫描约 0.52 秒，未对真实仓库执行合并、push 或删除。安装绕过问题后插件和 MCP 均可识别，但真实 Claude 解普通冲突及多仓库发布仍缺端到端验证。",
+  "solved": {
+    "版本遗漏": "部分解决",
+    "分支落后": "已解决",
+    "大版本待办": "已解决"
+  },
+  "blocking_issues": [
+    {
+      "title": "README 安装命令在当前环境第一步直接退出",
+      "repro": "本机 Bash 3.2、现有 LC_ALL=C.UTF-8 环境下执行 scripts/install.sh 或 scripts/install.sh --dry-run，均在第 59 行报 unbound variable，退出码 1；该行 $BUN 紧接中文括号，变量边界解析出错。",
+      "impact": "新用户无法按 README 完成安装。临时加 LC_ALL=C 后已验证安装成功、插件 enabled、MCP Connected，但这需要文档之外的排障；应先修正变量边界为 ${BUN} 并复验。"
+    }
+  ],
+  "suggestions": [
+    "后续补齐真实 Claude 普通冲突处理和跨仓库发布演练。",
+    "让看板与 CLI 共用合并计划及状态口径，清理“自动顺延尚未实现”等过期提示。",
+    "在基线预演后提供直达对应会话或同步操作的入口，减少手动切换。",
+    "默认只注册一份 MCP，避免用户看到重复工具。"
+  ]
+}
+tokens used
+141,498
+{
+  "verdict": "不通过",
+  "summary": "明天可以用它管理待办、查看分支落后和预演合并，但还不能照 README 三步直接安装。已实看看板，跑通会话注入→新卡预约下一版，以及 fixture 中确认合并、自动发布说明和顺延；三仓库扫描约 0.52 秒，未对真实仓库执行合并、push 或删除。安装绕过问题后插件和 MCP 均可识别，但真实 Claude 解普通冲突及多仓库发布仍缺端到端验证。",
+  "solved": {
+    "版本遗漏": "部分解决",
+    "分支落后": "已解决",
+    "大版本待办": "已解决"
+  },
+  "blocking_issues": [
+    {
+      "title": "README 安装命令在当前环境第一步直接退出",
+      "repro": "本机 Bash 3.2、现有 LC_ALL=C.UTF-8 环境下执行 scripts/install.sh 或 scripts/install.sh --dry-run，均在第 59 行报 unbound variable，退出码 1；该行 $BUN 紧接中文括号，变量边界解析出错。",
+      "impact": "新用户无法按 README 完成安装。临时加 LC_ALL=C 后已验证安装成功、插件 enabled、MCP Connected，但这需要文档之外的排障；应先修正变量边界为 ${BUN} 并复验。"
+    }
+  ],
+  "suggestions": [
+    "后续补齐真实 Claude 普通冲突处理和跨仓库发布演练。",
+    "让看板与 CLI 共用合并计划及状态口径，清理“自动顺延尚未实现”等过期提示。",
+    "在基线预演后提供直达对应会话或同步操作的入口，减少手动切换。",
+    "默认只注册一份 MCP，避免用户看到重复工具。"
+  ]
+}
