@@ -44,6 +44,7 @@ import {
   renderStatusSummary,
   repoTitle,
 } from "./render.ts";
+import { registerReleaseCommands } from "./release.ts";
 
 interface GlobalOpts {
   project?: string;
@@ -389,6 +390,8 @@ async function whereamiAction(_o: unknown, cmd: Command): Promise<void> {
 }
 program.command("whereami").description("我在哪：当前目录的仓库/分支/功能卡/预约版本/落后数/会话（--cwd 指定目录）").action(whereamiAction);
 program.command("我在哪").description("= whereami").action(whereamiAction);
+
+registerReleaseCommands(program);
 
 program
   .command("board")

@@ -626,6 +626,26 @@ export class Ledger {
     });
   }
 
+  /**
+   * M4 合并执行专用：顺延（milestone + rolled_from）、合入后改状态、回滚时恢复原值。
+   * 不做「只能预约到规划中」校验——回滚要把卡放回已冻结/合并中的版本；状态值仍校验。
+   * 每次都在卡片「## 变更记录」里记一行。
+   */
+  releaseUpdate(
+    idRaw: string,
+    patch: { milestone?: string | null; rolled_from?: string[]; status?: FeatureStatus },
+    log: string,
+    now = new Date(),
+  ): LedgerFeature {
+    if (patch.status !== undefined && !FEATURE_STATUSES.includes(patch.status)) throw new LedgerError(`功能状态只能是：${FEATURE_STATUSES.join(" / ")}`);
+    return this.update(idRaw, now, (f) => {
+      if (patch.milestone !== undefined) f.milestone = patch.milestone;
+      if (patch.rolled_from !== undefined) f.rolled_from = [...patch.rolled_from];
+      if (patch.status !== undefined) f.status = patch.status;
+      return log;
+    });
+  }
+
   rename(idRaw: string, title: string, now = new Date()): LedgerFeature {
     const t = title.replace(/\s+/g, " ").trim();
     if (!t) throw new LedgerError("功能标题不能为空");
