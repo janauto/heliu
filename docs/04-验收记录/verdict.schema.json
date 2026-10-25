@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "summary", "blocking_issues", "suggestions", "solved"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["通过", "有保留", "不通过"] },
+    "summary": { "type": "string", "description": "普通用户视角 3 句以内总结" },
+    "solved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["版本遗漏", "分支落后", "大版本待办"],
+      "properties": {
+        "版本遗漏": { "type": "string", "enum": ["已解决", "部分解决", "未解决", "本里程碑不涉及"] },
+        "分支落后": { "type": "string", "enum": ["已解决", "部分解决", "未解决", "本里程碑不涉及"] },
+        "大版本待办": { "type": "string", "enum": ["已解决", "部分解决", "未解决", "本里程碑不涉及"] }
+      }
+    },
+    "blocking_issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "repro", "impact"],
+        "properties": {
+          "title": { "type": "string" },
+          "repro": { "type": "string" },
+          "impact": { "type": "string" }
+        }
+      }
+    },
+    "suggestions": { "type": "array", "items": { "type": "string" }, "maxItems": 5 }
+  }
+}
