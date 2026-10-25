@@ -43,7 +43,7 @@ PROMPT="$(cat "$PROMPT_FILE")"
 [ -n "$SERVE_PORT" ] && PROMPT="$PROMPT
 
 【验收脚本补充】看板已由脚本在沙箱外启动：http://127.0.0.1:${SERVE_PORT}/ （不要自己再启动服务，你的沙箱不能监听端口）。台账与注册表是副本（HELIU_HOME 已指向副本），PATCH / POST 可以放心做，不会影响真实台账；被管理的磁吸背夹仓库仍然不得写入。"
-codex exec -s workspace-write --ephemeral -C "$SNAP" "${CODEX_EXTRA[@]}" \
+codex exec -s workspace-write --ephemeral -C "$SNAP" ${CODEX_EXTRA[@]+"${CODEX_EXTRA[@]}"} \
   --output-schema "$ROOT/docs/04-验收记录/verdict.schema.json" -o "$OUT" \
   "$PROMPT" >> "$LOG" 2>&1 || true
 if [ -s "$OUT" ]; then jq . "$OUT"; else echo "未得到结构化结论，见 $LOG" >&2; tail -20 "$LOG"; exit 1; fi
