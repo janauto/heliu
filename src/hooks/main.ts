@@ -1,10 +1,10 @@
-#!/usr/bin/env bun
-// heliu Claude Code hook 入口（plugin hooks/hooks.json 调用）。
+// heliu Claude Code hook 入口（TS 部分）：bin/heliu-hook（POSIX sh 包装，自寻 bun）exec 到这里；`bun run bin/heliu-hook` 也会 import 这里。
 // 硬约束：<300ms 返回；任何错误静默 exit 0（stderr 至多一行），绝不阻塞会话。
-// 看门狗：从进程启动算起 270ms 仍未完成就直接 exit 0（不输出），宁可少注入一次上下文也不拖慢会话。
+// 看门狗：从 bun 进程启动算起 260ms 仍未完成就直接 exit 0（不输出），宁可少注入一次上下文也不拖慢会话；
+// 留出约 10ms 给 sh 包装（找 bun + exec）。
 import { writeSync } from "node:fs";
 
-const BUDGET_MS = 270;
+const BUDGET_MS = 260;
 const watchdog = setTimeout(() => process.exit(0), Math.max(30, BUDGET_MS - performance.now()));
 
 function oneLine(msg: string): void {
@@ -17,7 +17,7 @@ function oneLine(msg: string): void {
 
 try {
   const text = await Bun.stdin.text();
-  const { handleHook, parseHookInput } = await import("../src/hooks/handler.ts");
+  const { handleHook, parseHookInput } = await import("./handler.ts");
   const input = parseHookInput(text);
   if (input) {
     const r = await handleHook(input);

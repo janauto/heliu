@@ -1,0 +1,13 @@
+#!/bin/sh
+':' //; # 合流（heliu）Claude Code hook 入口（plugin hooks/hooks.json 调用）。本文件既是 POSIX sh 脚本，也是 bun 能直接跑的 JS 模块：
+':' //; #  - 直接执行：sh 自己找 bun 再 exec 到 src/hooks/main.ts（stdin 原样传过去），不依赖 PATH 里有 bun；
+':' //; #  - bun run bin/heliu-hook：bun 当 JS 读，最后一行 import 入口。
+':' //; # 找 bun 的顺序同 bin/heliu；找不到时静默 exit 0（hook 绝不阻塞会话）。
+':' //; SELF=$0
+':' //; while [ -L "$SELF" ]; do L=$(readlink "$SELF"); case $L in /*) SELF=$L ;; *) SELF=$(dirname "$SELF")/$L ;; esac; done
+':' //; ROOT=$(cd "$(dirname "$SELF")/.." && pwd)
+':' //; BUN=
+':' //; for c in "$(command -v bun 2>/dev/null)" "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun "$BUN_BIN"; do if [ -n "$c" ] && [ -x "$c" ]; then BUN=$c; break; fi; done
+':' //; if [ -z "$BUN" ]; then exit 0; fi
+':' //; exec "$BUN" "$ROOT/src/hooks/main.ts" "$@"
+import "../src/hooks/main.ts";

@@ -1,0 +1,13 @@
+#!/bin/sh
+':' //; # 合流（heliu）CLI 入口。本文件既是 POSIX sh 脚本，也是 bun 能直接跑的 JS 模块：
+':' //; #  - 直接执行（./bin/heliu、plugin 的 .mcp.json、PATH 上的 heliu）：sh 自己找 bun 再 exec 到 src/cli/main.ts，不依赖 PATH 里有 bun；
+':' //; #  - bun run bin/heliu（验收提示词与旧文档的用法）：bun 当 JS 读，每行开头的 ':' 是无害的字符串语句、// 之后是注释，最后一行 import 入口。
+':' //; # 找 bun 的顺序：command -v bun → ~/.bun/bin/bun → /opt/homebrew/bin/bun → /usr/local/bin/bun → $BUN_BIN；找不到打印一行中文错误、退出 1。
+':' //; SELF=$0
+':' //; while [ -L "$SELF" ]; do L=$(readlink "$SELF"); case $L in /*) SELF=$L ;; *) SELF=$(dirname "$SELF")/$L ;; esac; done
+':' //; ROOT=$(cd "$(dirname "$SELF")/.." && pwd)
+':' //; BUN=
+':' //; for c in "$(command -v bun 2>/dev/null)" "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun "$BUN_BIN"; do if [ -n "$c" ] && [ -x "$c" ]; then BUN=$c; break; fi; done
+':' //; if [ -z "$BUN" ]; then echo "heliu：找不到 bun（已找过 PATH、~/.bun/bin、/opt/homebrew/bin、/usr/local/bin、BUN_BIN）。请安装 bun（https://bun.sh），或设置环境变量 BUN_BIN=<bun 的路径>" >&2; exit 1; fi
+':' //; exec "$BUN" "$ROOT/src/cli/main.ts" "$@"
+import "../src/cli/main.ts";

@@ -17,7 +17,8 @@ let fx: Fixture;
 
 function hook(input: string): { code: number; stdout: string; stderr: string; ms: number } {
   const t0 = performance.now();
-  const r = Bun.spawnSync({ cmd: [process.execPath, "run", HOOK], stdin: Buffer.from(input), env: { ...process.env, ...fx.env }, stdout: "pipe", stderr: "pipe" });
+  // 直接执行 sh 包装（与 Claude Code 调 hooks.json 的方式一致），计时含 sh 找 bun + bun 启动
+  const r = Bun.spawnSync({ cmd: [HOOK], stdin: Buffer.from(input), env: { ...process.env, ...fx.env }, stdout: "pipe", stderr: "pipe" });
   const ms = performance.now() - t0;
   return { code: r.exitCode ?? -1, stdout: r.stdout.toString(), stderr: r.stderr.toString(), ms };
 }
@@ -101,17 +102,17 @@ describe("Stop 与容错", () => {
 });
 
 describe("plugin 骨架", () => {
-  test("hooks.json：SessionStart/Stop 走 exec 形式（路径含空格也安全），timeout 5，不注册 WorktreeCreate", () => {
+  test("hooks.json：SessionStart/Stop 直接调 sh 包装（exec 形式、args 为空，路径含空格也安全），timeout 5，不注册 WorktreeCreate", () => {
     const h = JSON.parse(readFileSync(join(ROOT, "hooks", "hooks.json"), "utf8"));
     expect(Object.keys(h.hooks).sort()).toEqual(["SessionStart", "Stop"]);
     for (const k of ["SessionStart", "Stop"]) {
       const c = h.hooks[k][0].hooks[0];
-      expect(c).toEqual({ type: "command", command: "bun", args: ["${CLAUDE_PLUGIN_ROOT}/bin/heliu-hook"], timeout: 5 });
+      expect(c).toEqual({ type: "command", command: "${CLAUDE_PLUGIN_ROOT}/bin/heliu-hook", args: [], timeout: 5 });
     }
   });
   test(".mcp.json 与 plugin.json", () => {
     const m = JSON.parse(readFileSync(join(ROOT, ".mcp.json"), "utf8"));
-    expect(m).toEqual({ mcpServers: { heliu: { command: "bun", args: ["${CLAUDE_PLUGIN_ROOT}/bin/heliu", "mcp"] } } });
+    expect(m).toEqual({ mcpServers: { heliu: { command: "${CLAUDE_PLUGIN_ROOT}/bin/heliu", args: ["mcp"] } } });
     const p = JSON.parse(readFileSync(join(ROOT, ".claude-plugin", "plugin.json"), "utf8"));
     expect(p.name).toBe("heliu");
     expect(p.description).toMatch(/[一-龥]/);

@@ -172,7 +172,8 @@ describe("project.yaml 扩展与台账位置", () => {
 const BIN = join(import.meta.dir, "..", "bin", "heliu");
 let fx: Fixture;
 function heliu(args: string[], cwd?: string): { code: number; stdout: string; stderr: string } {
-  const r = Bun.spawnSync({ cmd: [process.execPath, "run", BIN, ...args], cwd: cwd ?? fx.repo, env: { ...process.env, ...fx.env }, stdout: "pipe", stderr: "pipe" });
+  // 直接执行 bin/heliu（sh 包装自寻 bun）；tests/cli.test.ts 仍用 `bun run bin/heliu`，两种入口都覆盖
+  const r = Bun.spawnSync({ cmd: [BIN, ...args], cwd: cwd ?? fx.repo, env: { ...process.env, ...fx.env }, stdout: "pipe", stderr: "pipe" });
   return { code: r.exitCode ?? -1, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
 }
 
