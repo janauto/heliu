@@ -1,0 +1,7 @@
+# bun 运行配置。测试只扫描 tests/，避免误跑 node_modules 里的用例。
+[test]
+root = "./tests"
+
+[install]
+# 锁定精确版本，减少依赖漂移
+exact = true

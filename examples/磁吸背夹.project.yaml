@@ -1,0 +1,28 @@
+# heliu 项目注册表：磁吸背夹（三仓库）
+# 正本位置：~/Library/Application Support/heliu/projects/磁吸背夹/project.yaml
+# 主线/集成分支均于 2026-10-26 只读核实（symbolic-ref、branch --list、merge-base）。
+name: 磁吸背夹
+repos:
+  - id: docs
+    label: 文档仓
+    path: /Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹
+    main: main
+    integration: claude/merge-features-refactor-143693
+    remote: github
+    icloud: true
+  - id: firmware
+    label: 固件仓
+    path: /Users/linxiansheng/.cache/backclip-web/esp_claw
+    # 产品主线是 release/backclip-1.1（本地 main 是上游 ESP-Claw 的 main）；1.1 是 feat/aios-entry 的祖先（0/100）
+    main: release/backclip-1.1
+    integration: feat/aios-entry
+    # github=janauto（release/backclip-1.0 的上游所在），origin=公司 GitLab；1.1 目前两边都没有
+    remote: github
+    icloud: false
+  - id: app
+    label: App 仓
+    path: /Users/linxiansheng/.cache/backclip-app-gitlab-20261015
+    # HEAD 与唯一的发布分支；上游 github/release/backclip-1.0
+    main: release/backclip-1.0
+    remote: github
+    icloud: false

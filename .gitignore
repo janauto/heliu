@@ -8,6 +8,9 @@
 *.sqlite*
 # 依赖与构建
 node_modules/
+# node_modules 是指向 node_modules.nosync 的符号链接（iCloud 不同步 .nosync），两者都忽略
+node_modules
+node_modules.nosync/
 dist/
 build/
 .venv/

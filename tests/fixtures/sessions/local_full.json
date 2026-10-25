@@ -1,0 +1,23 @@
+{
+  "sessionId": "local_full",
+  "cliSessionId": "cli-full",
+  "title": "实现 EPP 网关 v0（代调 MCP / CLI）",
+  "cwd": "__REPO__/.claude/worktrees/bold-shaw-cccccc",
+  "originCwd": "__REPO__",
+  "worktreeName": "bold-shaw-cccccc",
+  "worktreePath": "__REPO__/.claude/worktrees/bold-shaw-cccccc",
+  "branch": "claude/bold-shaw-cccccc",
+  "sourceBranch": "main",
+  "writtenBranches": ["__REPO__/.claude/worktrees/bold-shaw-cccccc\u0000claude/bold-shaw-cccccc"],
+  "prs": [
+    { "prNumber": 3, "repo": "acme/demo", "host": "github.com", "url": "https://github.com/acme/demo/pull/3", "branch": "claude/bold-shaw-cccccc", "state": "OPEN", "own": true }
+  ],
+  "postTurnSummary": { "status_category": "blocked", "status_detail": "等待确认", "needs_action": "确认是否推送到远端" },
+  "isArchived": false,
+  "createdAt": 1792000000000,
+  "lastActivityAt": 1792900000000,
+  "completedTurns": 12,
+  "spawnedFrom": { "sessionId": "local_parent", "title": "父会话", "taskId": "task_1" },
+  "model": "claude-opus-5-5",
+  "unknownFutureField": { "nested": true }
+}

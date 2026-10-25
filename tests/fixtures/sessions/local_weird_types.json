@@ -1,0 +1,13 @@
+{
+  "sessionId": "local_weird",
+  "title": 12345,
+  "cwd": "__REPO__/.claude/worktrees/reused-dir-eeeeee",
+  "originCwd": null,
+  "branch": null,
+  "isArchived": "yes",
+  "writtenBranches": ["__REPO__/.claude/worktrees/reused-dir-eeeeee\u0000claude/behind-dddddd", 42, ""],
+  "prs": "not-an-array",
+  "postTurnSummary": null,
+  "lastActivityAt": "not-a-number",
+  "createdAt": 1791000000000
+}

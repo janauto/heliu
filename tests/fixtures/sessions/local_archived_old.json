@@ -1,0 +1,10 @@
+{
+  "sessionId": "local_archived",
+  "title": "已归档的旧会话：老分支调研",
+  "cwd": "__REPO__",
+  "originCwd": "__REPO__",
+  "branch": "claude/behind-dddddd",
+  "isArchived": true,
+  "createdAt": 1790000000000,
+  "lastActivityAt": 1790500000000
+}
