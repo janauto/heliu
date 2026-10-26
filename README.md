@@ -16,6 +16,7 @@
 
 <p align="center">
   <a href="#快速开始"><strong>快速开始</strong></a> ·
+  <a href="docs/教程.md"><strong>使用教程</strong></a> ·
   <a href="#命令速查"><strong>命令速查</strong></a> ·
   <a href="#工作原理"><strong>工作原理</strong></a> ·
   <a href="#安全承诺"><strong>安全承诺</strong></a> ·
@@ -325,6 +326,7 @@ flowchart TD
 
 | 文档 | 内容 |
 |---|---|
+| [使用教程](docs/教程.md) | 通俗版：三个词、四个日常动作、看板怎么看、常见情况怎么办、速查卡 |
 | [产品定义](docs/02-产品定义/产品定义_v0.1.md) | 做什么、为什么、看板信息架构、怎么算做成 |
 | [架构决策](docs/03-架构/架构决策_v0.1.md) | 7 条 ADR（技术栈、数据落点、git 只读纪律、hooks……） |
 | [里程碑任务卡与实现说明](docs/03-架构/) | `M1…M5-任务卡.md` 与 `M1…M5-实现说明.md`：每个里程碑的规格与实现细节、实测数字 |
