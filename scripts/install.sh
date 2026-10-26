@@ -101,7 +101,10 @@ else
   # 本仓库根就是 marketplace 根（.claude-plugin/marketplace.json，插件 source "./"），原地加载，改代码不用重装
   EXISTING="$("${CLAUDE}" plugin marketplace list 2>/dev/null | grep -A1 "heliu-local" | grep -i "source" | sed "s/^ *//")"
   if [ -n "${EXISTING}" ]; then
-    echo "  ！这台机器已有 marketplace heliu-local（${EXISTING}）。本次会把它改指到当前目录 ${ROOT}，原目录那份安装随之失效。" >&2
+    case "${EXISTING}" in
+      *"${ROOT}"*) echo "  已有 marketplace heliu-local 且指向当前目录，重复安装无害" ;;
+      *) echo "  ！这台机器已有 marketplace heliu-local（${EXISTING}）。本次会把它改指到当前目录 ${ROOT}，原目录那份安装随之失效。" >&2 ;;
+    esac
   fi
   run "${CLAUDE}" plugin marketplace add "${ROOT}"
   run "${CLAUDE}" plugin install "${PLUGIN}@${MARKETPLACE}"
