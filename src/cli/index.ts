@@ -264,8 +264,8 @@ projectCmd
       ledgerSetting = tildify(ledgerDir);
       ledgerNote = "放在 heliu 数据目录，不写进仓库；想放进仓库用 --ledger repo";
     } else {
-      ledgerDir = join(det.root, ".heliu");
-      ledgerNote = "缺省位置；这次不建（加 --yes 才建台账）";
+      ledgerDir = join(paths.projectsDir, name, "ledger");
+      ledgerNote = "缺省位置（heliu 数据目录，不写进仓库）；非交互且没有 --yes，这次只登记注册表、不建台账";
     }
     const plan: OnboardPlan = { name, exists, id: o.id ?? repoIdOf(det.root), label: o.label ?? basename(det.root), ledgerDir, ledgerSetting, ledgerNote, registry };
 

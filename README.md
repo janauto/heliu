@@ -1,10 +1,35 @@
-# 合流（heliu）
+<a id="top"></a>
+
+# 合流（heliu）— 十几个 AI 会话并行开发，每一版还欠什么一眼看清
+
+[![版本](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-0.2.0-blue)](package.json)
+![许可：私有](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF-%E7%A7%81%E6%9C%89%20%28UNLICENSED%29-lightgrey)
+![Bun ≥ 1.3](https://img.shields.io/badge/Bun-%E2%89%A5%201.3-000000?logo=bun&logoColor=white)
+![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![平台：macOS](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS-999999?logo=apple&logoColor=white)
+[![测试：229 通过](https://img.shields.io/badge/%E6%B5%8B%E8%AF%95-229%20%E9%80%9A%E8%BF%87-brightgreen)](tests/)
+![Claude Code 插件 · MCP · hooks](https://img.shields.io/badge/Claude%20Code-%E6%8F%92%E4%BB%B6%20%C2%B7%20MCP%20%C2%B7%20hooks-D97757?logo=claude&logoColor=white)
 
 **合流是一个本机运行的中文版本台账**：它把 git 分支、worktree 和 Claude 桌面应用里的会话对上账，让你随口说的新点子变成功能卡、预约到某一版。
 **它解决的是「并行开了十几个会话之后，一版到底还欠什么、哪些能合、哪些在等我」**：看板 10 秒看懂，合并按版本走预演 → 确认 → 合入 → 顺延，不漏、不乱、不偷偷动你的仓库。
 **一句话：git 是事实，台账是承诺，看板是对账单。**
 
-![合流看板 · 总览（深色）](docs/04-验收记录/截图/M3-总览-深色.jpg)
+<p align="center">
+  <a href="#快速开始"><strong>快速开始</strong></a> ·
+  <a href="#命令速查"><strong>命令速查</strong></a> ·
+  <a href="#工作原理"><strong>工作原理</strong></a> ·
+  <a href="#安全承诺"><strong>安全承诺</strong></a> ·
+  <a href="#验证状态"><strong>验证状态</strong></a> ·
+  <a href="#文档索引"><strong>文档</strong></a> ·
+  <a href="#已知限制"><strong>已知限制</strong></a>
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/board-overview-dark.png">
+  <img src="docs/assets/board-overview-light.png" alt="合流看板「总览」页：顶部健康条标出两个仓库的集成分支几天未并回、17 个会话在等你处理；下面是「现在最该做的」三件事和「各版本还欠什么」（下一版还欠 61 项，可合 39、冲突 11、等你 11）" width="100%">
+</picture>
+
+<p align="center"><sub>看板「总览」，浅色 / 深色随系统切换。数据来自真实项目「磁吸背夹」（3 个仓库、61 张功能卡），2026-10-26 截图。</sub></p>
 
 ## 三句话就能用
 
@@ -16,17 +41,215 @@
 | 「1.2 还欠什么？」 | `heliu 待办 v1.2`（加 `--precheck` 在临时区试合，分出「有冲突」） | `heliu_milestone_todo` |
 | 「合并 1.2」 | 先 `heliu 合并 v1.2 --预演` 生成合并单 → 看过、改好决定 → `heliu 合并 v1.2`（终端里逐条确认） | `heliu_release_preview`（只出预演；MCP 不提供执行合并的工具，执行要在终端里跑 `heliu 合并`） |
 
-## 安装（三步）
+装好插件、接入项目之后，在项目仓库里新开会话时，hooks 会自动注入「你在哪个分支、对应哪张功能卡、预约哪一版、落后主线多少」，你不用额外操作。
 
-1. **装 bun**（已有可跳过）：`curl -fsSL https://bun.sh/install | bash`
-2. **跑安装脚本**：`scripts/install.sh`（想先看会做什么：`scripts/install.sh --dry-run`）。它会：`bun install`（`node_modules` 软链到 `node_modules.nosync`，iCloud 不同步）→ 把本仓库加成本地 marketplace `heliu-local` 并安装插件 `heliu@heliu-local`（带 `/heliu` Skill、hooks、MCP）。默认只装插件；想额外注册 user 级 MCP 加 `--with-mcp`。卸载：`scripts/uninstall.sh`（不删台账与缓存）。
-3. **接入你的项目**：`bin/heliu project add <仓库路径>`，向导会猜主线、集成分支、远端、是否在 iCloud，打一张中文摘要等你确认，然后建台账。再 `bin/heliu board --project <项目名>` 打开看板。
+## 为什么要做它
+
+一个人在 Claude 桌面应用里同时开十几个会话，每个会话一个 worktree，很快就会失去全局视图。合流的第一个用户场景是：同一项目 19 个活跃会话、75 个分支、54 个 worktree，跨三个仓库；版本整合发生在旁路集成分支上，4 天没并回 main。这时最难回答的问题是：哪个会话在做哪件事？这条分支落后主线多少？这一版到底还差什么？
+
+现成工具各管一段，没有一个把「版本」当作一等概念：
+
+| 工具类型 | 擅长 | 不管的部分 |
+|---|---|---|
+| Agent 工作台（并行会话 + worktree） | 并行开会话，一个任务一个 worktree | 没有版本或里程碑视图 |
+| 任务即 Markdown 的规划工具 | 里程碑、依赖、看板 | 不看 agent 会话，不管合并 |
+| PR 合并队列 / 堆叠 PR | PR 级别的顺序合入 | 面向团队和 PR，不按里程碑清点功能 |
+| **合流** | 分支 × worktree × 会话对账；功能卡预约到版本；按版本预演、合并、顺延 | 只做单人本机场景，不替代 GitHub；只在 macOS 上验证过 |
+
+调研盘点了 20 多款工具，最接近的组合（Claude 桌面版 + Backlog.md）约覆盖 60%。因此合流不 fork 任何工具：执行层直接用桌面应用的会话与 worktree，自己只写「版本列车」这一薄层（对账 + 预约 + 合并单），交付为 Claude Code 插件。详见 [竞品分析与社区声音](docs/01-调研/竞品分析与社区声音_20261026.md)。
+
+## 看板一览
+
+`heliu board` 打开一个只监听 127.0.0.1 的本机网页，共五页：总览、版本列、卫生、会话、合并预演。
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/assets/board-columns-dark.png" alt="看板「版本列」页（深色）：顶部可直接登记新点子，按「等你回答 / 有冲突 / 可合并 / 落后需同步」等状态灯给功能卡分组，卡片上标出冲突文件数与落后提交数" /><br/>
+      <sub><b>版本列</b>：每版一列，卡片按状态灯分组，顶部直接登记新点子</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/assets/board-drag-reserve.jpg" alt="把功能卡 F-0041 从 vNext 列拖到「未预约」列后，底部弹出提示「已把 F-0041 改到 未预约（已写入台账）」" /><br/>
+      <sub><b>拖拽改预约</b>：把卡片拖到另一列，立即写入台账（M3 验收截图）</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/assets/board-release-light.png" alt="看板「合并预演」页（浅色）：61 项按已进集成、无冲突、有冲突、未能试合、未完成、无法合并分档，表格列出顺序、功能、分支、试合冲突、建议动作和决定" /><br/>
+      <sub><b>合并预演</b>：与 <code>heliu 合并 --预演</code> 同一套规则，只预演、不执行</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/assets/board-mobile-375.png" alt="看板「总览」页在 375 像素宽的手机屏幕上的样子：标签栏、顶栏说明与健康条竖向排列" width="45%" /><br/>
+      <sub><b>手机宽度</b>：375 像素下也能看</sub>
+    </td>
+  </tr>
+</table>
+
+### 终端里也能看
+
+下面是 `heliu status` 在同一个项目上的真实输出（截到「现在最该做的」为止；第一行的「用时」是三个仓库的扫描耗时）：
+
+```text
+$ bin/heliu status --project 磁吸背夹
+合流 · 磁吸背夹 · 2026-10-26 09:26 · 3 个仓库 · 用时 0.8s
+图例：↑领先 ↓落后（提交数）· worktree 数不含主目录 · 工作区检查数含主目录 · 已进主线 = 提交已被主线包含，不代表功能已验收
+健康条
+  文档仓  分支 76 · 已进主线 24 · 未进主线 52（进集成 13 / 独立 38 / 集成分支 1） · worktree 55 · 主线 vs github/main ↑7 ↓5（分叉） · 集成分支领先主线 102，3 天未并回 · 本地无远端引用 60 · 工作区 未检查 56
+  固件仓  分支 33 · 已进主线 13 · 未进主线 20（进集成 14 / 独立 5 / 集成分支 1） · worktree 27 · 主线 vs github/release/backclip-1.1：本地无此引用 · 集成分支领先主线 100，2 天未并回 · 本地无远端引用 28 · 工作区 已跟踪文件干净 28
+  App 仓  分支 10 · 已进主线 7 · 未进主线 3 · worktree 7 · 主线 vs github/release/backclip-1.0 ↑34 ↓0 · 本地无远端引用 8 · 工作区 已跟踪文件干净 8
+  （远端对比基于本地已有引用，未 fetch）
+现在最该做的
+  1）集成分支未并回主线：文档仓（领先 102、3 天）、固件仓（领先 100、2 天） → 检查集成分支是否可并回
+     主线（可先预演）
+  2）17 个会话在等你拍板（见 ①，全部：heliu sessions）
+  3）46 条独立分支未被主线或集成分支包含（文档仓 38 / 固件仓 5 / App 仓 3；M2 起可预约版本）
+…（后面还有「① 等你处理」「② 独立未合并」「③ 已进集成分支待回主线」「④ 落后需同步」四段，此处略）
+```
+
+## 快速开始
+
+<!--
+给 AI agent 的非交互安装（macOS；需要已装好 bun ≥ 1.3、git ≥ 2.38、Claude 桌面应用或 Claude Code CLI，并且对私有仓库 janauto/heliu 有读权限）：
+  git clone https://github.com/janauto/heliu.git "$HOME/heliu" && cd "$HOME/heliu" && scripts/install.sh && bin/heliu doctor
+验收：doctor 最后一行以「结论：可用」或「结论：一切正常」开头；claude plugin list 里有 heliu@heliu-local 且 Status: ✔ enabled。
+install.sh 不需要输入任何凭据；重复执行无害。注意：如果这台机器已经从另一个目录装过 heliu-local，第 5 步会把 marketplace 改指到当前目录（脚本会打印一行警告），原目录的安装随之失效。
+接入项目的非交互写法：bin/heliu project add <仓库路径> --name <项目名> --yes
+-->
+
+### 1. 环境要求
+
+| 依赖 | 版本 | 必需 | 检查命令 | 用途 |
+|---|---|:---:|---|---|
+| macOS | 开发机为 macOS 27.0.1 | ✅ | `sw_vers -productVersion` | 试合与合并的写保护沙箱依赖 macOS 自带的 `sandbox-exec`；其他系统未验证 |
+| Bun | ≥ 1.3 | ✅ | `bun --version` | 运行时（`package.json` 的 `engines`）；没装见下方 |
+| git | ≥ 2.38 | ✅ | `git --version` | 试合依赖 `merge-tree --write-tree`；低于 2.41 时领先 / 落后统计会慢一些 |
+| Claude 桌面应用或 Claude Code CLI | ≥ 2.1.287（实测 2.1.308） | ✅ | 见下方 | 安装插件；在会话里使用 `/heliu` Skill 和 `heliu_*` 工具 |
+| 私有仓库 `janauto/heliu` 的读权限 | — | ✅ | `git ls-remote https://github.com/janauto/heliu.git HEAD` | 克隆代码。能打印出一行提交号即有权限 |
+| 已登录的 `claude` CLI | — | 可选 | 装好后看 `bin/heliu doctor` 的「无头 claude」一行 | 合并遇到普通文件冲突时交给 Claude 子代理解；未登录时在终端执行 `claude login`，不登录不影响无冲突合并 |
+
+没有 Bun 时先安装（装好后不必重开终端，安装脚本会到 `~/.bun/bin` 里找）：
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+检查 Claude CLI：桌面应用内置的 CLI 不在 PATH 里，下面第一行先找它，找不到再用 PATH 里的 `claude`。安装脚本用的是同样的查找顺序。
+
+```bash
+CLAUDE="$(ls -d "$HOME/Library/Application Support/Claude/claude-code/"*/*/claude.app/Contents/MacOS/claude 2>/dev/null | sort -V | tail -1)"
+"${CLAUDE:-claude}" --version
+```
+
+预期输出类似 `2.1.308 (Claude Code)`。报 `command not found` 说明两处都没有，请先安装 Claude 桌面应用或 Claude Code。
+
+### 2. 安装
+
+```bash
+git clone https://github.com/janauto/heliu.git "$HOME/heliu"
+cd "$HOME/heliu"
+scripts/install.sh
+```
+
+`scripts/install.sh` 依次做五步，每条命令先打印再执行（想先看会做什么：`scripts/install.sh --dry-run`）：
+
+1. 找 bun：依次查 PATH、`~/.bun/bin`、`/opt/homebrew/bin`、`/usr/local/bin`、`$BUN_BIN`。
+2. `bun install`：`node_modules` 软链到 `node_modules.nosync`，iCloud 不同步。
+3. 找 Claude CLI：优先用桌面应用内置的最高版本，其次用 PATH 里的 `claude`。
+4. 注册 user 级 MCP：**默认跳过**。插件已自带同名 MCP；确实需要时加 `--with-mcp`。
+5. 把本仓库加成本地 marketplace `heliu-local`，并安装插件 `heliu@heliu-local`（带 `/heliu` Skill、hooks、MCP）。
+
+> [!NOTE]
+> 插件从克隆目录原地加载，改代码不用重装。因此装好后不要移动或删除这个目录；要换位置，先在旧目录跑 `scripts/uninstall.sh`，再在新目录重新安装。
+> 如果这台机器已经从别的目录装过 `heliu-local`，第 5 步会把它改指到当前目录并打印警告；旧目录那份安装随之失效，这是预期行为。
+
+### 3. 验证安装
+
+```bash
+bin/heliu doctor
+```
+
+预期：最后一行是 `结论：一切正常` 或 `结论：可用，N 项警告`。警告不影响使用，例如刚装好时的「注册表……（尚无项目）」，或无头 claude 未登录。看到 `结论：N 项失败` 时命令退出码为 1，按 `✗` 开头的那几行处理。这条命令要检查无头 claude 能否登录，最长约 20 秒。
+
+本机实测输出（节选）：
+
+```text
+合流 · 环境自检
+  ✓ git 2.50.1
+  ✓ bun 1.3.4
+  ✓ sandbox-exec 可用：试合在写保护沙箱里进行，合并执行与演练也包在沙箱里
+  ! 无头 claude（解冲突子代理，桌面版内置 claude 2.1.308）：未登录（…）：请在终端执行 claude login（或设 HELIU_CLAUDE_BIN 指向已登录的 claude）。…
+  ✓ 桌面会话 281 条可读（281 个文件）：…/Claude/claude-code-sessions
+  …
+结论：可用，4 项警告
+```
+
+再确认插件已装上（`CLAUDE` 取桌面应用内置的 CLI，没有时用 PATH 里的 `claude`）：
+
+```bash
+CLAUDE="$(ls -d "$HOME/Library/Application Support/Claude/claude-code/"*/*/claude.app/Contents/MacOS/claude 2>/dev/null | sort -V | tail -1)"
+"${CLAUDE:-claude}" plugin list
+"${CLAUDE:-claude}" mcp list
+```
+
+预期：`plugin list` 里有下面这一段，`mcp list` 里有一行 `plugin:heliu:heliu: …/heliu/bin/heliu mcp - ✔ Connected`。在克隆目录里运行 `mcp list` 时，还会多一行关于根目录 `.mcp.json` 缺 `CLAUDE_PLUGIN_ROOT` 的警告，可以忽略（见「已知限制」）。
+
+```text
+  ❯ heliu@heliu-local
+    Version: 0.2.0
+    Read from: /Users/<你的用户名>/heliu
+    Scope: user
+    Status: ✔ enabled
+```
+
+最后在 Claude 桌面应用里新开一个会话：输入 `/heliu` 应能看到 `/heliu:heliu` Skill，会话可用的工具里应有 13 个 `heliu_*` 工具。
+
+### 4. 接入第一个项目
+
+```bash
+bin/heliu project add <仓库路径>
+```
+
+`<仓库路径>` 换成你要管理的本地 git 仓库的绝对路径。heliu 对它只读，缺省也不往里写任何文件。向导会猜主线、集成分支、远端、是否在 iCloud，打一张中文摘要等你确认，然后建台账。项目名缺省取仓库目录名（可用 `--name` 指定），摘要里会写明。台账缺省建在 `~/Library/Application Support/heliu/projects/<项目名>/ledger/`，想放进仓库加 `--ledger repo`。
+
+没有交互终端时（脚本或 AI agent 调用）向导不会停下来问，只登记注册表、不建台账；这种情况加 `--yes` 一步到位：
+
+```bash
+bin/heliu project add <仓库路径> --name <项目名> --yes
+```
+
+之后：
+
+```bash
+bin/heliu status --project <项目名>   # 健康条 + 现在最该做的（刚接入、没有待处理事项的项目不显示这一段）
+bin/heliu board --project <项目名>    # 打开看板，缺省 http://127.0.0.1:7788
+```
 
 想在任何目录直接敲 `heliu`：把 `bin/heliu` 链到你 PATH 里的某个目录，例如 `ln -s "$PWD/bin/heliu" /usr/local/bin/heliu`。`bin/heliu` 是个 sh 包装，自己找 bun，不依赖 PATH 里有 bun。
 
+### 常见问题
+
+| 现象 | 处理 |
+|---|---|
+| 安装脚本打印「没找到 bun」并退出 | 先装 bun：`curl -fsSL https://bun.sh/install \| bash`，再重跑 `scripts/install.sh` |
+| 运行 `bin/heliu` 报「heliu：找不到 bun」 | bun 装在非常规位置：`export BUN_BIN=<bun 的绝对路径>` 后再运行 |
+| 安装脚本打印「没找到 claude CLI」 | 第 4、5 步会被跳过。装好 Claude 桌面应用或 Claude Code 后重跑 `scripts/install.sh` |
+| 某一步打印「！上面这条没成功（可能已经装过）」 | 脚本不会中断。用上面的 `plugin list` 确认 `heliu@heliu-local` 是否已启用 |
+| 以前从别的目录装过 | 先在旧目录跑 `scripts/uninstall.sh`，再在新目录安装 |
+| `git clone` 报 `Repository not found` 或要求登录 | 仓库是私有的，需要用有权限的 GitHub 账号登录（HTTPS 凭据或 SSH） |
+| `git clone` 报 `destination path ... already exists` | `$HOME/heliu` 已被占用：换一个目录名克隆，后面的 `cd` 跟着改 |
+| 看板端口 7788 被占 | 换个端口：`bin/heliu board --project <项目名> --port 7790` |
+
+### 卸载
+
+```bash
+scripts/uninstall.sh            # 想先看会做什么：scripts/uninstall.sh --dry-run
+```
+
+依次卸插件、删本地 marketplace、删 user 级 MCP。不删台账与缓存：`~/Library/Application Support/heliu/`（注册表、台账、索引缓存）和 `~/.cache/heliu/`（合并演练与临时 worktree）都会保留，也不删 `node_modules`。
+
 ## 命令速查
 
-全局选项：`--project <名>`（缺省按当前目录识别）· `--json`（稳定 JSON）· `--precheck`（试合）· `--wide`（表格不截断）。
+全局选项：`--project <名>`（缺省按当前目录识别）· `--json`（稳定 JSON）· `--precheck`（试合）· `--wide`（表格不截断）。下表的 `heliu` 即仓库里的 `bin/heliu`。
 
 | 想做什么 | 命令 | MCP 工具 |
 |---|---|---|
@@ -47,6 +270,29 @@
 
 ## 工作原理
 
+```mermaid
+flowchart TD
+    subgraph IN["输入（只读）"]
+        G["被管理的 git 仓库<br/>分支 · worktree · 提交"]
+        S["桌面应用会话记录<br/>标题 · 在等你回答什么 · 最后活动"]
+        C["本机缓存<br/>Stop hook 记下的最后活动"]
+    end
+    L["台账（承诺）<br/>milestones.yaml<br/>features/F-0001-标题.md"]
+    R["对账（事实）<br/>每次现算，不落盘<br/>领先/落后 · 是否进主线 · 试合冲突"]
+    G --> R
+    S --> R
+    C --> R
+    L --> R
+    R --> INJ["SessionStart hook<br/>会话开头注入【合流】提示"]
+    R --> CLI["CLI<br/>heliu status / 待办"]
+    R --> MCP["MCP 工具<br/>会话里一句话"]
+    R --> B["本机看板<br/>127.0.0.1"]
+    R --> P["合并单（预演）<br/>heliu 合并 vX --预演"]
+    MCP -- "登记新点子 / 改预约" --> L
+    P -- "你在终端逐条确认" --> X["合并执行<br/>只写集成分支 · tag · 能快进的主线"]
+    X -- "没兑现的功能" --> Y["顺延到下一版"] --> L
+```
+
 - **对账（事实，实时算、不落盘）**：每次都用只读 git 命令（`for-each-ref`、`rev-list`、`merge-base`、`merge-tree` 试合等）现算每个分支是否进了主线 / 集成分支、领先落后多少、试合会冲突哪些文件，再和桌面应用的会话记录（标题、在等你回答什么、最后活动）对上。iCloud 仓库的命令都带超时，超时标「未知」，不会卡死。
 - **台账（承诺，纯文本）**：`milestones.yaml` + 每张功能卡一个 `features/F-0001-<标题>.md`（frontmatter 记标题、状态、预约到哪一版、绑定的仓库/分支/会话、验收档位、从哪版顺延来）。只记 git 里没有的东西，人可以直接读改。
 - **hooks 零额外动作**：插件注册 SessionStart 与 Stop 两个 hook。会话一开始注入「你在哪个分支、对应哪张功能卡、预约哪一版、落后主线多少」；每轮结束把最后活动记进本机缓存。注入的提示会请会话在你明确提出新需求时调用 `heliu_feature_add` 登记（用你的原话当标题），你不用额外操作。
@@ -59,14 +305,33 @@
 - **不 push、不 fetch、不删分支、不删 worktree**。远端对比只用本地已有的引用；推送永远由你决定。
 - 台账写在你选的位置（缺省 `~/Library/Application Support/heliu/projects/<项目>/ledger/`），数据库只放在 `~/Library/Application Support/heliu/`，不放 iCloud。
 
+## 验证状态
+
+每个里程碑都经过两道验收：Fable 终验，加 Codex 以普通用户视角的二次验收（每个里程碑最多 3 轮）。M5 终验三轮的结论依次是：不通过 → 有保留 → 有保留，三轮各修了一个真实问题。Codex 第 3 轮的原话是「明天可以用来登记需求、管理下一版和查看分支落后」。
+
+| 项目 | 结论 | 依据 |
+|---|---|---|
+| 全量测试 | ✅ 229 个通过、0 失败（15 个测试文件），类型检查通过 | `bun test`、`bun run typecheck` |
+| 真装插件 + 真实桌面会话端到端 | ✅ 通过：会话里出现 13 个 `heliu_*` 工具与 `/heliu:heliu` Skill，直接查到 61 条待办 | [M5 验收记录](docs/04-验收记录/M5.md) 闸门一 |
+| 接入其他项目 | ✅ 通过：向导真实接入第二个项目，被管理仓库零写入 | [M5 实现说明](docs/03-架构/M5-实现说明.md) |
+| 三仓库扫描速度 | ✅ 终验三轮实测 0.52 / 0.6 / 1.61 秒，iCloud 仓库不卡死 | [M5 验收记录](docs/04-验收记录/M5.md) |
+| 合并执行（临时仓库） | ✅ 人工确认后合入 4 项、顺延 2 项，并生成发布说明 | [M5 验收记录](docs/04-验收记录/M5.md) 第 2、3 轮 |
+| 对真实仓库执行合并 | — 未执行（验收全程没有对真实仓库合并、push 或删分支） | 同上 |
+| 真实 Opus 解冲突端到端 | ⚠️ **未验证**：需要本机 `claude login` 后补跑 `heliu 演练` | [M4 实现说明](docs/03-架构/M4-实现说明.md)、[交付总结](docs/交付总结_20261026.md) |
+| 固件 / App 跨仓库演练 | ⚠️ **未验证**，列为 1.0 之后的遗留 | [M5 验收记录](docs/04-验收记录/M5.md) |
+
 ## 文档索引
 
-- `docs/02-产品定义/产品定义_v0.1.md`：做什么、为什么、看板信息架构、怎么算做成
-- `docs/03-架构/架构决策_v0.1.md`：7 条 ADR（技术栈、数据落点、git 只读纪律、hooks……）
-- `docs/03-架构/M1…M5-任务卡.md` 与 `M1…M5-实现说明.md`：每个里程碑的规格与实现细节、实测数字
-- `docs/04-验收记录/`：每个里程碑的验收记录（Fable 终验 + Codex 二次验收）、截图、M4 演练报告
-- `docs/00-现场证据/`、`docs/01-调研/`：现状快照、竞品与社区调研、Claude Code 接入点核实
-- `skills/heliu/SKILL.md`：主控会话里怎么用 heliu 工具
+| 文档 | 内容 |
+|---|---|
+| [产品定义](docs/02-产品定义/产品定义_v0.1.md) | 做什么、为什么、看板信息架构、怎么算做成 |
+| [架构决策](docs/03-架构/架构决策_v0.1.md) | 7 条 ADR（技术栈、数据落点、git 只读纪律、hooks……） |
+| [里程碑任务卡与实现说明](docs/03-架构/) | `M1…M5-任务卡.md` 与 `M1…M5-实现说明.md`：每个里程碑的规格与实现细节、实测数字 |
+| [验收记录](docs/04-验收记录/) | 每个里程碑的验收记录（Fable 终验 + Codex 二次验收）、截图、[M4 演练报告](docs/04-验收记录/M4-演练报告.md) |
+| [现场证据](docs/00-现场证据/)、[调研](docs/01-调研/) | 现状快照、竞品与社区调研、Claude Code 接入点核实 |
+| [交付总结](docs/交付总结_20261026.md) | 调研结论、使用方式、五个里程碑验收结论、用户待办 |
+| [`skills/heliu/SKILL.md`](skills/heliu/SKILL.md) | 主控会话里怎么用 heliu 工具 |
+| [`docs/assets/README.md`](docs/assets/README.md) | 本页截图与终端输出怎么重新生成 |
 
 ## 已知限制
 
@@ -79,3 +344,9 @@
 - 看板一次服务一个项目；拖拽改预约只支持桌面浏览器，手机上用卡片展开后的下拉。
 - 仓库放在 iCloud Drive 时，Claude 桌面应用的「预览」（`.claude/launch.json`）启动器拿不到 iCloud 目录的访问权（报 `Operation not permitted`），看板请在终端用 `bin/heliu board` 启动。
 - 在本仓库目录内开会话时，根目录的 `.mcp.json`（插件配置）会被当作项目级 MCP 配置再读一次，提示 `CLAUDE_PLUGIN_ROOT` 未定义；无害，插件自带的 `plugin:heliu:heliu` 才是生效的那份。
+
+## 许可
+
+私有项目，未附开源许可证（`package.json` 标记 `"private": true`，插件清单的 license 为 `UNLICENSED`）。
+
+<p align="right"><a href="#top">⬆ 回到顶部</a></p>
