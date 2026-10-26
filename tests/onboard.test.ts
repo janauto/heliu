@@ -126,7 +126,8 @@ describe("安装 / 卸载脚本（只跑 --dry-run）", () => {
     expect(r.exitCode).toBe(0);
     expect(out).toContain(" plugin uninstall heliu@heliu-local");
     expect(out).toContain(" plugin marketplace remove heliu-local");
-    expect(out).toContain(" mcp remove -s user heliu");
+    // 默认安装没有 user 级 MCP：脚本会跳过第 3 步；装过 --with-mcp 的机器上则打印 remove 命令
+    expect(out.includes(" mcp remove -s user heliu") || out.includes("没有 user 级 MCP heliu")).toBe(true);
     expect(out).toContain("台账、注册表与缓存都保留");
   });
 
