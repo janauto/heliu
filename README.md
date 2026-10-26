@@ -221,7 +221,7 @@ bin/heliu project add <仓库路径> --name <项目名> --yes
 
 ```bash
 bin/heliu status --project <项目名>   # 健康条 + 现在最该做的（刚接入、没有待处理事项的项目不显示这一段）
-bin/heliu board --project <项目名>    # 打开看板，缺省 http://127.0.0.1:7788
+bin/heliu board --project <项目名>    # 打开看板，缺省 http://127.0.0.1:7788，并自动打开浏览器；无桌面环境加 --no-open
 ```
 
 想在任何目录直接敲 `heliu`：把 `bin/heliu` 链到你 PATH 里的某个目录，例如 `ln -s "$PWD/bin/heliu" /usr/local/bin/heliu`。`bin/heliu` 是个 sh 包装，自己找 bun，不依赖 PATH 里有 bun。
@@ -234,10 +234,11 @@ bin/heliu board --project <项目名>    # 打开看板，缺省 http://127.0.0.
 | 运行 `bin/heliu` 报「heliu：找不到 bun」 | bun 装在非常规位置：`export BUN_BIN=<bun 的绝对路径>` 后再运行 |
 | 安装脚本打印「没找到 claude CLI」 | 第 4、5 步会被跳过。装好 Claude 桌面应用或 Claude Code 后重跑 `scripts/install.sh` |
 | 某一步打印「！上面这条没成功（可能已经装过）」 | 脚本不会中断。用上面的 `plugin list` 确认 `heliu@heliu-local` 是否已启用 |
-| 以前从别的目录装过 | 先在旧目录跑 `scripts/uninstall.sh`，再在新目录安装 |
+| 以前从别的目录装过 | 直接在新目录跑 `scripts/install.sh` 即可：第 5 步会把 `heliu-local` 改指到新目录并打印警告，旧目录那份随之失效；旧目录有空再跑 `scripts/uninstall.sh` 做清理（可选） |
 | `git clone` 报 `Repository not found` 或要求登录 | 仓库是私有的，需要用有权限的 GitHub 账号登录（HTTPS 凭据或 SSH） |
 | `git clone` 报 `destination path ... already exists` | `$HOME/heliu` 已被占用：换一个目录名克隆，后面的 `cd` 跟着改 |
-| 看板端口 7788 被占 | 换个端口：`bin/heliu board --project <项目名> --port 7790` |
+| 看板端口 7788 被占 | 换个端口，例如 `bin/heliu board --project <项目名> --port 7789`（报错信息里也会给出建议） |
+| 想移除一个已接入的项目 | 删除 `~/Library/Application Support/heliu/projects/<项目名>/`（里面是它的注册表与缺省位置的台账）；被管理仓库本身不受影响 |
 
 ### 卸载
 
@@ -245,7 +246,7 @@ bin/heliu board --project <项目名>    # 打开看板，缺省 http://127.0.0.
 scripts/uninstall.sh            # 想先看会做什么：scripts/uninstall.sh --dry-run
 ```
 
-依次卸插件、删本地 marketplace、删 user 级 MCP。不删台账与缓存：`~/Library/Application Support/heliu/`（注册表、台账、索引缓存）和 `~/.cache/heliu/`（合并演练与临时 worktree）都会保留，也不删 `node_modules`。
+依次卸插件、删本地 marketplace、删 user 级 MCP（默认安装没有这一项，脚本会跳过）。不删台账与缓存：`~/Library/Application Support/heliu/`（注册表、台账、索引缓存）和 `~/.cache/heliu/`（合并演练与临时 worktree）都会保留，也不删 `node_modules`。
 
 ## 命令速查
 

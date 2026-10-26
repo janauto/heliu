@@ -87,7 +87,7 @@ else
   CLAUDE="claude"
 fi
 
-step "4/5" "注册 user 级 MCP（任何会话都能用 heliu_* 工具）"
+step "4/5" "注册 user 级 MCP（可选；插件已自带，--with-mcp 才注册）"
 if [ "${SKIP_MCP}" = 1 ]; then
   echo "  跳过（默认只装插件；需要 user 级 MCP 请加 --with-mcp）"
 else

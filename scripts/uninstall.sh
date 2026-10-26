@@ -53,7 +53,11 @@ run "${CLAUDE}" plugin uninstall "${PLUGIN}@${MARKETPLACE}"
 printf '\n【2/3】删除本地 marketplace\n'
 run "${CLAUDE}" plugin marketplace remove "${MARKETPLACE}"
 printf '\n【3/3】删除 user 级 MCP\n'
-run "${CLAUDE}" mcp remove -s user heliu
+if "${CLAUDE}" mcp get heliu 2>/dev/null | grep -qi "scope: *user"; then
+  run "${CLAUDE}" mcp remove -s user heliu
+else
+  echo "  没有 user 级 MCP heliu（默认安装只装插件），跳过"
+fi
 
 printf '\n完成%s。台账、注册表与缓存都保留：\n' "$([ "${DRY}" = 1 ] && echo "（演练，未执行）" || true)"
 echo "  ~/Library/Application Support/heliu/（注册表、台账、索引缓存）"
