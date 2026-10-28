@@ -97,6 +97,8 @@ function card(title: string, bindings: Array<[string, string]>, p: Partial<Ledge
     status: bindings.length ? "开发中" : "想法",
     milestone: "v1.2",
     acceptance: "未",
+    type: null,
+    module: null,
     bindings: bindings.map(([r, b]) => ({ repo: r, branch: b, worktree: null, session: null, pr: null })),
     rolled_from: [],
     source: "cli",

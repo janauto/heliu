@@ -10,7 +10,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import {
+import { FEATURE_TYPES } from "../core/classify.ts";
+import { opAfterMerge,
   opFeatureAdd,
   opFeatureBind,
   opFeatureReserve,
@@ -42,6 +43,7 @@ export const MCP_TOOL_NAMES = [
   "heliu_milestone_todo",
   "heliu_milestone_list",
   "heliu_sync",
+  "heliu_after_merge",
   ...RELEASE_TOOL_NAMES,
 ] as const;
 
@@ -216,10 +218,12 @@ export function buildServer(): McpServer {
         status: z.enum(FEATURE_STATUSES).optional().describe("新状态"),
         acceptance: z.enum(ACCEPTANCE_LEVELS).optional().describe("新验收档位（和合并状态无关，不会自动提升）"),
         title: z.string().optional().describe("新标题"),
+        type: z.enum(FEATURE_TYPES).optional().describe("类型（M8）：用户说「这是个 bug 修复」→ 修复；「这是功能迭代」→ 功能"),
+        module: z.string().optional().describe("所属模块（M8），如「语音与对话」「界面与交互」"),
         ...common,
       },
     },
-    async (a) => run("heliu feature list", () => opFeatureSet(ctxOf(a), a.id, { status: a.status, acceptance: a.acceptance, title: a.title })),
+    async (a) => run("heliu feature list", () => opFeatureSet(ctxOf(a), a.id, { status: a.status, acceptance: a.acceptance, title: a.title, type: a.type, module: a.module })),
   );
 
   server.registerTool(
@@ -259,6 +263,21 @@ export function buildServer(): McpServer {
       },
     },
     async (a) => run("heliu sync --dry-run", () => opSync(ctxOf(a), { dryRun: !!a.dry_run })),
+  );
+
+  server.registerTool(
+    "heliu_after_merge",
+    {
+      title: "合并后同步：把已合入的功能卡同步到台账",
+      description:
+        "用户在终端或会话里合并完分支后调用：对照最新 git 事实，找出分支已被集成分支 / 主线包含的功能卡，把状态改成 已合入 / 已进主线。默认 dry_run=true 只列出；把列表念给用户、用户确认后再用 dry_run=false 写入。只改台账，不碰仓库。",
+      inputSchema: {
+        dry_run: z.boolean().optional().describe("true（默认）= 只列出；false = 写入"),
+        ids: z.array(z.string()).optional().describe("只同步这些卡号；不传 = 全部建议"),
+        ...common,
+      },
+    },
+    async (a) => run("heliu 同步合并结果 --dry-run", () => opAfterMerge(ctxOf(a), { dryRun: a.dry_run !== false, ids: a.ids ?? null })),
   );
 
   registerReleaseTools(server, { ctxOf, run, common });

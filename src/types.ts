@@ -317,6 +317,10 @@ export interface LedgerFeature {
   bindings: FeatureBinding[];
   rolled_from: string[];
   source: FeatureSource;
+  /** M8：类型（修复 / 功能 / 调研 / 文档 / 工程 / 其他）；null = 没写，界面上显示推测 */
+  type: string | null;
+  /** M8：所属模块（整机的组成部分）；null = 没写，界面上显示推测 */
+  module: string | null;
   created: string;
   updated: string;
   /** frontmatter 之后的正文（原样保留） */

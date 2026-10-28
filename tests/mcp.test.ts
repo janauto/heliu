@@ -7,12 +7,13 @@ import { MCP_TOOL_NAMES } from "../src/mcp/server.ts";
 import { clampText } from "../src/cli/render-ledger.ts";
 
 describe("MCP server", () => {
-  test(`冒烟脚本通过：${MCP_TOOL_NAMES.length} 个中文工具（M4 起含 2 个合并单工具）、heliu_feature_add 登记成功、待办里能看到`, () => {
+  test(`冒烟脚本通过：${MCP_TOOL_NAMES.length} 个中文工具（M4 起含 2 个合并单工具，M8 起含合并后同步）、heliu_feature_add 登记成功、待办里能看到`, () => {
     const r = Bun.spawnSync({ cmd: [process.execPath, "run", join(import.meta.dir, "..", "scripts", "mcp-smoke.ts")], stdout: "pipe", stderr: "pipe" });
     const out = r.stdout.toString();
     expect(r.exitCode).toBe(0);
     expect(out).toContain(`② tools/list → ${MCP_TOOL_NAMES.length} 个工具`);
-    expect(MCP_TOOL_NAMES.length).toBe(13);
+    expect(MCP_TOOL_NAMES.length).toBe(14); // M8 起含 heliu_after_merge
+    expect(MCP_TOOL_NAMES).toContain("heliu_after_merge");
     // 不提供执行合并的工具：执行只能由用户在 CLI 确认
     expect(MCP_TOOL_NAMES.some((n) => /release_(run|execute|merge|rollback)/.test(n))).toBe(false);
     for (const name of MCP_TOOL_NAMES) expect(out).toContain(`- ${name}：`);

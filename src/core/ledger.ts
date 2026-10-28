@@ -23,6 +23,7 @@ import {
   type LedgerMilestone,
   type MilestoneStatus,
 } from "../types.ts";
+import { parseFeatureType } from "./classify.ts";
 import { primaryRepo, ProjectError, type ProjectConfig } from "./project.ts";
 
 export class LedgerError extends ProjectError {
@@ -89,7 +90,8 @@ export function splitFrontmatter(text: string): ParsedDoc | null {
   return { data, body: src.slice(m[0].length) };
 }
 
-const KNOWN_KEYS = ["id", "title", "status", "milestone", "acceptance", "bindings", "rolled_from", "source", "created", "updated"];
+// type / module（M8）必须在这里：否则手写的 type: 会进 extras，写回时盖掉程序设的值
+const KNOWN_KEYS = ["id", "title", "status", "milestone", "acceptance", "bindings", "rolled_from", "source", "type", "module", "created", "updated"];
 
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v).trim() || null);
 const num = (v: unknown): number | null => {
@@ -138,6 +140,8 @@ export function parseFeature(text: string, file: string): LedgerFeature | null {
     bindings: Array.isArray(d.bindings) ? d.bindings.map(parseBinding).filter((b): b is FeatureBinding => b !== null) : [],
     rolled_from: Array.isArray(d.rolled_from) ? d.rolled_from.map((x) => String(x)) : [],
     source: (str(d.source) ?? "cli") as FeatureSource,
+    type: str(d.type),
+    module: str(d.module),
     created: str(d.created) ?? "",
     updated: str(d.updated) ?? "",
     body: doc.body,
@@ -165,6 +169,9 @@ export function serializeFeature(f: LedgerFeature): string {
     }),
     rolled_from: f.rolled_from,
     source: f.source,
+    // 只在用户设过时才写，老卡片文件不因此改动
+    ...(f.type ? { type: f.type } : {}),
+    ...(f.module ? { module: f.module } : {}),
     created: f.created,
     updated: f.updated,
     ...(extrasOf.get(f) ?? {}),
@@ -259,6 +266,9 @@ export interface AddFeatureInput {
   body?: string;
   source?: FeatureSource;
   status?: FeatureStatus;
+  /** M8：建卡时就知道类型 / 模块（比如从星图拖进某个模块）；不给 = 推测 */
+  type?: string | null;
+  module?: string | null;
   now?: Date;
 }
 
@@ -543,6 +553,8 @@ export class Ledger {
         bindings,
         rolled_from: [],
         source: input.source ?? "cli",
+        type: input.type ? parseFeatureTypeOr(input.type) : null,
+        module: input.module?.trim() || null,
         created: today(now),
         updated: today(now),
         body,
@@ -646,6 +658,34 @@ export class Ledger {
     });
   }
 
+  /** M8：设类型 / 模块（null 或空串 = 清掉，回到推测） */
+  classify(idRaw: string, input: { type?: string | null; module?: string | null }, now = new Date()): LedgerFeature {
+    let type: string | null | undefined;
+    if (input.type !== undefined) {
+      if (input.type === null || !input.type.trim()) type = null;
+      else {
+        try {
+          type = parseFeatureType(input.type);
+        } catch (e) {
+          throw new LedgerError((e as Error).message);
+        }
+      }
+    }
+    const module = input.module === undefined ? undefined : input.module === null || !input.module.trim() ? null : input.module.replace(/\s+/g, " ").trim();
+    return this.update(idRaw, now, (f) => {
+      const logs: string[] = [];
+      if (type !== undefined && f.type !== type) {
+        logs.push(`类型：${f.type ?? "（推测）"} → ${type ?? "（推测）"}`);
+        f.type = type;
+      }
+      if (module !== undefined && f.module !== module) {
+        logs.push(`模块：${f.module ?? "（推测）"} → ${module ?? "（推测）"}`);
+        f.module = module;
+      }
+      return logs.length ? logs.join("；") : null;
+    });
+  }
+
   rename(idRaw: string, title: string, now = new Date()): LedgerFeature {
     const t = title.replace(/\s+/g, " ").trim();
     if (!t) throw new LedgerError("功能标题不能为空");
@@ -655,6 +695,14 @@ export class Ledger {
       f.title = t;
       return `改名：${old} → ${t}`;
     });
+  }
+}
+
+function parseFeatureTypeOr(raw: string): string {
+  try {
+    return parseFeatureType(raw);
+  } catch (e) {
+    throw new LedgerError((e as Error).message);
   }
 }
 

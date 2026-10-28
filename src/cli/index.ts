@@ -26,6 +26,7 @@ import {
   opFeatureBind,
   opFeatureList,
   opFeatureReserve,
+  opAfterMerge,
   opFeatureSet,
   opInit,
   opMilestoneAdd,
@@ -426,6 +427,25 @@ featureCmd
     emit(g, "feature.accept", await opFeatureSet(opCtx(g), id, { acceptance }));
   });
 
+async function classifyAction(id: string, o: { type?: string; module?: string }, cmd: Command): Promise<void> {
+  const g = globals(cmd);
+  if (o.type === undefined && o.module === undefined) throw new ProjectError("至少给出 --type 或 --module（写「推测」可清掉，回到自动推测）");
+  const norm = (v: string | undefined) => (v === undefined ? undefined : ["推测", "auto", "清除", ""].includes(v.trim()) ? null : v);
+  emit(g, "feature.classify", await opFeatureSet(opCtx(g), id, { type: norm(o.type), module: norm(o.module) }));
+}
+featureCmd
+  .command("classify <卡号>")
+  .description("改类型 / 模块（M8）：--type 修复|功能|调研|文档|工程|其他 · --module <模块名>；写「推测」回到自动推测")
+  .option("--type <类型>", "修复 / 功能 / 调研 / 文档 / 工程 / 其他（也认 bug / feature 等）")
+  .option("--module <模块>", "所属模块，如「语音与对话」")
+  .action(classifyAction);
+program
+  .command("分类 <卡号>")
+  .description("= feature classify")
+  .option("--type <类型>", "修复 / 功能 / 调研 / 文档 / 工程 / 其他")
+  .option("--module <模块>", "所属模块")
+  .action(classifyAction);
+
 featureCmd
   .command("rename <卡号> <新标题...>")
   .description("改功能卡标题（sync 草稿确认时常用）")
@@ -487,6 +507,24 @@ program
     const g = globals(cmd);
     emit(g, "sync", await opSync(opCtx(g), { dryRun: !!o.dryRun }));
   });
+
+async function mergedAction(o: { dryRun?: boolean; ids?: string }, cmd: Command): Promise<void> {
+  const g = globals(cmd);
+  const ids = o.ids ? o.ids.split(/[,，\s]+/).filter(Boolean) : null;
+  emit(g, "merged", await opAfterMerge(opCtx(g), { dryRun: !!o.dryRun, ids }));
+}
+program
+  .command("merged")
+  .description("合并后同步（M8）：分支已被集成分支 / 主线包含的卡，状态改成 已合入 / 已进主线（只改台账）")
+  .option("--dry-run", "只列出，不写入")
+  .option("--ids <卡号>", "只同步这些卡（逗号分隔）")
+  .action(mergedAction);
+program
+  .command("同步合并结果")
+  .description("= merged：合并完分支后运行，把已合入的功能卡同步到台账")
+  .option("--dry-run", "只列出，不写入")
+  .option("--ids <卡号>", "只同步这些卡（逗号分隔）")
+  .action(mergedAction);
 
 async function whereamiAction(_o: unknown, cmd: Command): Promise<void> {
   const g = globals(cmd);

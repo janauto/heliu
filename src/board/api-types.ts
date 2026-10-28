@@ -125,6 +125,12 @@ export interface BoardCard {
   doneNote: string | null;
   bindings: CardBinding[];
   file: string;
+  /** M8：类型（修复 / 功能 / 调研 / 文档 / 工程 / 其他）与来源（card = 用户定的，guess = 推测） */
+  type: string;
+  typeSource: "card" | "guess";
+  /** M8：所属模块（整机的组成部分） */
+  module: string;
+  moduleSource: "card" | "guess";
 }
 
 export interface BoardColumn {
@@ -164,6 +170,10 @@ export interface FeaturesData {
   /** 台账里无法解析的卡片文件 */
   broken: string[];
   ledgerDir: string;
+  /** M8：模块定义（内置或台账目录 modules.yaml）与类型列表；前端用同一套规则给没卡的分支归类 */
+  modules: Array<{ name: string; keywords: string[] }>;
+  modulesSource: "default" | "file";
+  types: string[];
 }
 
 /* ───────────── 总览 ───────────── */
@@ -470,4 +480,25 @@ export interface ReleaseDecisionResult {
     union: string[];
     precheckState: "checked" | "failed" | "skipped" | null;
   }>;
+}
+
+/* ───────────── M8：合并闭环 ───────────── */
+
+/** POST /api/release/prompt：拖版本行星到合流点 → 刷新合并单 → 复制到剪贴板的 Prompt */
+export interface MergePromptData {
+  milestone: string;
+  prompt: string;
+  previewCommand: string;
+  command: string;
+  syncCommand: string;
+  counts: { newMerge: number; inIntegration: number; conflict: number; precheckFailed: number; deferred: number; waiting: number };
+  file: string;
+}
+
+/** GET / POST /api/merged：合并后同步 */
+export interface MergedData {
+  dryRun: boolean;
+  scannedAt: string;
+  suggestions: Array<{ id: string; title: string; milestone: string | null; from: string; to: string; branches: Array<{ repo: string; repoLabel: string; branch: string; mergedState: string }> }>;
+  changed: Array<{ id: string; title: string; from: string; to: string }>;
 }

@@ -9,6 +9,7 @@ import type { HeliuPaths } from "../core/paths.ts";
 import { loadProject, resolveProject, type ProjectConfig } from "../core/project.ts";
 import { reconcile } from "../core/reconcile.ts";
 import { syncLedger, type SyncResult } from "../core/sync.ts";
+import { afterMerge, type AfterMergeResult } from "../core/after-merge.ts";
 import { sourceBranchIndex, zeroCommitBranches } from "../core/owncommits.ts";
 import { countsTowardTodo, groupTodo, todoFeatures } from "../core/todo.ts";
 import { whereami } from "../core/whereami.ts";
@@ -169,15 +170,40 @@ export async function opFeatureBind(ctx: OpContext, id: string, input: BindInput
   return { text: lines.join("\n"), data: { feature: r.feature, added: r.added, binding }, project: ref(p) };
 }
 
-export async function opFeatureSet(ctx: OpContext, id: string, input: { status?: string; acceptance?: string; title?: string }): Promise<OpResult<{ feature: LedgerFeature }>> {
+export async function opFeatureSet(
+  ctx: OpContext,
+  id: string,
+  input: { status?: string; acceptance?: string; title?: string; type?: string | null; module?: string | null },
+): Promise<OpResult<{ feature: LedgerFeature }>> {
   const p = await projectOf(ctx);
   const ledger = Ledger.of(p);
-  if (!input.status && !input.acceptance && !input.title) throw new LedgerError("至少给出 状态 / 验收档位 / 新标题 之一");
+  if (!input.status && !input.acceptance && !input.title && input.type === undefined && input.module === undefined) throw new LedgerError("至少给出 状态 / 验收档位 / 新标题 / 类型 / 模块 之一");
   let f: LedgerFeature = ledger.getFeature(id);
   if (input.title) f = ledger.rename(id, input.title, ctx.now);
+  if (input.type !== undefined || input.module !== undefined) f = ledger.classify(id, { type: input.type, module: input.module }, ctx.now);
   if (input.status) f = ledger.setStatus(id, parseFeatureStatus(input.status), ctx.now);
   if (input.acceptance) f = ledger.setAcceptance(id, parseAcceptance(input.acceptance), ctx.now);
-  return { text: `已更新 ${renderFeatureLine(f)} · 验收 ${f.acceptance}`, data: { feature: f }, project: ref(p) };
+  const cls = f.type || f.module ? ` · 类型 ${f.type ?? "（推测）"} · 模块 ${f.module ?? "（推测）"}` : "";
+  return { text: `已更新 ${renderFeatureLine(f)} · 验收 ${f.acceptance}${cls}`, data: { feature: f }, project: ref(p) };
+}
+
+/* ───────────── M8：合并后同步 ───────────── */
+
+export async function opAfterMerge(ctx: OpContext, opts: { dryRun: boolean; ids?: string[] | null }): Promise<OpResult<AfterMergeResult>> {
+  const p = await projectOf(ctx);
+  const r = await afterMerge(p, ctx.paths, { dryRun: opts.dryRun, ids: opts.ids ?? null, now: ctx.now });
+  const lines: string[] = [`合流 · ${p.name} · 合并后同步${r.dryRun ? "（预览，没有写入）" : ""}`];
+  if (!r.suggestions.length) lines.push("没有需要同步的卡：还没合入的功能，它们的分支也都还没被集成分支 / 主线包含。");
+  else {
+    lines.push(`对照最新的 git 事实，这些卡的分支已经合进去了：`);
+    for (const s of r.suggestions) {
+      const done = r.changed.find((c) => c.id === s.id);
+      lines.push(`  ${done ? "✓" : "·"} ${s.id} ${s.title} · ${s.from} → ${s.to}（${s.branches.map((b) => `${b.repoLabel} ${b.branch}`).join("、")}）`);
+    }
+    if (r.dryRun) lines.push("确认后去掉 --dry-run 再运行一次即可写入（只改台账状态，不碰仓库）。");
+    else lines.push(`已更新 ${r.changed.length} 张卡的状态（只改台账，不碰仓库）。`);
+  }
+  return { text: lines.join("\n"), data: r, project: ref(p) };
 }
 
 /* ───────────── 里程碑 ───────────── */

@@ -162,13 +162,31 @@ export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: Boa
     const b = await body(c);
     // M7：带 bind: {repo, branch} = 从分支建卡（星图把没卡的分支拖到版本行星）
     if (b.bind && typeof b.bind === "object") {
-      return send(c, "feature.add", await s.addFeatureFromBranch({ title: b.title, milestone: b.milestone, bind: b.bind as Record<string, unknown> }), null, 201, s);
+      return send(c, "feature.add", await s.addFeatureFromBranch({ title: b.title, milestone: b.milestone, bind: b.bind as Record<string, unknown>, type: b.type, module: b.module }), null, 201, s);
     }
     return send(c, "feature.add", s.addFeature(b), null, 201, s);
   });
   app.post("/api/features/:id/bind", async (c) => {
     const s = svc(c);
     return send(c, "feature.bind", await s.bindFeature(c.req.param("id"), await body(c)), null, 200, s);
+  });
+  /* M8：合并闭环 */
+  app.post("/api/release/prompt", async (c) => {
+    const s = svc(c);
+    const b = await body(c);
+    const ms = typeof b.milestone === "string" && b.milestone.trim() ? b.milestone : "下一版";
+    return send(c, "release.prompt", await s.releasePrompt(ms), null, 200, s);
+  });
+  app.get("/api/merged", async (c) => {
+    const s = svc(c);
+    return send(c, "merged", await s.merged(true, null), null, 200, s);
+  });
+  app.post("/api/merged", async (c) => {
+    const s = svc(c);
+    const b = await body(c);
+    const ids = Array.isArray(b.ids) ? b.ids.map((x) => String(x)) : null;
+    if (!ids || !ids.length) throw new ProjectError("请给出要同步的卡号 ids（先 GET /api/merged 看建议）");
+    return send(c, "merged", await s.merged(false, ids), null, 200, s);
   });
   app.post("/api/release/decision", async (c) => {
     const s = svc(c);

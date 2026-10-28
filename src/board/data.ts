@@ -44,15 +44,21 @@ import type {
   ReleaseAction,
   ReleaseBinding,
   ReleaseItem,
+  MergedData,
+  MergePromptData,
   ReleaseDecisionResult,
   ReleasePlanResult,
   ReleasePreview,
   ReleaseTier,
 } from "./api-types.ts";
 import { buildReleasePlan, previewRelease, setPlanDecision, type BuildResult } from "../core/release.ts";
-import { ACTION_TEXT, TIER_OF, type ItemState } from "../core/release-plan.ts";
+import { ACTION_TEXT, planCounts, TIER_OF, type ItemState } from "../core/release-plan.ts";
 import { baselinePreview } from "./baseline.ts";
 import { HELIU_ROOT } from "./root.ts";
+import { classify, classifyText, FEATURE_TYPES } from "../core/classify.ts";
+import { loadModules } from "../core/modules.ts";
+import { afterMerge } from "../core/after-merge.ts";
+import { buildMergePrompt } from "../core/merge-prompt.ts";
 import { buildHygiene } from "./hygiene.ts";
 
 export const STATUS_TTL_MS = 20_000;
@@ -350,6 +356,15 @@ export class BoardService {
     }
     const groups = TODO_GROUP_DEFS.map((d) => ({ key: d.key, title: d.title, hint: d.hint, light: LIGHT_OF[d.key] }));
     const nextMs = milestones.find((m) => m.status === "规划中") ?? null;
+    // M8：给每张卡标类型 / 模块（卡片上写了就用卡片的，没写就按标题、分支标签、会话标题、分支名推测）
+    const mods = loadModules(ledger.dir);
+    const featById = new Map(features.map((f) => [f.id, f]));
+    for (const col of shown)
+      for (const card of col.cards) {
+        const f = featById.get(card.id) ?? null;
+        const text = classifyText([card.title, ...card.bindings.flatMap((b) => [b.label, b.session?.title, b.branch])]);
+        Object.assign(card, classify(f, text, mods.modules));
+      }
     return {
       data: {
         columns: shown,
@@ -361,6 +376,9 @@ export class BoardService {
         precheckSummary: summarizePrecheck({ precheck: scan.precheck, groups: todos.flatMap((t) => t.groups) }),
         broken,
         ledgerDir: ledger.dir,
+        modules: mods.modules,
+        modulesSource: mods.source,
+        types: [...FEATURE_TYPES],
       },
       meta: this.meta(scan, cached),
     };
@@ -414,6 +432,11 @@ export class BoardService {
         doneNote,
         bindings,
         file: f.file,
+        // 类型 / 模块在 features() 末尾统一推测填入（这里先占位）
+        type: f.type ?? "其他",
+        typeSource: f.type ? "card" : "guess",
+        module: f.module ?? "其他",
+        moduleSource: f.module ? "card" : "guess",
       });
     };
     if (todo) {
@@ -540,7 +563,14 @@ export class BoardService {
     let from: string | null = f.milestone;
     let milestoneCreated: string | null = null;
     const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
-    if (!has("title") && !has("milestone") && !has("status")) throw new LedgerError("至少给出 milestone / title / status 之一");
+    if (!has("title") && !has("milestone") && !has("status") && !has("type") && !has("module")) throw new LedgerError("至少给出 milestone / title / status / type / module 之一");
+    if (has("type") || has("module")) {
+      const v = (k: string) => (has(k) ? (body[k] === null || body[k] === "" ? null : typeof body[k] === "string" ? (body[k] as string) : undefined) : undefined);
+      if ((has("type") && v("type") === undefined) || (has("module") && v("module") === undefined)) throw new LedgerError("type / module 必须是字符串或 null（null = 回到推测）");
+      f = ledger.classify(f.id, { type: v("type"), module: v("module") }, now);
+      if (has("type")) changed.push("type");
+      if (has("module")) changed.push("module");
+    }
     if (has("title")) {
       if (typeof body.title !== "string") throw new LedgerError("title 必须是字符串");
       f = ledger.rename(f.id, body.title, now);
@@ -585,7 +615,7 @@ export class BoardService {
   }
 
   /** 从分支建卡：标题缺省取分支标签（会话标题 > 首条独有提交 …），绑定该分支，预约到指定版本 */
-  async addFeatureFromBranch(input: { title?: unknown; milestone?: unknown; bind: Record<string, unknown> }): Promise<{ feature: LedgerFeature; milestoneCreated: string | null }> {
+  async addFeatureFromBranch(input: { title?: unknown; milestone?: unknown; bind: Record<string, unknown>; type?: unknown; module?: unknown }): Promise<{ feature: LedgerFeature; milestoneCreated: string | null }> {
     const { binding, label } = await this.branchBinding(input.bind.repo, input.bind.branch);
     const ledger = this.ledger();
     const ex = ledger.findByBinding(binding.repo, binding.branch);
@@ -594,7 +624,9 @@ export class BoardService {
     let milestone: string | null = "next";
     if (input.milestone === null || input.milestone === UNRESERVED) milestone = null;
     else if (typeof input.milestone === "string" && input.milestone.trim()) milestone = input.milestone.trim();
-    const r = ledger.addFeature({ title, milestone, bindings: [binding], status: "开发中", source: "board", now: this.now() });
+    const type = typeof input.type === "string" && input.type.trim() ? input.type : null;
+    const module = typeof input.module === "string" && input.module.trim() ? input.module : null;
+    const r = ledger.addFeature({ title, milestone, bindings: [binding], status: "开发中", source: "board", type, module, now: this.now() });
     return { feature: r.feature, milestoneCreated: r.milestoneCreated?.id ?? null };
   }
 
@@ -664,6 +696,28 @@ export class BoardService {
         precheckState: i.precheck_state ?? null,
       })),
     };
+  }
+
+  /* ───────────── M8：合并闭环 ───────────── */
+
+  /** 拖版本行星到合流点：刷新该版合并单（M4 previewRelease，保留已改的决定），生成复制到剪贴板的 Prompt */
+  async releasePrompt(ref: string): Promise<MergePromptData> {
+    const project = this.project;
+    const { scan } = await this.scan(true);
+    const r = await previewRelease(project, this.paths, ref.trim() || "下一版", { now: this.now(), timeoutMs: this.timeoutMs, reconciled: scan.result });
+    const c = planCounts(r.plan);
+    const ms = r.plan.milestone;
+    const built = buildMergePrompt({ project: project.name, milestone: ms, bin: `${HELIU_ROOT}/bin/heliu`, counts: c });
+    return { milestone: ms, ...built, counts: { newMerge: c.newMerge, inIntegration: c.inIntegration, conflict: c.conflict, precheckFailed: c.precheckFailed, deferred: c.deferred, waiting: c.waiting }, file: r.file };
+  }
+
+  /** 合并后同步：总是先强制重新对账（刚在别处合并完，20 秒缓存里是旧事实）；dryRun 只列出 */
+  async merged(dryRun: boolean, ids: string[] | null): Promise<MergedData> {
+    const project = this.project;
+    const { scan } = await this.scan(false, true);
+    const r = await afterMerge(project, this.paths, { dryRun, ids, reconciled: scan.result, now: this.now() });
+    if (!dryRun && r.changed.length) this.scans.clear();
+    return r;
   }
 
   async sync(dryRun: boolean): Promise<SyncResult> {
