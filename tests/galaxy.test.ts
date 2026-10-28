@@ -13,7 +13,8 @@ import { Ledger } from "../src/core/ledger.ts";
 import { heliuPaths, type HeliuPaths } from "../src/core/paths.ts";
 import { addRepoToProject, loadProject, projectFile, stringifyProject, type ProjectConfig } from "../src/core/project.ts";
 import type { ReconcileReport } from "../src/types.ts";
-import { buildGalaxy, hitTarget, textWidth, xOfAge, type GBranch } from "../web/galaxy-model.ts";
+import { buildGalaxy, hitConfluence, hitTarget, textWidth, xOfAge, type GBranch } from "../web/galaxy-model.ts";
+import { buildStructure, STATES } from "../web/structure-model.ts";
 import { B, buildFixture, type Fixture } from "./helpers/fixture.ts";
 
 let fx: Fixture;
@@ -85,7 +86,7 @@ describe("星图布局", () => {
   test("用真实对账结果建模：已进主线默认隐藏、最新前三、标签不重叠、行星在右侧", async () => {
     const report = await get<ReconcileReport>("/api/status");
     const features = await get<FeaturesData>("/api/features?precheck=0");
-    const m = buildGalaxy(report, features, { width: 1200, now: Date.now(), showMerged: false, collapsed: new Set() });
+    const m = buildGalaxy(report, features, { width: 1200, now: Date.now(), showMerged: false, collapsed: new Set(), expanded: new Set(), expandAll: true });
     const branches = m.nodes.filter((n): n is GBranch => n.kind === "branch");
     expect(branches.length).toBeGreaterThan(2);
     expect(branches.some((b) => b.merged === "in_main")).toBe(false);
@@ -121,17 +122,17 @@ describe("星图布局", () => {
         expect(a0! < b1! && b0! < a1! && a2! < b3! && b2! < a3!).toBe(false);
       }
     // 显示已进主线：星点变多
-    const m2 = buildGalaxy(report, features, { width: 1200, now: Date.now(), showMerged: true, collapsed: new Set() });
+    const m2 = buildGalaxy(report, features, { width: 1200, now: Date.now(), showMerged: true, collapsed: new Set(), expanded: new Set(), expandAll: true });
     expect(m2.nodes.filter((n) => n.kind === "branch").length).toBeGreaterThan(branches.length);
     // 折叠泳道：该仓库不出星点
-    const m3 = buildGalaxy(report, features, { width: 1200, now: Date.now(), showMerged: false, collapsed: new Set([repoId]) });
+    const m3 = buildGalaxy(report, features, { width: 1200, now: Date.now(), showMerged: false, collapsed: new Set([repoId]), expanded: new Set(), expandAll: true });
     expect(m3.nodes.filter((n) => n.kind === "branch").length).toBe(0);
   });
 
   test("拖拽落点：行星 / 合流点 / 小卡星按吸附半径判定，空白处没有目标", async () => {
     const report = await get<ReconcileReport>("/api/status");
     const features = await get<FeaturesData>("/api/features?precheck=0");
-    const m = buildGalaxy(report, features, { width: 1200, now: Date.now(), showMerged: false, collapsed: new Set() });
+    const m = buildGalaxy(report, features, { width: 1200, now: Date.now(), showMerged: false, collapsed: new Set(), expanded: new Set(), expandAll: true });
     const star = m.nodes.find((n): n is GBranch => n.kind === "branch" && n.merged === "unmerged")!;
     const planet = m.planets.find((p) => p.droppable)!;
     expect(hitTarget(m, planet.x + 3, planet.y - 3, star)?.kind).toBe("planet");
@@ -141,6 +142,98 @@ describe("星图布局", () => {
     const t = hitTarget(m, cardStar.x, cardStar.y, star);
     expect(t?.kind === "card" || t?.kind === "planet").toBe(true);
     expect(hitTarget(m, m.xL + 2, 2, star)).toBeNull();
+  });
+});
+
+describe("M8 星团：按类型分行、默认收起", () => {
+  const opts = (expanded: Set<string> = new Set()) => ({ width: 1200, now: Date.now(), showMerged: false, collapsed: new Set<string>(), expanded });
+
+  test("默认每个类型行收成星团：不画分支星点，条数加起来 = 显示范围内的全部分支；行之间不重叠", async () => {
+    const report = await get<ReconcileReport>("/api/status");
+    const features = await get<FeaturesData>("/api/features?precheck=0");
+    const m = buildGalaxy(report, features, opts());
+    expect(m.nodes.some((n) => n.kind === "branch")).toBe(false);
+    expect(m.all.length).toBeGreaterThan(2);
+    expect(m.rows.length).toBeGreaterThan(0);
+    expect(m.rows.reduce((n, r) => n + r.count, 0)).toBe(m.all.length);
+    for (const r of m.rows) {
+      expect(r.expanded).toBe(false);
+      expect(r.cluster).not.toBeNull();
+      expect(r.cluster!.x0).toBeLessThanOrEqual(r.cluster!.x1);
+      expect(r.cluster!.x0).toBeGreaterThanOrEqual(m.xL);
+      expect(r.cluster!.x1).toBeLessThanOrEqual(m.xR);
+      expect(r.cluster!.labelText).toContain(`${r.count} 条`);
+      expect(r.members.every((k) => m.all.find((b) => b.key === k)!.row === r.key)).toBe(true);
+    }
+    const sorted = [...m.rows].sort((a, b) => a.y0 - b.y0);
+    for (let i = 1; i < sorted.length; i++) expect(sorted[i]!.y0).toBeGreaterThanOrEqual(sorted[i - 1]!.y1);
+    // 每个星团一条汇流线（不再每颗星一条）
+    expect(m.flows.length).toBe(m.rows.length);
+    // 收起的星团连到行星：合成一条，count = 这一行里预约到该版本的卡星数
+    for (const l of m.links) {
+      const row = m.rows.find((r) => r.key === l.from)!;
+      expect(row).toBeDefined();
+      const n = m.all.filter((b) => b.row === row.key && b.card && !b.card.done && b.card.column === l.to).length;
+      expect(l.count).toBe(n);
+    }
+  });
+
+  test("展开一行：只有这一行的分支变成星点，其余仍是星团；全部展开 = M7 的样子", async () => {
+    const report = await get<ReconcileReport>("/api/status");
+    const features = await get<FeaturesData>("/api/features?precheck=0");
+    const first = buildGalaxy(report, features, opts()).rows[0]!;
+    const m = buildGalaxy(report, features, opts(new Set([first.key])));
+    const stars = m.nodes.filter((n): n is GBranch => n.kind === "branch");
+    expect(stars.length).toBe(first.count);
+    expect(stars.every((b) => b.row === first.key && b.y > m.rows.find((r) => r.key === first.key)!.y0)).toBe(true);
+    expect(m.rows.filter((r) => r.key !== first.key).every((r) => r.cluster !== null)).toBe(true);
+    const full = buildGalaxy(report, features, { ...opts(), expandAll: true });
+    expect(full.nodes.filter((n) => n.kind === "branch").length).toBe(full.all.length);
+  });
+
+  test("卡片上写了类型就进那一行（推测不覆盖）；拖到别的类型行头 = 改类型；拖行星只认合流点", async () => {
+    const L = Ledger.of(project);
+    const f = L.findByBinding(repoId, B.inInteg)!;
+    L.classify(f.id, { type: "修复" }, new Date());
+    const report = await get<ReconcileReport>("/api/status");
+    const features = await get<FeaturesData>("/api/features?precheck=0");
+    const m = buildGalaxy(report, features, { ...opts(), expandAll: true });
+    const star = m.nodes.find((n): n is GBranch => n.kind === "branch" && n.branch === B.inInteg)!;
+    expect(star.type).toBe("修复");
+    expect(star.row).toBe(`${repoId}|修复`);
+    const other = m.rows.find((r) => r.type !== "修复")!;
+    expect(hitTarget(m, 40, other.y, star)).toEqual({ kind: "row", row: other });
+    const same = m.rows.find((r) => r.key === star.row)!;
+    expect(hitTarget(m, 40, same.y, star)).toBeNull();
+    const conf = m.confluences[0]!;
+    expect(hitConfluence(m, conf.x + 4, conf.y - 4)?.key).toBe(conf.key);
+    expect(hitConfluence(m, m.planets[0]!.x, m.planets[0]!.y)).toBeNull();
+    L.classify(f.id, { type: null }, new Date());
+  });
+
+  test("结构页模型：卡片 + 没卡的未合并分支按模块汇总，矩阵合计 = 总数，该决定的按优先级排", async () => {
+    const report = await get<ReconcileReport>("/api/status");
+    const features = await get<FeaturesData>("/api/features?precheck=0");
+    const s = buildStructure(report, features);
+    const cards = features.columns.reduce((n, c) => n + c.cards.length, 0);
+    expect(s.total).toBeGreaterThanOrEqual(cards);
+    expect(s.modules.reduce((n, m) => n + m.items.length, 0)).toBe(s.total);
+    let cells = 0;
+    for (const m of s.modules) for (const t of s.types) cells += s.matrix[m.name]?.[t]?.n ?? 0;
+    expect(cells).toBe(s.total);
+    // 只挑"该决定"的状态；每个模块最多三项，且按优先级
+    const order = STATES.map((x) => x.key);
+    for (const m of s.modules) {
+      expect(m.top.length).toBeLessThanOrEqual(3);
+      const idx = m.top.map((i) => order.indexOf(i.state));
+      expect([...idx].sort((a, b) => a - b)).toEqual(idx);
+      expect(m.top.every((i) => STATES.find((x) => x.key === i.state)!.decide)).toBe(true);
+    }
+    // 没卡的分支：只算还没进主线的（与星图同口径），带着建卡所需的仓库 / 分支
+    for (const it of s.decisions.stray ?? []) {
+      expect(it.cardId).toBeNull();
+      expect(it.bind).not.toBeNull();
+    }
   });
 });
 

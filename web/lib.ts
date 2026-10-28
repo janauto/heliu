@@ -113,6 +113,28 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
+/**
+ * 复制"稍后才拿到"的文字（M8：拖完才向服务端要 Prompt）。
+ * 必须在松手 / 点击的同一轮里调用：先把一个 Promise 交给剪贴板（ClipboardItem，Safari 只认这种写法），
+ * 不支持时等文字到了再 writeText。失败只返回 false，不弹窗——面板里有「复制」按钮兜底。
+ */
+export async function copyWhenReady(text: Promise<string>): Promise<boolean> {
+  try {
+    if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+      await navigator.clipboard.write([new ClipboardItem({ "text/plain": text.then((t) => new Blob([t], { type: "text/plain" })) })]);
+      return true;
+    }
+  } catch {
+    /* 退回 writeText */
+  }
+  try {
+    await navigator.clipboard.writeText(await text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const SESSION_STATUS_TEXT: Record<string, string> = {
   running: "运行中",
   online: "在线（空闲）",

@@ -4,9 +4,10 @@
  * 「生成合并单草稿」只把预演写成 <台账>/releases/<里程碑>.md，不执行任何合并（M4）。
  */
 import { useEffect, useState } from "preact/hooks";
-import type { ReleasePlanResult, ReleasePreview } from "../src/board/api-types.ts";
+import type { MergePromptData, ReleasePlanResult, ReleasePreview } from "../src/board/api-types.ts";
 import type { LedgerMilestone } from "../src/types.ts";
-import { api, hms, MERGED_TEXT, useApi } from "./lib.ts";
+import { api, copyWhenReady, hms, MERGED_TEXT, useApi } from "./lib.ts";
+import { MergedPanel, MergePromptPanel, type PromptState } from "./merge-flow.tsx";
 
 export function ReleasePage({ tick }: { tick: number }) {
   const ms = useApi<{ milestones: LedgerMilestone[]; next: string | null }>("/api/milestones", [tick]);
@@ -18,7 +19,23 @@ export function ReleasePage({ tick }: { tick: number }) {
   const pv = useApi<ReleasePreview>(sel ? `/api/release/preview?milestone=${encodeURIComponent(sel)}` : null, [tick]);
   const [plan, setPlan] = useState<{ busy: boolean; result: ReleasePlanResult | null; error: string | null }>({ busy: false, result: null, error: null });
   const [openFiles, setOpenFiles] = useState<Set<string>>(new Set());
+  const [mp, setMp] = useState<PromptState | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
   const d = pv.env?.data;
+
+  /** M8：复制这一版的合并 Prompt（与星图"拖版本行星到合流点"同一个接口）；剪贴板写入在点击这一刻交出 */
+  const copyPrompt = () => {
+    if (!sel) return;
+    const req = api<MergePromptData>("/api/release/prompt", { body: { milestone: sel } });
+    const copied = copyWhenReady(req.then((r) => r.data.prompt));
+    setMp({ data: null, copied: null, error: null });
+    req
+      .then(async (r) => {
+        setMp({ data: r.data, copied: await copied, error: null });
+        pv.reload();
+      })
+      .catch((e: Error) => setMp({ data: null, copied: false, error: e.message }));
+  };
 
   const makePlan = async () => {
     if (!sel) return;
@@ -55,7 +72,17 @@ export function ReleasePage({ tick }: { tick: number }) {
           ))}
         </select>
         {d ? <span class="muted small">试合于 {hms(d.generatedAt)} · 用时 {(d.scanMs / 1000).toFixed(1)}s</span> : null}
+        {sel ? (
+          <button class="btn small" onClick={copyPrompt} title="刷新合并单，并把交给 Claude 会话的合并 Prompt 复制到剪贴板（不执行合并）">
+            复制合并 Prompt
+          </button>
+        ) : null}
+        <button class="btn small" onClick={() => setSyncOpen(true)} title="在别处合并了分支？重新对账，把台账状态补上（先列出，你勾选后才写）">
+          刚合并完？同步一下
+        </button>
       </div>
+      {mp ? <MergePromptPanel st={mp} title={sel ?? ""} onClose={() => setMp(null)} onSync={() => { setMp(null); setSyncOpen(true); }} /> : null}
+      {syncOpen ? <MergedPanel onClose={() => setSyncOpen(false)} onChanged={() => pv.reload()} /> : null}
       {!list.length && ms.env ? <p class="muted">还没有里程碑：在「版本列」登记一个新点子会自动建 vNext。</p> : null}
       {pv.error ? <p class="err">{pv.error}</p> : null}
       {sel && !d && !pv.error ? <p class="muted">正在试合…</p> : null}
