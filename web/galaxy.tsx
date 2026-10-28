@@ -642,7 +642,7 @@ function DecisionPanel({ d, root, onClose }: { d: ReleaseDecisionResult; root: s
           <li>
             {i.branch ?? "（没有分支）"} · {i.state}
             {i.precheckState === "failed" ? " · 未能试合（合并时再试，或人工确认）" : i.precheckState === "checked" ? ` · ${conflictLine(i.conflicts, i.union)}` : ""}
-            {i.detail ? ` · ${i.detail}` : ""}
+            {i.detail ? ` · ${i.decision === "并入" ? i.detail.replace(/或把决定改成「并入」/g, "").replace(/（\s*）/g, "") : i.detail}` : ""}
           </li>
         ))}
       </ul>

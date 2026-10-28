@@ -423,11 +423,11 @@ main .col:nth-child(4) { animation-delay: 210ms; }
 .chk { display: inline-flex; gap: 8px; align-items: center; font-size: 13.5px; cursor: pointer; color: var(--fg-2); }
 .chk input { accent-color: var(--accent); }
 .galaxy-meta { margin-left: auto; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.latest-pills { display: inline-flex; flex-wrap: wrap; gap: var(--s2); align-items: center; font-size: 13px; color: var(--muted); }
+.latest-pills { display: inline-flex; flex-wrap: wrap; gap: var(--s2); align-items: center; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .pill { border: 1px solid rgba(255, 207, 92, 0.5); background: rgba(255, 207, 92, 0.10); color: var(--fg); border-radius: 999px; padding: 2px 12px; cursor: pointer; font-size: 12.5px; transition: transform 0.15s; }
 .pill:hover { transform: translateY(-1px); }
 .filters { display: flex; flex-wrap: wrap; gap: var(--s2); }
-.fchip { border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg-2); border-radius: 999px; padding: 4px 14px; cursor: pointer; font-size: 13px; transition: all 0.15s; }
+.fchip { border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg-2); border-radius: 999px; padding: 4px 14px; cursor: pointer; font-size: 13px; white-space: nowrap; flex: none; transition: all 0.15s; }
 .fchip b { margin-left: 4px; font-family: var(--font-display); }
 .fchip:hover:not(:disabled) { border-color: var(--accent); color: var(--fg); }
 .fchip.on { background: var(--brand); border-color: transparent; color: #fff; box-shadow: var(--glow); }
