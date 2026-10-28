@@ -395,6 +395,8 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
     });
 
   if (!status) return <p class="muted">正在对账…</p>;
+  // 功能卡还没到时先不画：否则会短暂把所有分支都画成「没卡」，计数也是 0 张功能卡
+  if (!fdata && !features.error) return <p class="muted">正在读取功能卡…</p>;
   if (!model) return null;
   const selNode = model.nodes.find((n) => n.key === sel) ?? null;
   const selP = model.planets.find((p) => p.key === selPlanet) ?? null;
