@@ -187,6 +187,15 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
     if (!m) return;
     const rk = rowKeyOf(m, key);
     if (rk && !m.rows.find((r) => r.key === rk)?.expanded) setExpanded((s) => new Set(s).add(rk));
+    // 所在仓库泳道被折叠了：一并展开，否则星点不会画出来
+    const repo = m.all.find((b) => b.key === key)?.repo;
+    if (repo)
+      setCollapsed((s) => {
+        if (!s.has(repo)) return s;
+        const n = new Set(s);
+        n.delete(repo);
+        return n;
+      });
     setSel(key);
   };
   // 从结构页跳过来：#/galaxy/focus/<key>
@@ -304,11 +313,15 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
   const classifyNode = async (n: GNode, patch: { type?: string | null; module?: string | null }) => {
     setBusy(true);
     try {
-      const id = cardIdOf(n);
+      let id = cardIdOf(n);
+      let created = false;
       if (id) await api(`/api/features/${id}`, { method: "PATCH", body: patch });
-      else if (n.kind === "branch") await ensureCard(n, null, patch);
+      else if (n.kind === "branch") {
+        id = await ensureCard(n, null, patch);
+        created = true;
+      }
       const what = patch.type !== undefined ? `类型 → ${patch.type ?? "按推测"}` : `模块 → ${patch.module ?? "按推测"}`;
-      setToast(`${id ?? "已建卡"}：${what}（已写入台账）`);
+      setToast(`${created ? `已建卡 ${id}（未预约）` : id}：${what}（已写入台账）`);
       onChanged();
     } catch (e) {
       setToast(`没成功：${(e as Error).message}`);

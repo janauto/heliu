@@ -35,9 +35,10 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
   const classify = async (it: SItem, patch: { type?: string | null; module?: string | null }) => {
     setBusy(true);
     try {
-      if (it.cardId) await api(`/api/features/${it.cardId}`, { method: "PATCH", body: patch });
-      else if (it.bind) await api("/api/features", { body: { bind: it.bind, ...patch } });
-      setToast(`${it.cardId ?? "已建卡"}「${short(it.title, 16)}」：${patch.type !== undefined ? `类型 → ${patch.type ?? "按推测"}` : `模块 → ${patch.module ?? "按推测"}`}`);
+      let id = it.cardId;
+      if (id) await api(`/api/features/${id}`, { method: "PATCH", body: patch });
+      else if (it.bind) id = `已建卡 ${(await api<{ feature: { id: string } }>("/api/features", { body: { bind: it.bind, ...patch } })).data.feature.id}`;
+      setToast(`${id ?? ""}「${short(it.title, 16)}」：${patch.type !== undefined ? `类型 → ${patch.type ?? "按推测"}` : `模块 → ${patch.module ?? "按推测"}`}`);
       onChanged();
     } catch (e) {
       setToast(`没成功：${(e as Error).message}`);
