@@ -554,13 +554,13 @@ main .col:nth-child(4) { animation-delay: 210ms; }
 .galaxy-svg .flow.cf { opacity: 0.2; }
 .galaxy-svg .flow.cf.hover { opacity: 0.75; }
 /* M9 会话入口：没有自己提交的分支，空心、偏暗，不抢真实改动的注意力 */
-.row.entry .row-name { fill: #9aa5d6 !important; font-weight: 550; }
+.row.entry .row-name { fill: #c3ccf2 !important; font-weight: 600; }
 .row.entry .row-head-bg { opacity: 0.55; }
 .cluster.entry .cluster-band { opacity: 0.45; }
-.cluster.entry .cluster-dot { stroke-width: 1.2; opacity: 0.75; }
-.cluster.entry .cluster-label { fill: #9aa5d6 !important; }
+.cluster.entry .cluster-dot { stroke-width: 1.4; opacity: 0.95; }
+.cluster.entry .cluster-label { fill: #c3ccf2 !important; }
 .entry-core { stroke-width: 1.6; }
-.star.entry .entry-core { stroke-width: 1.4; opacity: 0.85; }
+.star.entry .entry-core { stroke-width: 1.6; opacity: 1; }
 .star.entry.sel .entry-core, .star.entry.mate .entry-core { stroke: #fff; opacity: 1; }
 .galaxy-svg .link.entry { opacity: 0.04; }
 .galaxy-svg .link.entry.on { opacity: 0.5; }

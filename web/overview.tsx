@@ -12,9 +12,18 @@ export function OverviewPage({ status, overview, go }: { tick: number; status: R
       <div class="panel">
         {overview.actions.length ? (
           <ol class="actions">
-            {overview.actions.map((a) => (
-              <li>{a}</li>
-            ))}
+            {overview.actions.map((a) =>
+              // M9：跨仓配对那一行可以直接点过去（打开结构页的配对面板）
+              a.includes("跨仓配对") ? (
+                <li>
+                  <button class="link" onClick={() => (location.hash = "/structure/pairing")}>
+                    {a}
+                  </button>
+                </li>
+              ) : (
+                <li>{a}</li>
+              ),
+            )}
           </ol>
         ) : (
           <p class="ok">暂时没有需要马上处理的事。</p>

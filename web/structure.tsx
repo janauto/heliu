@@ -28,7 +28,12 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
   const [focus, setFocus] = useState<Focus>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [syncOpen, setSyncOpen] = useState(false);
-  const [pairOpen, setPairOpen] = useState(false);
+  // 从总览「N 条跨仓配对建议待确认」点过来（#/structure/pairing）时直接打开配对面板
+  const [pairOpen, setPairOpenRaw] = useState(() => location.hash.includes("structure/pairing"));
+  const setPairOpen = (v: boolean) => {
+    setPairOpenRaw(v);
+    if (!v && location.hash.includes("structure/pairing")) history.replaceState(null, "", "#/structure");
+  };
   const pairings = useApi<PairingsData>("/api/pairings", [tick, pairOpen]);
   const pd = pairings.env?.data ?? null;
   const [busy, setBusy] = useState(false);

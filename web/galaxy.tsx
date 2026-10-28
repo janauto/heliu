@@ -548,7 +548,7 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
                 <text x={20} y={l.y0 + 38} class="lane-sub">
                   {l.error
                     ? l.error
-                    : `${l.entries ? `工作 ${l.work} + 会话入口 ${l.entries}` : `${l.shown}`} / ${l.total} 条分支${l.hiddenMerged && !showMerged ? `（${l.hiddenMerged} 条已进主线未显示）` : ""}`}
+                    : `${l.entries ? `有自己提交的 ${l.work} + 会话入口 ${l.entries}` : `${l.shown}`} / ${l.total} 条分支${l.hiddenMerged && !showMerged ? `（${l.hiddenMerged} 条已进主线未显示）` : ""}`}
                 </text>
               </g>
               {l.integY !== null ? (
