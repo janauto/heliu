@@ -134,7 +134,12 @@ export function MergedPanel({ onClose, onChanged }: { onClose: () => void; onCha
         </>
       ) : list.length ? (
         <>
-          <p class="small">这些卡的分支已经合进去了，台账还是旧状态。勾选要更新的：</p>
+          <p class="small">
+            这些卡的分支已经合进去了，台账还是旧状态。勾选要更新的（已选 {pick.size} / {list.length}）：{" "}
+            <button class="link" onClick={() => setPick(pick.size === list.length ? new Set() : new Set(list.map((s) => s.id)))}>
+              {pick.size === list.length ? "全不选" : "全选"}
+            </button>
+          </p>
           <ul class="sync-list">
             {list.map((s) => (
               <li>

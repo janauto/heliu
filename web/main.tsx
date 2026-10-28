@@ -152,7 +152,7 @@ function App({ projects, reloadProjects }: { projects: ProjectsData; reloadProje
         </nav>
         {cur ? <NextLine ov={ov ?? null} pc={pc} onCheck={() => void check(pc.state === "on")} /> : null}
       </header>
-      {ov && tab !== "start" && tab !== "galaxy" ? <Strip ov={ov} go={go} /> : null}
+      {ov && tab !== "start" && tab !== "galaxy" ? <Strip ov={ov} go={go} compact={tab === "structure"} /> : null}
       <main>
         {status.error && tab !== "start" ? <p class="err">读取对账失败：{status.error}</p> : null}
         {tab === "start" ? <StartPage projects={projects} reloadProjects={reloadProjects} go={go} /> : null}
@@ -237,9 +237,9 @@ function NextLine({ ov, pc, onCheck }: { ov: OverviewData | null; pc: { state: "
 }
 
 /** 一眼条：每页顶部都看得到 集成分支 N 天未并回 / 本地无远端引用 / 等你处理 */
-function Strip({ ov, go }: { ov: OverviewData; go: (t: Tab) => void }) {
+function Strip({ ov, go, compact }: { ov: OverviewData; go: (t: Tab) => void; compact?: boolean }) {
   return (
-    <div class="strip">
+    <div class={`strip${compact ? " compact" : ""}`}>
       {ov.integrations.map((i) => (
         <span class={`chip${(i.days ?? 0) >= 3 ? " red" : ""}`} onClick={() => go("overview")} title={`集成分支 ${i.branch}`}>
           {i.repoLabel}集成分支 <b>{i.days ?? "?"}</b> 天未并回（领先主线 {i.ahead ?? "?"} 个提交）

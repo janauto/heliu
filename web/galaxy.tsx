@@ -458,6 +458,7 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
         ) : null}
       </div>
 
+      <Legend />
       <div class={`galaxy${intro ? " intro" : ""}${dragging ? " dragging" : ""}`} ref={wrapRef}>
         <svg ref={svgRef} width={model.width} height={model.height} class="galaxy-svg" role="img" aria-label="分支星图">
           <defs>
@@ -756,7 +757,6 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
         </svg>
       </div>
 
-      <Legend />
       <p class="galaxy-hint">
         点左侧类型行或星团 = 展开 / 收起 · 拖星点到版本行星 = 改预约（没卡会自动建卡）· 拖到小卡星 = 绑定分支 · 拖到左侧类型行 = 改类型 · 拖到「合流点」= 排进合并单并入 · <b>拖版本行星到「合流点」= 合并这一版</b>：复制合并 Prompt，真正合并仍在终端输入 yes
       </p>

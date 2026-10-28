@@ -17,11 +17,11 @@ export const STATES: Array<{ key: SState; title: string; tone: "purple" | "red" 
   { key: "conflict", title: "有冲突", tone: "red", hint: "试合有冲突文件，合并前要解", decide: true },
   { key: "merged", title: "已合入待确认", tone: "green", hint: "分支已被集成分支 / 主线包含，台账还是旧状态：点「同步一下」", decide: true },
   { key: "mergeable", title: "可合并", tone: "green", hint: "已进集成分支或试合无冲突，可以排进合并单", decide: true },
-  { key: "behind", title: "落后需同步", tone: "yellow", hint: "落后基线，合并前先评估是否同步", decide: true },
+  { key: "behind", title: "落后需同步", tone: "yellow", hint: "有还没合并的分支落后基线（与星图「落后需同步」同口径）；合并前先评估是否同步", decide: true },
   { key: "stray", title: "还没建卡", tone: "blue", hint: "有分支（还没进主线）没有功能卡，不知道它要进哪一版", decide: true },
   { key: "dev", title: "开发中", tone: "gray", hint: "正在推进（含停滞）", decide: false },
   { key: "idea", title: "想法", tone: "gray", hint: "还没关联开发分支", decide: false },
-  { key: "done", title: "已完成", tone: "gray", hint: "已合入 / 已进主线 / 已发布", decide: false },
+  { key: "done", title: "已合入", tone: "gray", hint: "台账状态已是 已合入 / 已进主线 / 已发布（不等于已验收）", decide: false },
 ];
 const ORDER = new Map(STATES.map((s, i) => [s.key, i]));
 export const stateMeta = (k: SState) => STATES[ORDER.get(k)!]!;
@@ -45,6 +45,8 @@ export interface SItem {
   bind: { repo: string; branch: string } | null;
   /** 主状态不是「已合入待确认」（例如还在等你），但分支其实已经合进去了：也列进「已合入待确认」，与「同步一下」一致 */
   alsoMerged: boolean;
+  /** 还没合并的分支里最多落后基线几个提交（0 = 不落后）；主状态不是「落后」时也列进「落后需同步」 */
+  behind: number;
 }
 
 export interface SModule {
@@ -114,6 +116,7 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
         repos: [...new Set(c.bindings.map((b) => b.repoLabel))],
         bind: null,
         alsoMerged: false,
+        behind: Math.max(0, ...c.bindings.filter((b) => b.exists && b.mergedState === "unmerged").map((b) => b.vsIntegration?.behind ?? b.vsMain?.behind ?? 0)),
       });
       const it = items[items.length - 1]!;
       if (c.mergedTo && it.state !== "done" && it.state !== "merged") it.alsoMerged = true;
@@ -139,6 +142,7 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
         repos: [r.label],
         bind: { repo: r.id, branch: b.branch },
         alsoMerged: false,
+        behind: b.mergedState === "unmerged" ? Math.max(0, b.vsIntegration?.behind ?? b.vsMain?.behind ?? 0) : 0,
       });
     }
   }
@@ -170,7 +174,9 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
   }
   const decisions: StructureModel["decisions"] = {};
   for (const s of STATES) if (s.decide) {
-    const list = items.filter((i) => i.state === s.key || (s.key === "merged" && i.alsoMerged)).sort(byUrgency);
+    const list = items
+      .filter((i) => i.state === s.key || (s.key === "merged" && i.alsoMerged) || (s.key === "behind" && i.behind > 0 && i.state !== "done" && i.state !== "merged"))
+      .sort(byUrgency);
     if (list.length) decisions[s.key] = list;
   }
   const types = FEATURE_TYPES.filter((t) => items.some((i) => i.type === t));

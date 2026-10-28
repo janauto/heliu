@@ -108,7 +108,7 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
                     {t}
                   </th>
                 ))}
-                <th>进度</th>
+                <th class="col-prog">进度</th>
               </tr>
             </thead>
             <tbody>
@@ -140,7 +140,7 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
                       </td>
                     );
                   })}
-                  <td>
+                  <td class="col-prog">
                     <Progress m={m} />
                   </td>
                 </tr>
@@ -148,7 +148,7 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
             </tbody>
           </table>
         </div>
-        <p class="explain">数字 = 条数（功能卡 + 没建卡的分支），颜色越深越多；带小红点 = 里面有等你回答或有冲突的。进度 = 已完成 / 全部。</p>
+        <p class="explain">数字 = 条数（功能卡 + 没建卡的分支），颜色越深越多；带小红点 = 里面有等你回答或有冲突的。进度 = 台账状态已合入（含已进主线、已发布）/ 全部，不等于已验收。</p>
       </section>
 
       {/* ③ 模块卡 */}
@@ -185,7 +185,7 @@ function Progress({ m }: { m: SModule }) {
   const total = m.open + m.done;
   const pct = total ? Math.round((m.done / total) * 100) : 0;
   return (
-    <span class="prog" title={`已完成 ${m.done} / 全部 ${total}`}>
+    <span class="prog" title={`台账已合入（含已进主线、已发布）${m.done} / 全部 ${total}；不等于已验收`}>
       <span class="bar">
         <span style={{ width: `${pct}%` }} />
       </span>
@@ -214,6 +214,7 @@ function ItemLine({ it, showModule }: { it: SItem; showModule?: boolean }) {
         <span class="item-sub">
           <span class={`tag t-${s.tone}`}>{s.title}</span>
           {it.alsoMerged ? <span class="tag t-green" title="分支已被集成分支 / 主线包含，台账还没改；「同步一下」会列出它"> 分支已合入</span> : null}
+          {it.behind > 0 && it.state !== "behind" && it.state !== "done" && it.state !== "merged" ? <span class="tag t-yellow" title="还没合并的分支落后基线的提交数"> 落后 ↓{it.behind}</span> : null}
           {showModule ? <span class="muted"> {it.module} ·</span> : null}
           <span class="muted"> {it.milestone ? `预约 ${it.milestone}` : it.cardId ? "未预约" : it.repos.join("、")}</span>
           {it.lastAt ? <span class="muted"> · {ago(it.lastAt)}</span> : null}
