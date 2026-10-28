@@ -51,7 +51,7 @@
 
 <table>
   <tr>
-    <td align="center" width="50%"><img src="docs/assets/start-page-light.png" alt="看板「开始」页：欢迎说明，第 1 步检查环境（git、bun、写保护沙箱等逐项打勾），还没选项目时其他页签置灰" /><br/><sub><b>开始</b>：五步上手，第一次打开就落在这里</sub></td>
+    <td align="center" width="50%"><img src="docs/assets/start-page-light.png" alt="看板「开始」页：渐变大标题的欢迎说明，下面第 1 步「检查环境」只列出提醒项，正常项收成一行可展开" /><br/><sub><b>开始</b>：五步上手，第一次打开就落在这里</sub></td>
     <td align="center" width="50%"><img src="docs/assets/galaxy-dark.png" alt="星图：深色星空背景上，文档仓、固件仓两条泳道里分布着彩色星点，右侧是发光的 vNext 行星和「未预约」「已发布」，最新分支标着金色「★ 最新」" /><br/><sub><b>星图</b>：纵横看清每条分支在哪、离合并还差什么</sub></td>
   </tr>
 </table>
