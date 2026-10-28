@@ -374,6 +374,7 @@ function AddWizard({ projects, onAdded, go }: { projects: ProjectsData; onAdded:
                 </span>
               </label>
             ))}
+            <OtherBranch det={det} main={main} integ={integ} setInteg={setInteg} />
             <label class="radio">
               <input type="radio" name="integ" checked={integ === ""} onChange={() => setInteg("")} />
               <span>不设（以后需要再加）</span>
@@ -425,6 +426,33 @@ function AddWizard({ projects, onAdded, go }: { projects: ProjectsData; onAdded:
         </>
       ) : null}
     </div>
+  );
+}
+
+/** 「其他分支」：候选里没有（比如集成分支刚建、还和主线同一个提交）时，从全部本地分支里手选 */
+function OtherBranch({ det, main, integ, setInteg }: { det: DetectData; main: string; integ: string; setInteg: (v: string) => void }) {
+  const cands = new Set(det.detection.candidates.map((c) => c.branch));
+  const others = det.localBranches.filter((b) => b.name !== main.trim() && !cands.has(b.name));
+  if (!others.length) return null;
+  const picked = integ !== "" && !cands.has(integ);
+  return (
+    <label class="radio">
+      <input type="radio" name="integ" checked={picked} onChange={() => setInteg(others[0]!.name)} />
+      <span>
+        其他分支：
+        <select value={picked ? integ : ""} onChange={(e) => setInteg((e.target as HTMLSelectElement).value)} onFocus={() => !picked && setInteg(others[0]!.name)}>
+          {!picked ? <option value="">选一个本地分支…</option> : null}
+          {others.map((b) => (
+            <option value={b.name}>
+              {b.name}
+              {b.lastCommitAt ? `（${mdhm(b.lastCommitAt)}）` : ""}
+            </option>
+          ))}
+        </select>
+        <br />
+        <span class="muted small">候选里没有你的集成分支时用这里（比如它刚建好、还和主线指向同一个提交）。</span>
+      </span>
+    </label>
   );
 }
 

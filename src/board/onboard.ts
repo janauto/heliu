@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import YAML from "yaml";
 import { Ledger } from "../core/ledger.ts";
+import { listLocalBranches } from "../core/branches.ts";
 import { detectRepo } from "../core/onboard.ts";
 import { canonicalPath, type HeliuPaths } from "../core/paths.ts";
 import { addRepoToProject, expandPath, listProjectNames, loadProject, ProjectError, projectFile } from "../core/project.ts";
@@ -70,8 +71,13 @@ export async function detectForBoard(paths: HeliuPaths, body: Record<string, unk
   const detection = await detectRepo(path, { main: str(body.main), integration: str(body.integration), remote: str(body.remote) });
   const suggestedName = cleanName(str(body.name) ?? basename(detection.root));
   const lp = ledgerPlan(paths, suggestedName);
+  const lb = await listLocalBranches(detection.root, { timeoutMs: 8000 });
+  const localBranches = lb.branches
+    .map((b) => ({ name: b.name, lastCommitAt: b.committedAt !== null ? new Date(b.committedAt * 1000).toISOString() : null }))
+    .sort((a, b) => (b.lastCommitAt ?? "").localeCompare(a.lastCommitAt ?? ""));
   return {
     detection,
+    localBranches,
     suggestedName,
     existingProjects: listProjectNames(paths),
     registryExists: existsSync(projectFile(paths, suggestedName)),

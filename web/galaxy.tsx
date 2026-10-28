@@ -81,6 +81,7 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
   const [busy, setBusy] = useState(false);
   const [intro, setIntro] = useState(true);
   const [hoverPlanet, setHoverPlanet] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
 
   const model: GalaxyModel | null = useMemo(
     () => (status ? buildGalaxy(status, features.env?.data ?? null, { width: Math.max(width, 900), now: Date.now(), showMerged, collapsed }) : null),
@@ -109,7 +110,9 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
   }, [model?.width, model?.height]);
 
   const q = query.trim().toLowerCase();
+  const inFilter = (n: GNode) => filterHit(filter, n);
   const matches = (n: GNode) => {
+    if (!inFilter(n)) return false;
     if (!q) return true;
     const hay = n.kind === "branch" ? `${n.label} ${n.branch} ${n.card?.id ?? ""} ${n.sessionTitle ?? ""}` : `${n.card.title} ${n.card.id}`;
     return hay.toLowerCase().includes(q);
@@ -235,6 +238,16 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
             ))}
           </span>
         ) : null}
+      </div>
+      <div class="filters" role="group" aria-label="筛选星点">
+        {FILTERS.map((f) => {
+          const n = f.key === "all" ? model.nodes.length : model.nodes.filter((x) => filterHit(f.key, x)).length;
+          return (
+            <button class={`fchip f-${f.key}${filter === f.key ? " on" : ""}`} onClick={() => setFilter(f.key)} disabled={f.key !== "all" && n === 0}>
+              {f.title} <b>{n}</b>
+            </button>
+          );
+        })}
       </div>
       <p class="galaxy-hint">
         拖星点到右边的版本行星 = 改预约（没卡会自动建卡）· 拖到小卡星 = 绑定分支 · 拖到「合流点」= 排进合并单并入 · 点星点看详情 · 点泳道名折叠
@@ -409,6 +422,16 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
                   {isB && n.recent ? <circle r={n.r + 9} class="halo" /> : null}
                   <circle r={n.r * 2.2} fill={`url(#star-${n.color})`} class="glow" />
                   <circle r={n.r} class="core" fill={COLOR[n.color]} />
+                  {isB && n.behind && n.behind > 0 && n.merged === "unmerged" && (n.color === "yellow" || filter === "behind") ? (
+                    <text y={n.r + 13} text-anchor="middle" class="behind-badge">
+                      ↓{n.behind}
+                    </text>
+                  ) : null}
+                  {isB && filter !== "all" && filter !== "behind" && m && !n.labelSide ? (
+                    <text x={n.r + 6} y={4} class="star-label">
+                      {n.labelText}
+                    </text>
+                  ) : null}
                   {isB && (n.labelSide || hl || (q && m)) ? (
                     <text
                       x={n.labelSide === "l" ? -(n.r + 6) : n.labelSide === "t" || n.labelSide === "b" ? 0 : n.r + 6}
@@ -444,6 +467,23 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
       {toast ? <div class="toast">{toast}</div> : null}
     </div>
   );
+}
+
+type Filter = "all" | "waiting" | "behind" | "conflict" | "stray";
+const FILTERS: Array<{ key: Filter; title: string }> = [
+  { key: "all", title: "全部" },
+  { key: "waiting", title: "等你回答" },
+  { key: "behind", title: "落后需同步" },
+  { key: "conflict", title: "有冲突" },
+  { key: "stray", title: "还没建卡" },
+];
+function filterHit(f: Filter, n: GNode): boolean {
+  if (f === "all") return true;
+  if (n.kind === "card") return false;
+  if (f === "waiting") return n.color === "purple" || !!n.waiting;
+  if (f === "behind") return n.merged === "unmerged" && (n.behind ?? 0) > 0;
+  if (f === "conflict") return n.color === "red" || (n.conflicts ?? 0) > 0;
+  return !n.card;
 }
 
 function dropText(n: GNode, t: DropTarget): string {
@@ -583,9 +623,7 @@ function conflictLine(conflicts: string[], union: string[]): string {
 }
 
 function DecisionPanel({ d, root, onClose }: { d: ReleaseDecisionResult; root: string; onClose: () => void }) {
-  const proj = currentProject();
-  const p = proj ? ` --project ${/\s/.test(proj) ? JSON.stringify(proj) : proj}` : "";
-  const cmd = `"${root}/bin/heliu" 合并 ${d.milestone}${p}`;
+  const cmd = d.command || `"${root}/bin/heliu" 合并 ${d.milestone}`;
   return (
     <aside class="detail decision">
       <button class="menu-btn" onClick={onClose} aria-label="关闭">

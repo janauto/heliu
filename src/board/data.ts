@@ -52,6 +52,7 @@ import type {
 import { buildReleasePlan, previewRelease, setPlanDecision, type BuildResult } from "../core/release.ts";
 import { ACTION_TEXT, TIER_OF, type ItemState } from "../core/release-plan.ts";
 import { baselinePreview } from "./baseline.ts";
+import { HELIU_ROOT } from "./root.ts";
 import { buildHygiene } from "./hygiene.ts";
 
 export const STATUS_TTL_MS = 20_000;
@@ -634,6 +635,13 @@ export class BoardService {
     const set = setPlanDecision(project, ms, f.id, decision, { now: this.now() });
     const items = set.plan.items.filter((i) => i.feature === f.id);
     if (!items.length) throw new LedgerError(`${f.id} 没进 ${ms} 的合并单（可能还没绑定分支，或台账状态已是已合入）`);
+    const projArg = /\s/.test(project.name) ? JSON.stringify(project.name) : project.name;
+    const command = `"${HELIU_ROOT}/bin/heliu" 合并 ${ms} --project ${projArg}`;
+    const conflictFiles = new Set(items.flatMap((i) => (i.precheck?.conflicts ?? []).filter((c) => !(i.precheck?.union ?? []).includes(c))));
+    const message =
+      `已把 ${f.id}「${f.title}」排进 ${ms} 的合并单，决定 = ${decision}${reservedTo ? `（顺手预约到 ${reservedTo}）` : ""}。` +
+      (conflictFiles.size ? `试合有 ${conflictFiles.size} 个文件需要解冲突。` : "") +
+      `没有执行 git 合并：真正合并请在终端运行 ${command}，看完摘要输入 yes 才开始。`;
     return {
       feature: f.id,
       title: f.title,
@@ -641,6 +649,9 @@ export class BoardService {
       reservedTo,
       changed: set.changed.length,
       file: set.plan.file,
+      executed: false,
+      message,
+      command,
       items: items.map((i) => ({
         repo: i.repo,
         branch: i.branch,

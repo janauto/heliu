@@ -424,6 +424,8 @@ export interface DetectData {
   existingProjects: string[];
   /** 建议名对应的项目已存在（接入 = 往这个项目里再加一个仓库） */
   registryExists: boolean;
+  /** 全部本地分支（最后提交倒序），向导里「其他分支」下拉用；候选里没有时也能手选 */
+  localBranches: Array<{ name: string; lastCommitAt: string | null }>;
   /** 台账会放在哪（已有项目沿用它的设置） */
   ledgerDir: string;
   ledgerNote: string;
@@ -451,6 +453,12 @@ export interface ReleaseDecisionResult {
   changed: number;
   /** 合并单文件 */
   file: string;
+  /** 始终为 false：这个接口只写合并单，从不执行 git 合并 */
+  executed: false;
+  /** 一句话中文结果（给不看页面的调用方） */
+  message: string;
+  /** 真正执行合并要在终端运行的命令（会先列摘要，输入 yes 才开始） */
+  command: string;
   items: Array<{
     repo: string | null;
     branch: string | null;

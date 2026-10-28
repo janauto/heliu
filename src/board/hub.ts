@@ -6,16 +6,15 @@
  * - 识别不出项目时 default 为 null：看板照常启动，页面「开始」里选项目或接入新项目。
  */
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import type { HeliuPaths } from "../core/paths.ts";
 import { Ledger } from "../core/ledger.ts";
 import { listProjectNames, loadProject, ProjectError, type ProjectConfig } from "../core/project.ts";
 import type { ProjectsData, ProjectSummary } from "./api-types.ts";
 import { BoardService } from "./data.ts";
+import { HELIU_ROOT } from "./root.ts";
 
 const OPEN = new Set(["想法", "开发中", "待合并"]);
-/** 合流仓库根目录（src/board/ 往上两级） */
-export const HELIU_ROOT = join(import.meta.dir, "..", "..");
+export { HELIU_ROOT };
 
 export interface BoardHubOptions {
   paths: HeliuPaths;

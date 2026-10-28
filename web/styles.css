@@ -340,6 +340,15 @@ fieldset.field { border: 1px solid var(--line); border-radius: 10px; padding: 8p
 .latest-pills { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
 .pill { border: 1px solid #ffcf5c88; background: #ffcf5c1a; color: var(--fg); border-radius: 999px; padding: 1px 10px; cursor: pointer; font-size: 13px; }
 .galaxy-hint { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.fchip { border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 2px 12px; cursor: pointer; font-size: 14px; }
+.fchip b { margin-left: 2px; }
+.fchip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fchip:disabled { opacity: 0.45; cursor: default; }
+.fchip.f-waiting.on { background: var(--purple); border-color: var(--purple); }
+.fchip.f-behind.on { background: var(--yellow); border-color: var(--yellow); color: #1d1d1b; }
+.fchip.f-conflict.on { background: var(--red); border-color: var(--red); }
+.behind-badge { fill: #ffcf5c !important; font-size: 10px !important; font-weight: 700; paint-order: stroke; stroke: #070a1c; stroke-width: 3px; pointer-events: none; }
 
 .galaxy {
   position: relative; overflow: auto; border-radius: 16px; border: 1px solid #263055;

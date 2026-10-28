@@ -1,0 +1,1724 @@
+快照：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M7-r1-af6a5d2（af6a5d2）
+HELIU_HOME 副本：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M7-r1-af6a5d2-heliu-home
+看板已在沙箱外启动：http://127.0.0.1:7796/
+Reading additional input from stdin...
+OpenAI Codex v0.164.0-alpha.11.1
+--------
+workdir: /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+model: gpt-6-astra
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR] (network access enabled)
+reasoning effort: high
+reasoning summaries: none
+session id: 01a1819f-16c0-7490-922a-4bde0b604544
+--------
+user
+你是「合流（heliu）」的新用户：个人开发者，在 Claude 桌面应用里同时开十几个会话（每个会话一个 git worktree）开发同一个项目。你第一次打开它的图形界面，想快速上手。请以新手的用户体验视角，验收两个里程碑：M6「开始」页（图形化上手入口）与 M7「星图」（宇宙星河风格的分支关系图 + 拖拽）。不做压力测试、不做异常注入，不修改被管理的任何仓库。
+
+先读：README.md、docs/03-架构/M6-任务卡.md、docs/03-架构/M7-任务卡.md。
+
+看板已由验收脚本在你的沙箱外启动，地址见提示末尾；台账与注册表是副本，写操作可以放心做。你的沙箱里 sandbox-exec 不可用，试合会显示「未能试合」，这是环境限制，不算产品问题。
+
+请实际操作（能开浏览器就用浏览器看；不能就用 curl 读接口与首页 HTML，并如实说明）：
+1. 「开始」页：GET /api/projects、GET /api/doctor；用 POST /api/projects/detect 和 POST /api/projects 接入一个你自己在临时目录 git init 并提交两次、带一个 worktree 分支的小仓库（项目名自取）；再 POST /api/sync?project=<名> 先 dry_run 再真登记。判断：一个新手能不能不碰终端就完成「检查环境 → 接入项目 → 登记现有分支」？
+2. 「星图」：在页面里切到「星图」页签（或读 GET /api/status?project=磁吸背夹 与 GET /api/features?project=磁吸背夹）。判断：能不能一眼找到最新的分支、看出哪些在等我、哪些落后、它们预约在哪一版？
+3. 拖拽背后的三个接口（在你新接入的项目上做）：POST /api/features {"bind":{"repo":<仓库 id>,"branch":<分支>},"milestone":"v1.0"}（从分支建卡）；POST /api/features/<卡号>/bind（绑定）；POST /api/release/decision {"feature":<卡号>}（排进合并单并入）。确认返回值能让新手看懂发生了什么，且明确说明「没有执行 git 合并」。
+4. 判断边界说明是否清楚：拖到合流点只写合并单，真正合并要在终端输入 yes。
+
+按 schema 输出：verdict、summary（3 句内）、solved（版本遗漏 / 分支落后 / 大版本待办 各一档）、blocking_issues（会让新手卡住的问题，带复现与影响）、suggestions（≤5）。
+
+【验收脚本补充】看板已由脚本在沙箱外启动：http://127.0.0.1:7796/ （不要自己再启动服务，你的沙箱不能监听端口）。台账与注册表是副本（HELIU_HOME 已指向副本），PATCH / POST 可以放心做，不会影响真实台账；被管理的磁吸背夹仓库仍然不得写入。
+warning: Under-development features enabled: chronicle. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Users/linxiansheng/.codex/config.toml.
+codex
+我会先读任务卡和使用说明，再实际走一遍接入、登记和星图操作，重点检查新手能否理解操作结果与合并边界。
+exec
+/bin/zsh -lc 'cat README.md docs/03-架构/M6-任务卡.md docs/03-架构/M7-任务卡.md' in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 0ms:
+<a id="top"></a>
+
+# 合流（heliu）— 十几个 AI 会话并行开发，每一版还欠什么一眼看清
+
+[![版本](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-0.2.0-blue)](package.json)
+![许可：私有](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF-%E7%A7%81%E6%9C%89%20%28UNLICENSED%29-lightgrey)
+![Bun ≥ 1.3](https://img.shields.io/badge/Bun-%E2%89%A5%201.3-000000?logo=bun&logoColor=white)
+![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![平台：macOS](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS-999999?logo=apple&logoColor=white)
+[![测试：229 通过](https://img.shields.io/badge/%E6%B5%8B%E8%AF%95-229%20%E9%80%9A%E8%BF%87-brightgreen)](tests/)
+![Claude Code 插件 · MCP · hooks](https://img.shields.io/badge/Claude%20Code-%E6%8F%92%E4%BB%B6%20%C2%B7%20MCP%20%C2%B7%20hooks-D97757?logo=claude&logoColor=white)
+
+**合流是一个本机运行的中文版本台账**：它把 git 分支、worktree 和 Claude 桌面应用里的会话对上账，让你随口说的新点子变成功能卡、预约到某一版。
+**它解决的是「并行开了十几个会话之后，一版到底还欠什么、哪些能合、哪些在等我」**：看板 10 秒看懂，合并按版本走预演 → 确认 → 合入 → 顺延，不漏、不乱、不偷偷动你的仓库。
+**一句话：git 是事实，台账是承诺，看板是对账单。**
+
+<p align="center">
+  <a href="#快速开始"><strong>快速开始</strong></a> ·
+  <a href="docs/教程.md"><strong>使用教程</strong></a> ·
+  <a href="#命令速查"><strong>命令速查</strong></a> ·
+  <a href="#工作原理"><strong>工作原理</strong></a> ·
+  <a href="#安全承诺"><strong>安全承诺</strong></a> ·
+  <a href="#验证状态"><strong>验证状态</strong></a> ·
+  <a href="#文档索引"><strong>文档</strong></a> ·
+  <a href="#已知限制"><strong>已知限制</strong></a>
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/board-overview-dark.png">
+  <img src="docs/assets/board-overview-light.png" alt="合流看板「总览」页：顶部健康条标出两个仓库的集成分支几天未并回、17 个会话在等你处理；下面是「现在最该做的」三件事和「各版本还欠什么」（下一版还欠 61 项，可合 39、冲突 11、等你 11）" width="100%">
+</picture>
+
+<p align="center"><sub>看板「总览」，浅色 / 深色随系统切换。数据来自真实项目「磁吸背夹」（3 个仓库、61 张功能卡），2026-10-26 截图。</sub></p>
+
+## 三句话就能用
+
+在任何 Claude 会话里直接说，或者在终端敲命令：
+
+| 你说 | 终端命令 | 会话里调用的 MCP 工具 |
+|---|---|---|
+| 「我有个新点子：让背夹支持闹钟」 | `heliu 新点子 "让背夹支持闹钟"`（默认预约到下一版，在 worktree 里会自动绑定当前分支与会话） | `heliu_feature_add` |
+| 「1.2 还欠什么？」 | `heliu 待办 v1.2`（加 `--precheck` 在临时区试合，分出「有冲突」） | `heliu_milestone_todo` |
+| 「合并 1.2」 | 先 `heliu 合并 v1.2 --预演` 生成合并单 → 看过、改好决定 → `heliu 合并 v1.2`（终端里逐条确认） | `heliu_release_preview`（只出预演；MCP 不提供执行合并的工具，执行要在终端里跑 `heliu 合并`） |
+
+装好插件、接入项目之后，在项目仓库里新开会话时，hooks 会自动注入「你在哪个分支、对应哪张功能卡、预约哪一版、落后主线多少」，你不用额外操作。
+
+## 为什么要做它
+
+一个人在 Claude 桌面应用里同时开十几个会话，每个会话一个 worktree，很快就会失去全局视图。合流的第一个用户场景是：同一项目 19 个活跃会话、75 个分支、54 个 worktree，跨三个仓库；版本整合发生在旁路集成分支上，4 天没并回 main。这时最难回答的问题是：哪个会话在做哪件事？这条分支落后主线多少？这一版到底还差什么？
+
+现成工具各管一段，没有一个把「版本」当作一等概念：
+
+| 工具类型 | 擅长 | 不管的部分 |
+|---|---|---|
+| Agent 工作台（并行会话 + worktree） | 并行开会话，一个任务一个 worktree | 没有版本或里程碑视图 |
+| 任务即 Markdown 的规划工具 | 里程碑、依赖、看板 | 不看 agent 会话，不管合并 |
+| PR 合并队列 / 堆叠 PR | PR 级别的顺序合入 | 面向团队和 PR，不按里程碑清点功能 |
+| **合流** | 分支 × worktree × 会话对账；功能卡预约到版本；按版本预演、合并、顺延 | 只做单人本机场景，不替代 GitHub；只在 macOS 上验证过 |
+
+调研盘点了 20 多款工具，最接近的组合（Claude 桌面版 + Backlog.md）约覆盖 60%。因此合流不 fork 任何工具：执行层直接用桌面应用的会话与 worktree，自己只写「版本列车」这一薄层（对账 + 预约 + 合并单），交付为 Claude Code 插件。详见 [竞品分析与社区声音](docs/01-调研/竞品分析与社区声音_20261026.md)。
+
+## 看板一览
+
+`heliu board` 打开一个只监听 127.0.0.1 的本机网页，共五页：总览、版本列、卫生、会话、合并预演。
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/assets/board-columns-dark.png" alt="看板「版本列」页（深色）：顶部可直接登记新点子，按「等你回答 / 有冲突 / 可合并 / 落后需同步」等状态灯给功能卡分组，卡片上标出冲突文件数与落后提交数" /><br/>
+      <sub><b>版本列</b>：每版一列，卡片按状态灯分组，顶部直接登记新点子</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/assets/board-drag-reserve.jpg" alt="把功能卡 F-0041 从 vNext 列拖到「未预约」列后，底部弹出提示「已把 F-0041 改到 未预约（已写入台账）」" /><br/>
+      <sub><b>拖拽改预约</b>：把卡片拖到另一列，立即写入台账（M3 验收截图）</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/assets/board-release-light.png" alt="看板「合并预演」页（浅色）：61 项按已进集成、无冲突、有冲突、未能试合、未完成、无法合并分档，表格列出顺序、功能、分支、试合冲突、建议动作和决定" /><br/>
+      <sub><b>合并预演</b>：与 <code>heliu 合并 --预演</code> 同一套规则，只预演、不执行</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/assets/board-mobile-375.png" alt="看板「总览」页在 375 像素宽的手机屏幕上的样子：标签栏、顶栏说明与健康条竖向排列" width="45%" /><br/>
+      <sub><b>手机宽度</b>：375 像素下也能看</sub>
+    </td>
+  </tr>
+</table>
+
+### 终端里也能看
+
+下面是 `heliu status` 在同一个项目上的真实输出（截到「现在最该做的」为止；第一行的「用时」是三个仓库的扫描耗时）：
+
+```text
+$ bin/heliu status --project 磁吸背夹
+合流 · 磁吸背夹 · 2026-10-26 09:26 · 3 个仓库 · 用时 0.8s
+图例：↑领先 ↓落后（提交数）· worktree 数不含主目录 · 工作区检查数含主目录 · 已进主线 = 提交已被主线包含，不代表功能已验收
+健康条
+  文档仓  分支 76 · 已进主线 24 · 未进主线 52（进集成 13 / 独立 38 / 集成分支 1） · worktree 55 · 主线 vs github/main ↑7 ↓5（分叉） · 集成分支领先主线 102，3 天未并回 · 本地无远端引用 60 · 工作区 未检查 56
+  固件仓  分支 33 · 已进主线 13 · 未进主线 20（进集成 14 / 独立 5 / 集成分支 1） · worktree 27 · 主线 vs github/release/backclip-1.1：本地无此引用 · 集成分支领先主线 100，2 天未并回 · 本地无远端引用 28 · 工作区 已跟踪文件干净 28
+  App 仓  分支 10 · 已进主线 7 · 未进主线 3 · worktree 7 · 主线 vs github/release/backclip-1.0 ↑34 ↓0 · 本地无远端引用 8 · 工作区 已跟踪文件干净 8
+  （远端对比基于本地已有引用，未 fetch）
+现在最该做的
+  1）集成分支未并回主线：文档仓（领先 102、3 天）、固件仓（领先 100、2 天） → 检查集成分支是否可并回
+     主线（可先预演）
+  2）17 个会话在等你拍板（见 ①，全部：heliu sessions）
+  3）46 条独立分支未被主线或集成分支包含（文档仓 38 / 固件仓 5 / App 仓 3；M2 起可预约版本）
+…（后面还有「① 等你处理」「② 独立未合并」「③ 已进集成分支待回主线」「④ 落后需同步」四段，此处略）
+```
+
+## 快速开始
+
+<!--
+给 AI agent 的非交互安装（macOS；需要已装好 bun ≥ 1.3、git ≥ 2.38、Claude 桌面应用或 Claude Code CLI，并且对私有仓库 janauto/heliu 有读权限）：
+  git clone https://github.com/janauto/heliu.git "$HOME/heliu" && cd "$HOME/heliu" && scripts/install.sh && bin/heliu doctor
+验收：doctor 最后一行以「结论：可用」或「结论：一切正常」开头；claude plugin list 里有 heliu@heliu-local 且 Status: ✔ enabled。
+install.sh 不需要输入任何凭据；重复执行无害。注意：如果这台机器已经从另一个目录装过 heliu-local，第 5 步会把 marketplace 改指到当前目录（脚本会打印一行警告），原目录的安装随之失效。
+接入项目的非交互写法：bin/heliu project add <仓库路径> --name <项目名> --yes
+-->
+
+### 1. 环境要求
+
+| 依赖 | 版本 | 必需 | 检查命令 | 用途 |
+|---|---|:---:|---|---|
+| macOS | 开发机为 macOS 27.0.1 | ✅ | `sw_vers -productVersion` | 试合与合并的写保护沙箱依赖 macOS 自带的 `sandbox-exec`；其他系统未验证 |
+| Bun | ≥ 1.3 | ✅ | `bun --version` | 运行时（`package.json` 的 `engines`）；没装见下方 |
+| git | ≥ 2.38 | ✅ | `git --version` | 试合依赖 `merge-tree --write-tree`；低于 2.41 时领先 / 落后统计会慢一些 |
+| Claude 桌面应用或 Claude Code CLI | ≥ 2.1.287（实测 2.1.308） | ✅ | 见下方 | 安装插件；在会话里使用 `/heliu` Skill 和 `heliu_*` 工具 |
+| 私有仓库 `janauto/heliu` 的读权限 | — | ✅ | `git ls-remote https://github.com/janauto/heliu.git HEAD` | 克隆代码。能打印出一行提交号即有权限 |
+| 已登录的 `claude` CLI | — | 可选 | 装好后看 `bin/heliu doctor` 的「无头 claude」一行 | 合并遇到普通文件冲突时交给 Claude 子代理解；未登录时在终端执行 `claude login`，不登录不影响无冲突合并 |
+
+没有 Bun 时先安装（装好后不必重开终端，安装脚本会到 `~/.bun/bin` 里找）：
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+检查 Claude CLI：桌面应用内置的 CLI 不在 PATH 里，下面第一行先找它，找不到再用 PATH 里的 `claude`。安装脚本用的是同样的查找顺序。
+
+```bash
+CLAUDE="$(ls -d "$HOME/Library/Application Support/Claude/claude-code/"*/*/claude.app/Contents/MacOS/claude 2>/dev/null | sort -V | tail -1)"
+"${CLAUDE:-claude}" --version
+```
+
+预期输出类似 `2.1.308 (Claude Code)`。报 `command not found` 说明两处都没有，请先安装 Claude 桌面应用或 Claude Code。
+
+### 2. 安装
+
+```bash
+git clone https://github.com/janauto/heliu.git "$HOME/heliu"
+cd "$HOME/heliu"
+scripts/install.sh
+```
+
+`scripts/install.sh` 依次做五步，每条命令先打印再执行（想先看会做什么：`scripts/install.sh --dry-run`）：
+
+1. 找 bun：依次查 PATH、`~/.bun/bin`、`/opt/homebrew/bin`、`/usr/local/bin`、`$BUN_BIN`。
+2. `bun install`：`node_modules` 软链到 `node_modules.nosync`，iCloud 不同步。
+3. 找 Claude CLI：优先用桌面应用内置的最高版本，其次用 PATH 里的 `claude`。
+4. 注册 user 级 MCP：**默认跳过**。插件已自带同名 MCP；确实需要时加 `--with-mcp`。
+5. 把本仓库加成本地 marketplace `heliu-local`，并安装插件 `heliu@heliu-local`（带 `/heliu` Skill、hooks、MCP）。
+
+> [!NOTE]
+> 插件从克隆目录原地加载，改代码不用重装。因此装好后不要移动或删除这个目录；要换位置，先在旧目录跑 `scripts/uninstall.sh`，再在新目录重新安装。
+> 如果这台机器已经从别的目录装过 `heliu-local`，第 5 步会把它改指到当前目录并打印警告；旧目录那份安装随之失效，这是预期行为。
+
+### 3. 验证安装
+
+```bash
+bin/heliu doctor
+```
+
+预期：最后一行是 `结论：一切正常` 或 `结论：可用，N 项警告`。警告不影响使用，例如刚装好时的「注册表……（尚无项目）」，或无头 claude 未登录。看到 `结论：N 项失败` 时命令退出码为 1，按 `✗` 开头的那几行处理。这条命令要检查无头 claude 能否登录，最长约 20 秒。
+
+本机实测输出（节选）：
+
+```text
+合流 · 环境自检
+  ✓ git 2.50.1
+  ✓ bun 1.3.4
+  ✓ sandbox-exec 可用：试合在写保护沙箱里进行，合并执行与演练也包在沙箱里
+  ! 无头 claude（解冲突子代理，桌面版内置 claude 2.1.308）：未登录（…）：请在终端执行 claude login（或设 HELIU_CLAUDE_BIN 指向已登录的 claude）。…
+  ✓ 桌面会话 281 条可读（281 个文件）：…/Claude/claude-code-sessions
+  …
+结论：可用，4 项警告
+```
+
+再确认插件已装上（`CLAUDE` 取桌面应用内置的 CLI，没有时用 PATH 里的 `claude`）：
+
+```bash
+CLAUDE="$(ls -d "$HOME/Library/Application Support/Claude/claude-code/"*/*/claude.app/Contents/MacOS/claude 2>/dev/null | sort -V | tail -1)"
+"${CLAUDE:-claude}" plugin list
+"${CLAUDE:-claude}" mcp list
+```
+
+预期：`plugin list` 里有下面这一段，`mcp list` 里有一行 `plugin:heliu:heliu: …/heliu/bin/heliu mcp - ✔ Connected`。在克隆目录里运行 `mcp list` 时，还会多一行关于根目录 `.mcp.json` 缺 `CLAUDE_PLUGIN_ROOT` 的警告，可以忽略（见「已知限制」）。
+
+```text
+  ❯ heliu@heliu-local
+    Version: 0.2.0
+    Read from: /Users/<你的用户名>/heliu
+    Scope: user
+    Status: ✔ enabled
+```
+
+最后在 Claude 桌面应用里新开一个会话：输入 `/heliu` 应能看到 `/heliu:heliu` Skill，会话可用的工具里应有 13 个 `heliu_*` 工具。
+
+### 4. 接入第一个项目
+
+```bash
+bin/heliu project add <仓库路径>
+```
+
+`<仓库路径>` 换成你要管理的本地 git 仓库的绝对路径。heliu 对它只读，缺省也不往里写任何文件。向导会猜主线、集成分支、远端、是否在 iCloud，打一张中文摘要等你确认，然后建台账。项目名缺省取仓库目录名（可用 `--name` 指定），摘要里会写明。台账缺省建在 `~/Library/Application Support/heliu/projects/<项目名>/ledger/`，想放进仓库加 `--ledger repo`。
+
+没有交互终端时（脚本或 AI agent 调用）向导不会停下来问，只登记注册表、不建台账；这种情况加 `--yes` 一步到位：
+
+```bash
+bin/heliu project add <仓库路径> --name <项目名> --yes
+```
+
+之后：
+
+```bash
+bin/heliu status --project <项目名>   # 健康条 + 现在最该做的（刚接入、没有待处理事项的项目不显示这一段）
+bin/heliu board --project <项目名>    # 打开看板，缺省 http://127.0.0.1:7788，并自动打开浏览器；无桌面环境加 --no-open
+```
+
+想在任何目录直接敲 `heliu`：把 `bin/heliu` 链到你 PATH 里的某个目录，例如 `ln -s "$PWD/bin/heliu" /usr/local/bin/heliu`。`bin/heliu` 是个 sh 包装，自己找 bun，不依赖 PATH 里有 bun。
+
+### 常见问题
+
+| 现象 | 处理 |
+|---|---|
+| 安装脚本打印「没找到 bun」并退出 | 先装 bun：`curl -fsSL https://bun.sh/install \| bash`，再重跑 `scripts/install.sh` |
+| 运行 `bin/heliu` 报「heliu：找不到 bun」 | bun 装在非常规位置：`export BUN_BIN=<bun 的绝对路径>` 后再运行 |
+| 安装脚本打印「没找到 claude CLI」 | 第 4、5 步会被跳过。装好 Claude 桌面应用或 Claude Code 后重跑 `scripts/install.sh` |
+| 某一步打印「！上面这条没成功（可能已经装过）」 | 脚本不会中断。用上面的 `plugin list` 确认 `heliu@heliu-local` 是否已启用 |
+| 以前从别的目录装过 | 直接在新目录跑 `scripts/install.sh` 即可：第 5 步会把 `heliu-local` 改指到新目录并打印警告，旧目录那份随之失效；旧目录有空再跑 `scripts/uninstall.sh` 做清理（可选） |
+| `git clone` 报 `Repository not found` 或要求登录 | 仓库是私有的，需要用有权限的 GitHub 账号登录（HTTPS 凭据或 SSH） |
+| `git clone` 报 `destination path ... already exists` | `$HOME/heliu` 已被占用：换一个目录名克隆，后面的 `cd` 跟着改 |
+| 看板端口 7788 被占 | 换个端口，例如 `bin/heliu board --project <项目名> --port 7789`（报错信息里也会给出建议） |
+| 想移除一个已接入的项目 | 删除 `~/Library/Application Support/heliu/projects/<项目名>/`（里面是它的注册表与缺省位置的台账）；被管理仓库本身不受影响 |
+
+### 卸载
+
+```bash
+scripts/uninstall.sh            # 想先看会做什么：scripts/uninstall.sh --dry-run
+```
+
+依次卸插件、删本地 marketplace、删 user 级 MCP（默认安装没有这一项，脚本会跳过）。不删台账与缓存：`~/Library/Application Support/heliu/`（注册表、台账、索引缓存）和 `~/.cache/heliu/`（合并演练与临时 worktree）都会保留，也不删 `node_modules`。
+
+## 命令速查
+
+全局选项：`--project <名>`（缺省按当前目录识别）· `--json`（稳定 JSON）· `--precheck`（试合）· `--wide`（表格不截断）。下表的 `heliu` 即仓库里的 `bin/heliu`。
+
+| 想做什么 | 命令 | MCP 工具 |
+|---|---|---|
+| 项目现在什么情况（健康条 + 现在最该做的） | `heliu status`（`--full` 全部分支长表） | `heliu_status` |
+| 某一版还欠什么 | `heliu 待办 [v1.2 / 下一版]`（`--precheck` 分出有冲突） | `heliu_milestone_todo` |
+| 登记新点子 | `heliu 新点子 "<一句话>" [--预约 v1.2 / --unreserved / --no-bind]` | `heliu_feature_add` |
+| 改预约 | `heliu 预约 F-0003 v1.3`（版本不存在就新建；写 `无` 取消预约） | `heliu_feature_reserve` |
+| 我在哪（分支 / 功能卡 / 预约 / 落后多少） | `heliu 我在哪` | `heliu_whereami` |
+| 把现有分支登记成草稿卡 | `heliu sync --dry-run` → `heliu sync` | `heliu_sync` |
+| 打开看板 | `heliu board [--port 7788] [--no-open]` | — |
+| 合并 · 预演（生成合并单，只读仓库） | `heliu 合并 v1.2 --预演`；改决定 `heliu release set v1.2 F-0012 顺延` | `heliu_release_preview`、`heliu_release_plan_set_decision` |
+| 合并 · 执行 | `heliu 合并 v1.2`（逐条确认；`--dry-run` 只说明会怎么做；`--to-main` 能快进才快进主线） | 不提供 |
+| 合并 · 演练（在克隆上完整跑一遍） | `heliu 演练 v1.2` | — |
+| 合并 · 回滚 | `heliu 回滚 v1.2` | — |
+| 会话 / 卫生 / 环境 | `heliu sessions` · `heliu hygiene` · `heliu doctor` | `heliu_sessions`、`heliu_hygiene` |
+| 里程碑 | `heliu milestone add / list / freeze / rename` | `heliu_milestone_list` |
+| 接入新仓库 | `heliu project add <路径> [--integration <分支>] [--ledger repo] [--yes]` | — |
+
+## 工作原理
+
+```mermaid
+flowchart TD
+    subgraph IN["输入（只读）"]
+        G["被管理的 git 仓库<br/>分支 · worktree · 提交"]
+        S["桌面应用会话记录<br/>标题 · 在等你回答什么 · 最后活动"]
+        C["本机缓存<br/>Stop hook 记下的最后活动"]
+    end
+    L["台账（承诺）<br/>milestones.yaml<br/>features/F-0001-标题.md"]
+    R["对账（事实）<br/>每次现算，不落盘<br/>领先/落后 · 是否进主线 · 试合冲突"]
+    G --> R
+    S --> R
+    C --> R
+    L --> R
+    R --> INJ["SessionStart hook<br/>会话开头注入【合流】提示"]
+    R --> CLI["CLI<br/>heliu status / 待办"]
+    R --> MCP["MCP 工具<br/>会话里一句话"]
+    R --> B["本机看板<br/>127.0.0.1"]
+    R --> P["合并单（预演）<br/>heliu 合并 vX --预演"]
+    MCP -- "登记新点子 / 改预约" --> L
+    P -- "你在终端逐条确认" --> X["合并执行<br/>只写集成分支 · tag · 能快进的主线"]
+    X -- "没兑现的功能" --> Y["顺延到下一版"] --> L
+```
+
+- **对账（事实，实时算、不落盘）**：每次都用只读 git 命令（`for-each-ref`、`rev-list`、`merge-base`、`merge-tree` 试合等）现算每个分支是否进了主线 / 集成分支、领先落后多少、试合会冲突哪些文件，再和桌面应用的会话记录（标题、在等你回答什么、最后活动）对上。iCloud 仓库的命令都带超时，超时标「未知」，不会卡死。
+- **台账（承诺，纯文本）**：`milestones.yaml` + 每张功能卡一个 `features/F-0001-<标题>.md`（frontmatter 记标题、状态、预约到哪一版、绑定的仓库/分支/会话、验收档位、从哪版顺延来）。只记 git 里没有的东西，人可以直接读改。
+- **hooks 零额外动作**：插件注册 SessionStart 与 Stop 两个 hook。会话一开始注入「你在哪个分支、对应哪张功能卡、预约哪一版、落后主线多少」；每轮结束把最后活动记进本机缓存。注入的提示会请会话在你明确提出新需求时调用 `heliu_feature_add` 登记（用你的原话当标题），你不用额外操作。
+- **看板**：本机网页（只监听 127.0.0.1），总览 / 版本列（拖卡片改预约）/ 卫生 / 会话 / 合并预演，浅深色随系统，手机宽度可看。
+
+## 安全承诺
+
+- **只读**：除了你确认过的 `heliu 合并`（和 `回滚`），所有命令对被管理仓库的 git 数据只读；git 调用走白名单，macOS 上再包一层 `sandbox-exec` 写保护；试合在临时对象区进行；`heliu 演练` 只在缓存目录的克隆上执行。台账如果按 `--ledger repo` 放进仓库，heliu 只写仓库里的 `.heliu/` 目录。
+- **合并只写三样东西**：集成分支、版本 tag，以及加了 `--to-main` 且能快进时的主线。有冲突的合并在 `~/.cache/heliu/` 下的临时 worktree 里做，不碰你的工作目录；每次移动引用都先记进合并单，可 `heliu 回滚`。
+- **不 push、不 fetch、不删分支、不删 worktree**。远端对比只用本地已有的引用；推送永远由你决定。
+- 台账写在你选的位置（缺省 `~/Library/Application Support/heliu/projects/<项目>/ledger/`），数据库只放在 `~/Library/Application Support/heliu/`，不放 iCloud。
+
+## 验证状态
+
+每个里程碑都经过两道验收：Fable 终验，加 Codex 以普通用户视角的二次验收（每个里程碑最多 3 轮）。M5 终验三轮的结论依次是：不通过 → 有保留 → 有保留，三轮各修了一个真实问题。Codex 第 3 轮的原话是「明天可以用来登记需求、管理下一版和查看分支落后」。
+
+| 项目 | 结论 | 依据 |
+|---|---|---|
+| 全量测试 | ✅ 229 个通过、0 失败（15 个测试文件），类型检查通过 | `bun test`、`bun run typecheck` |
+| 真装插件 + 真实桌面会话端到端 | ✅ 通过：会话里出现 13 个 `heliu_*` 工具与 `/heliu:heliu` Skill，直接查到 61 条待办 | [M5 验收记录](docs/04-验收记录/M5.md) 闸门一 |
+| 接入其他项目 | ✅ 通过：向导真实接入第二个项目，被管理仓库零写入 | [M5 实现说明](docs/03-架构/M5-实现说明.md) |
+| 三仓库扫描速度 | ✅ 终验三轮实测 0.52 / 0.6 / 1.61 秒，iCloud 仓库不卡死 | [M5 验收记录](docs/04-验收记录/M5.md) |
+| 合并执行（临时仓库） | ✅ 人工确认后合入 4 项、顺延 2 项，并生成发布说明 | [M5 验收记录](docs/04-验收记录/M5.md) 第 2、3 轮 |
+| 对真实仓库执行合并 | — 未执行（验收全程没有对真实仓库合并、push 或删分支） | 同上 |
+| 真实 Opus 解冲突端到端 | ⚠️ **未验证**：需要本机 `claude login` 后补跑 `heliu 演练` | [M4 实现说明](docs/03-架构/M4-实现说明.md)、[交付总结](docs/交付总结_20261026.md) |
+| 固件 / App 跨仓库演练 | ⚠️ **未验证**，列为 1.0 之后的遗留 | [M5 验收记录](docs/04-验收记录/M5.md) |
+
+## 文档索引
+
+| 文档 | 内容 |
+|---|---|
+| [使用教程](docs/教程.md) | 通俗版：三个词、四个日常动作、看板怎么看、常见情况怎么办、速查卡 |
+| [产品定义](docs/02-产品定义/产品定义_v0.1.md) | 做什么、为什么、看板信息架构、怎么算做成 |
+| [架构决策](docs/03-架构/架构决策_v0.1.md) | 7 条 ADR（技术栈、数据落点、git 只读纪律、hooks……） |
+| [里程碑任务卡与实现说明](docs/03-架构/) | `M1…M5-任务卡.md` 与 `M1…M5-实现说明.md`：每个里程碑的规格与实现细节、实测数字 |
+| [验收记录](docs/04-验收记录/) | 每个里程碑的验收记录（Fable 终验 + Codex 二次验收）、截图、[M4 演练报告](docs/04-验收记录/M4-演练报告.md) |
+| [现场证据](docs/00-现场证据/)、[调研](docs/01-调研/) | 现状快照、竞品与社区调研、Claude Code 接入点核实 |
+| [交付总结](docs/交付总结_20261026.md) | 调研结论、使用方式、五个里程碑验收结论、用户待办 |
+| [`skills/heliu/SKILL.md`](skills/heliu/SKILL.md) | 主控会话里怎么用 heliu 工具 |
+| [`docs/assets/README.md`](docs/assets/README.md) | 本页截图与终端输出怎么重新生成 |
+
+## 已知限制
+
+- 只在 macOS + Bun 1.3 上开发和验证过；写保护沙箱依赖 macOS 的 `sandbox-exec`，没有它时 `--precheck` 试合会被拒绝（看板上显示「未能试合」，不会当成无冲突）。
+- iCloud 仓库默认不做工作区脏检查（会触发文件下载），`--dirty` 才查。
+- 桌面应用的会话 JSON 没有官方文档：字段变了会逐项降级为「缺失」；目前会话记录里没有 `claude://` 链接，看板的「打开会话」按钮置灰，改为复制会话 ID。
+- 合并遇到普通文件冲突时交给 Claude 子代理解，需要本机 `claude` CLI 已登录；真实 Opus 解冲突还没有端到端验证过（见 M4 实现说明）。仓库没配集成分支的项不会被合并（默认顺延）。
+- 用 `--with-mcp` 额外注册 user 级 MCP 后，会话里 heliu 工具会出现两份（插件自带同名 MCP）；默认安装只有插件那一份。
+- 注册表里有多个项目后，在项目目录之外运行命令需要加 `--project <名>`。
+- 看板一次服务一个项目；拖拽改预约只支持桌面浏览器，手机上用卡片展开后的下拉。
+- 仓库放在 iCloud Drive 时，Claude 桌面应用的「预览」（`.claude/launch.json`）启动器拿不到 iCloud 目录的访问权（报 `Operation not permitted`），看板请在终端用 `bin/heliu board` 启动。
+- 在本仓库目录内开会话时，根目录的 `.mcp.json`（插件配置）会被当作项目级 MCP 配置再读一次，提示 `CLAUDE_PLUGIN_ROOT` 未定义；无害，插件自带的 `plugin:heliu:heliu` 才是生效的那份。
+
+## 许可
+
+私有项目，未附开源许可证（`package.json` 标记 `"private": true`，插件清单的 license 为 `UNLICENSED`）。
+
+<p align="right"><a href="#top">⬆ 回到顶部</a></p>
+# M6 任务卡：图形化上手入口（看板升级为可操作的起点）
+
+## 为什么
+用户原话："搭建一个图形化的可操作界面，让我可以快速入手这个项目。"
+现状：看板能看、能拖卡改预约，但**上手的每一步都在终端**——启动看板、环境自检、接入项目、把现有分支登记成卡、切换项目。看板启动时还绑死一个项目，多个项目时不加 `--project` 直接报错。
+
+## 不另起桌面应用
+ADR-2 已定：看板（本机 Web）就是 GUI 载体。M6 只把它从"对账单"升级成"上手入口"。
+
+## 交付
+1. **多项目**：服务端加项目中枢（项目名 → BoardService），所有项目级接口支持 `?project=`。`heliu board` 不带参数且识别不出项目时，照常启动，页面里选项目。
+2. **「开始」页**（新的第一个页签）：五步引导。
+   - ① 环境检查：`runDoctor` 结果分组显示；默认跳过无头 claude 探测，另有「完整检查」按钮（约 20 秒）。
+   - ② 接入项目：已注册项目卡片（打开 / 再加一个仓库）+ 接入向导（粘贴路径 → 只读检测 → 选集成分支、改名 → 确认接入）。台账一律放 heliu 数据目录，GUI 不提供 `--ledger repo`。
+   - ③ 把现有分支登记成卡：sync 预览 → 确认登记。
+   - ④ 开始日常使用：就地登记新点子；跳到版本列 / 合并预演；可复制的"在 Claude 会话里怎么说"。
+   - ⑤ 终端命令：当前项目的合并、演练、回滚命令，带复制按钮。
+3. **顶栏项目切换**：下拉切换项目，记住上次选择。
+4. **双击启动**：仓库根 `合流看板.command`。看板已在运行时直接打开浏览器，不报端口占用。
+5. 新接口：`GET /api/projects`、`GET /api/doctor`、`POST /api/projects/detect`（只读）、`POST /api/projects`（只写注册表 + 台账）。
+
+## 非目标（明确不做）
+- GUI 不执行合并、不演练、不回滚：沿用"看板只预演，执行在终端输入 yes"的约定，页面给出可复制命令。
+- GUI 不删项目、不改项目名、不把台账放进仓库。
+
+## 硬约束
+- 新写接口沿用三道防护：只听 127.0.0.1、Host 校验、写接口只收 JSON。
+- 检测走 `detectRepo`（git 白名单），接入走 `addRepoToProject` + `Ledger.init`。被管理仓库零写入。
+- 现有接口不带 `?project=` 时行为不变（测试全部保持通过）。
+
+## 验收
+1. `bun test` + typecheck 全绿；新增测试：项目列表、`?project=` 路由、无项目时的友好报错、检测不写任何文件、接入只写 HELIU_HOME 且仓库零写入、doctor 接口。
+2. 内置浏览器实测：首次打开落在「开始」；向导接入一个临时仓库并登记草稿卡；顶栏切换项目；375px 可读。
+3. 双击启动脚本：看板未运行时启动并打开；已运行时直接打开。
+4. Codex 以新手视角验收（`scripts/codex-accept.sh M6 1 --ref <提交> --serve <端口>`），≤3 轮。
+# M7 任务卡：星图（宇宙星河风格的分支关系图 + 拖拽连线）
+
+## 用户原话
+1. 视觉像宇宙、星河、流变；能在多个分支间快速找到最新的分支，以及其他单独分支的情况；快速展开，科技感、动态、丝滑。可以从纵横之间得知项目每个节点的关系。
+2. 交互尽可能多用拖拉拽，类似拼图和线段连接：在线条里看到项目之间的关联；也能在交互中快速把某个子功能与一个节点合并。
+
+## 范围
+新增一个页签「星图」，其他页签风格不变（"清晰 > 花哨"已过 Codex 新手验收）。星图画布常驻深色宇宙风；页面外框跟随系统主题。
+
+## 纵横布局（确定性，不用力导向）
+- **横轴 = 时间**：每条分支的最后提交时间，越靠右越新；用平方根刻度，最近几天展得开，几个月前的压在左边。刻度：今天 / 3 天 / 1 周 / 1 月 / 更早。
+- **纵轴 = 仓库泳道**：每个仓库一条带；带内有两条"星河主流"——主线、集成分支；功能分支是星点，按状态分层排在带内。
+- **右侧 = 版本星座**：每个里程碑一颗"行星"，外加「未预约」。功能卡与它预约的版本之间画细连线（星座线）。
+- **流线**：功能分支到它的目标主流画一条曲线。已进集成 = 亮实线汇入；独立未合并 = 流动虚线；有冲突 = 红；落后 = 暗黄并标 ↓N；等你回答 = 紫色脉冲。集成分支到主线画"未并回"长弧，标领先数和天数。
+- **最新**：最后提交最新的 3 条分支加光晕呼吸和「最新」标记；搜索框高亮匹配。
+- 同一张功能卡绑定了多个仓库的分支（如固件 + App）时，卡片星点与各分支之间连线，跨泳道看得到关联。
+
+## 拖拽（Pointer Events，鼠标和触屏都能用；拖动时从起点牵出一条发光线段，可放的目标会亮起）
+| 拖什么 | 放到哪 | 发生什么（只写台账 / 合并单） |
+|---|---|---|
+| 分支星点（已有卡） | 版本行星 | 改预约到该版本 |
+| 分支星点（还没卡） | 版本行星 | 以分支标签为标题新建功能卡，绑定该分支，预约到该版本 |
+| 分支星点 | 尚未关联分支的功能卡星点 | 把分支绑定到这张卡 |
+| 任意功能卡 / 分支 | 「未预约」 | 取消预约 |
+| 功能卡 / 分支 | 集成主流（「合流点」） | 排进它所在版本的合并单并把决定设为「并入」，立刻显示这一项的试合结果（冲突文件数）和执行命令 |
+
+**边界（明确）**：拖到合流点**不执行 git 合并**。真正的合并仍在终端 `heliu 合并 <版本>`，看到摘要后输入 yes 才开始，可回滚（ADR-4 不变）。如果用户要求拖拽直接执行合并，单独再改安全约定。
+
+## 新接口
+- `POST /api/features` 支持 `bind: {repo, branch}`：从分支建卡（已有卡的分支拒绝并报卡号）。
+- `POST /api/features/:id/bind` `{repo, branch}`：绑定分支。
+- `POST /api/release/decision` `{feature, decision, milestone?}`：必要时先预约 → 刷新合并单（保留已改的决定）→ 设决定；返回该项的试合结果与终端命令。
+
+## 动效与性能
+- 星空背景：canvas 粒子缓慢漂移闪烁；主流：渐变描边 + 流动 dash 动画；星点：径向渐变 + 光晕；进入时星点依次展开。
+- `prefers-reduced-motion` 时全部静止。数据只来自 `/api/status` + `/api/features`（20 秒缓存），绝不按帧或按节点请求。
+- 手写 SVG + CSS，不引入图形库。375px 宽可横向滚动查看，拖拽在触屏同样可用。
+
+## 验收
+1. 新接口测试：从分支建卡、重复建卡拒绝、绑定、设并入（含自动预约与刷新合并单）、被管理仓库零写入。
+2. 内置浏览器实测：磁吸背夹 119 条分支流畅显示；最新分支一眼可见；拖分支到版本行星生效；拖到合流点出现试合结果；375px 可用。
+3. Codex 以新手视角与 M6 合并验收。
+
+exec
+/bin/zsh -lc "rg -n 'heliu|合流' /Users/linxiansheng/.codex/memories/MEMORY.md" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ exited 1 in 0ms:
+mcp: cua_repl/js started
+mcp: cua_repl/js (failed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc 'curl -sS http://127.0.0.1:7796/api/projects' in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 0ms:
+{"schemaVersion":1,"command":"project.list","generatedAt":"2026-10-28T08:28:04.584Z","project":null,"data":{"registry":"/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects","heliuRoot":"/private/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2","default":"磁吸背夹","projects":[{"name":"patent-figure-kit","source":"/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/patent-figure-kit/project.yaml","error":null,"repos":[{"id":"patent-figure-kit","label":"patent-figure-kit","path":"/Users/linxiansheng/development/patent-figure-kit","main":"main","integration":"pisen-ailab-v1","remote":"origin","icloud":false,"exists":true}],"ledgerDir":"/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M7-r1-af6a5d2-heliu-home/projects/patent-figure-kit/ledger","features":0,"open":0,"next":null},{"name":"磁吸背夹","source":"/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/磁吸背夹/project.yaml","error":null,"repos":[{"id":"docs","label":"文档仓","path":"/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹","main":"main","integration":"claude/merge-features-refactor-143693","remote":"github","icloud":true,"exists":true},{"id":"firmware","label":"固件仓","path":"/Users/linxiansheng/.cache/backclip-web/esp_claw","main":"release/backclip-1.1","integration":"feat/aios-entry","remote":"github","icloud":false,"exists":true},{"id":"app","label":"App 仓","path":"/Users/linxiansheng/.cache/backclip-app-gitlab-20261015","main":"release/backclip-1.0","integration":null,"remote":"github","icloud":false,"exists":true}],"ledgerDir":"/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T//heliu-accept/M7-r1-af6a5d2-heliu-home/projects/磁吸背夹/ledger","features":61,"open":61,"next":"vNext"}]},"meta":null}
+exec
+/bin/zsh -lc "git status --short; rg --files -g AGENTS.md -g '*board*' -g '*galaxy*' -g '*start*' src web tests" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 0ms:
+tests/start.test.ts
+tests/board.test.ts
+web/galaxy-model.ts
+web/galaxy.tsx
+tests/galaxy.test.ts
+web/board.tsx
+tests/onboard.test.ts
+web/start.tsx
+src/core/onboard.ts
+src/board/onboard.ts
+tests/helpers/board-probe.ts
+
+exec
+/bin/zsh -lc 'curl -sS http://127.0.0.1:7796/api/doctor' in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 560ms:
+{"schemaVersion":1,"command":"doctor","generatedAt":"2026-10-28T08:28:05.183Z","project":null,"data":{"checks":[{"id":"git","ok":true,"level":"ok","message":"git 2.50.1"},{"id":"bun","ok":true,"level":"ok","message":"bun 1.3.4"},{"id":"sandbox","ok":true,"level":"ok","message":"sandbox-exec 可用：试合在写保护沙箱里进行，合并执行与演练也包在沙箱里"},{"id":"headless-claude","ok":true,"level":"warn","message":"无头 claude：这次没检查（约 20 秒，点「完整检查」才做）"},{"id":"desktop-sessions","ok":true,"level":"ok","message":"桌面会话 285 条可读（285 个文件）：/Users/linxiansheng/Library/Application Support/Claude/claude-code-sessions"},{"id":"git-worktrees-json","ok":true,"level":"ok","message":"git-worktrees.json 登记 65 个 worktree"},{"id":"running-sessions","ok":true,"level":"ok","message":"运行中会话目录可读：4 个存活 / 4 个记录"},{"id":"registry","ok":true,"level":"ok","message":"注册表：/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects（patent-figure-kit、磁吸背夹）"},{"id":"project:patent-figure-kit","ok":true,"level":"ok","message":"项目「patent-figure-kit」：1 个仓库（/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/patent-figure-kit/project.yaml）"},{"id":"repo:patent-figure-kit/patent-figure-kit","ok":true,"level":"ok","message":"patent-figure-kit（patent-figure-kit） 可达：/Users/linxiansheng/development/patent-figure-kit"},{"id":"repo:patent-figure-kit/patent-figure-kit:integration","ok":true,"level":"ok","message":"patent-figure-kit（patent-figure-kit） 集成分支 pisen-ailab-v1（heliu 合并的目标）"},{"id":"project:磁吸背夹","ok":true,"level":"ok","message":"项目「磁吸背夹」：3 个仓库（/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/磁吸背夹/project.yaml）"},{"id":"repo:磁吸背夹/docs","ok":true,"level":"ok","message":"文档仓（docs） 可达：/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹"},{"id":"repo:磁吸背夹/docs:integration","ok":true,"level":"ok","message":"文档仓（docs） 集成分支 claude/merge-features-refactor-143693（heliu 合并的目标）"},{"id":"repo:磁吸背夹/docs:icloud","ok":true,"level":"warn","message":"文档仓（docs） 在 iCloud 上：工作区脏检查默认跳过（--dirty 才做，单个 worktree 可能超时）"},{"id":"repo:磁吸背夹/firmware","ok":true,"level":"warn","message":"固件仓（firmware） 可达：/Users/linxiansheng/.cache/backclip-web/esp_claw；本地没有 github/release/backclip-1.1（只用已有引用，不会 fetch）"},{"id":"repo:磁吸背夹/firmware:integration","ok":true,"level":"ok","message":"固件仓（firmware） 集成分支 feat/aios-entry（heliu 合并的目标）"},{"id":"repo:磁吸背夹/app","ok":true,"level":"ok","message":"App 仓（app） 可达：/Users/linxiansheng/.cache/backclip-app-gitlab-20261015"},{"id":"repo:磁吸背夹/app:integration","ok":true,"level":"warn","message":"App 仓（app） 未配置集成分支：heliu 合并不会合入该仓库的分支（这些项默认顺延）；需要时在 project.yaml 给该仓库加 integration"}],"full":false,"ms":599,"counts":{"ok":15,"warn":4,"fail":0}},"meta":null}
+codex
+Chrome 可以打开看板，首次确实落在「开始」页，五步引导和“终端输入 yes 才合并”的说明都能看到。我接下来用临时小仓库走完整接入流程，再查看真实项目的星图可读性。
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import tempfile,subprocess,pathlib,json
+p=pathlib.Path(tempfile.mkdtemp(prefix='heliu-newuser-',dir='/private/tmp'))
+r=p/'demo';r.mkdir()
+def git(*args,cwd=r): return subprocess.check_output(['git',*args],cwd=cwd,text=True).strip()
+git('init','-b','main');git('config','user.name','Heliu Acceptance');git('config','user.email','acceptance@example.invalid')
+(r/'README.md').write_text('New user demo\\n');git('add','README.md');git('commit','-m','Initial demo')
+(r/'README.md').write_text('New user demo\\nTwo commits on main\\n');git('add','README.md');git('commit','-m','Document demo')
+git('branch','integration');git('worktree','add','-b','feat/moon',str(p/'moon'))
+(p/'moon'/'moon.txt').write_text('Moon feature\\n');git('add','moon.txt',cwd=p/'moon');git('commit','-m','Add moon feature',cwd=p/'moon')
+(p/'context.json').write_text(json.dumps({'root':str(p),'repo':str(r),'project':'新手星河验收'}))
+print((p/'context.json').read_text())
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 256ms:
+Preparing worktree (new branch 'feat/moon')
+{"root": "/private/tmp/heliu-newuser-u70hcb4h", "repo": "/private/tmp/heliu-newuser-u70hcb4h/demo", "project": "\u65b0\u624b\u661f\u6cb3\u9a8c\u6536"}
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "sed -n '1,250p' src/board/onboard.ts; rg -n 'api/(features|release/decision|sync|projects)|dry_run' src/board web/start.tsx web/galaxy.tsx" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 62ms:
+/**
+ * 看板接入向导（M6）：与 `heliu project add` 同一套规则，只是把"问答"换成网页表单。
+ *
+ * - detect：只读检测（detectRepo 走 git 白名单），不写任何文件。
+ * - add：写注册表（addRepoToProject）并建台账（Ledger.init）。台账一律放 heliu 数据目录；
+ *   项目已存在时沿用它原来的 ledger 设置。被管理仓库零写入。
+ */
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, join } from "node:path";
+import YAML from "yaml";
+import { Ledger } from "../core/ledger.ts";
+import { detectRepo } from "../core/onboard.ts";
+import { canonicalPath, type HeliuPaths } from "../core/paths.ts";
+import { addRepoToProject, expandPath, listProjectNames, loadProject, ProjectError, projectFile } from "../core/project.ts";
+import type { DetectData, OnboardResult } from "./api-types.ts";
+import { summarizeProject } from "./hub.ts";
+
+const tildify = (p: string) => (p === homedir() || p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p);
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+/** 把用户粘贴的路径整理一下：去掉引号、首尾空白、file:// 前缀，展开 ~ */
+export function cleanPath(raw: unknown): string {
+  let p = typeof raw === "string" ? raw.trim() : "";
+  if (!p) throw new ProjectError("请先填一个 git 仓库的路径（在 Finder 里选中文件夹，按 ⌥⌘C 可以复制路径）");
+  p = p.replace(/^['"]+|['"]+$/g, "").trim();
+  if (p.startsWith("file://")) p = decodeURIComponent(p.slice("file://".length));
+  if (!p.startsWith("/") && !p.startsWith("~")) throw new ProjectError(`请填绝对路径（以 / 或 ~ 开头）：${p}`);
+  return expandPath(p, homedir());
+}
+
+/** 名字里不能有路径分隔符（注册表按名字建目录） */
+function cleanName(raw: string): string {
+  const n = raw.trim();
+  if (!n) throw new ProjectError("项目名不能为空");
+  if (/[/\\]/.test(n) || n === "." || n === "..") throw new ProjectError(`项目名里不能有 / 或 \\：${n}`);
+  return n;
+}
+
+function existingLedger(paths: HeliuPaths, name: string): string | null {
+  const f = projectFile(paths, name);
+  if (!existsSync(f)) return null;
+  try {
+    const raw = YAML.parse(readFileSync(f, "utf8")) as { ledger?: unknown };
+    return typeof raw?.ledger === "string" ? raw.ledger : null;
+  } catch {
+    return null;
+  }
+}
+
+function ledgerPlan(paths: HeliuPaths, name: string): { dir: string; setting: string | null; note: string } {
+  const old = existingLedger(paths, name);
+  if (old) return { dir: expandPath(old, join(paths.projectsDir, name)), setting: null, note: "沿用这个项目原来的台账位置" };
+  if (existsSync(projectFile(paths, name))) {
+    // 已有项目但 project.yaml 没写 ledger：只有 <主仓库>/.heliu/ 已经在用时才沿用；否则放数据目录，绝不在仓库里新建
+    try {
+      const L = Ledger.of(loadProject(paths, name));
+      if (L.exists()) return { dir: L.dir, setting: null, note: "沿用这个项目已经在用的台账（在仓库的 .heliu/ 里）" };
+    } catch {
+      /* 落到下面 */
+    }
+  }
+  const dir = join(paths.projectsDir, name, "ledger");
+  return { dir, setting: tildify(dir), note: "放在 heliu 数据目录，不往你的仓库里写任何文件" };
+}
+
+export async function detectForBoard(paths: HeliuPaths, body: Record<string, unknown>): Promise<DetectData> {
+  const path = cleanPath(body.path);
+  if (!existsSync(path)) throw new ProjectError(`这个路径不存在：${path}`);
+  const detection = await detectRepo(path, { main: str(body.main), integration: str(body.integration), remote: str(body.remote) });
+  const suggestedName = cleanName(str(body.name) ?? basename(detection.root));
+  const lp = ledgerPlan(paths, suggestedName);
+  return {
+    detection,
+    suggestedName,
+    existingProjects: listProjectNames(paths),
+    registryExists: existsSync(projectFile(paths, suggestedName)),
+    ledgerDir: lp.dir,
+    ledgerNote: lp.note,
+  };
+}
+
+export async function addForBoard(paths: HeliuPaths, body: Record<string, unknown>): Promise<OnboardResult> {
+  const path = cleanPath(body.path);
+  if (!existsSync(path)) throw new ProjectError(`这个路径不存在：${path}`);
+  const name = cleanName(str(body.name) ?? basename(path));
+  // integration：字符串 = 用它；null / "" = 不设；不传 = 按检测结果猜
+  let integration: string | undefined;
+  if (typeof body.integration === "string") integration = body.integration.trim() || undefined;
+  else if (body.integration === undefined) integration = (await detectRepo(path, { main: str(body.main), remote: str(body.remote) })).integration ?? undefined;
+  const lp = ledgerPlan(paths, name);
+  // 同一个仓库再接入一次（例如改集成分支）：保留它原来的 id 和显示名（如「文档仓」）
+  let keep: { id?: string; label?: string } = {};
+  if (existsSync(projectFile(paths, name))) {
+    try {
+      const root = canonicalPath(path);
+      const old = loadProject(paths, name).repos.find((r) => { const rp = canonicalPath(r.path); return root === rp || root.startsWith(`${rp}/`); });
+      if (old) keep = { id: old.id, label: old.label };
+    } catch {
+      /* 注册表坏了交给 addRepoToProject 报错 */
+    }
+  }
+  const res = await addRepoToProject(paths, {
+    path,
+    name,
+    ...keep,
+    main: str(body.main),
+    integration,
+    remote: str(body.remote),
+    ledger: lp.setting,
+  });
+  const ledger = Ledger.of(loadProject(paths, name)).init();
+  return { project: summarizeProject(paths, name), created: res.created, repo: res.repo, ledger };
+}
+web/start.tsx:227:      const r = await api<DetectData>("/api/projects/detect", { body: { path } });
+web/start.tsx:247:      const r = await api<OnboardResult>("/api/projects", {
+web/start.tsx:438:  const q = `/api/sync?project=${encodeURIComponent(project)}`;
+web/start.tsx:443:      const r = await api<SyncView>(q, { body: { dry_run: dry } });
+web/start.tsx:528:      const r = await api<{ feature: { id: string; milestone: string | null }; milestoneCreated: string | null }>("/api/features", { body: { title: title.trim() } });
+web/galaxy.tsx:73:  const features = useApi<FeaturesData>(`/api/features?precheck=${precheck ? 1 : 0}`, [tick]);
+web/galaxy.tsx:165:    const r = await api<{ feature: { id: string; title: string; milestone: string | null } }>("/api/features", { body: { bind: { repo: n.repo, branch: n.branch }, milestone } });
+web/galaxy.tsx:176:          await api(`/api/features/${id}`, { method: "PATCH", body: { milestone: ms } });
+web/galaxy.tsx:184:        await api(`/api/features/${t.node.card.id}/bind`, { body: { repo: n.repo, branch: n.branch } });
+web/galaxy.tsx:190:        const r = await api<ReleaseDecisionResult>("/api/release/decision", { body: { feature: id } });
+src/board/server.ts:94:  app.get("/api/projects", (c) => send(c, "project.list", hub.projects()));
+src/board/server.ts:103:  app.post("/api/projects/detect", async (c) => send(c, "project.detect", await detectForBoard(opts.paths, await body(c))));
+src/board/server.ts:104:  app.post("/api/projects", async (c) => {
+src/board/server.ts:131:  app.get("/api/features", async (c) => {
+src/board/server.ts:138:  app.get("/api/features/:id/baseline", async (c) => {
+src/board/server.ts:160:  app.post("/api/features", async (c) => {
+src/board/server.ts:169:  app.post("/api/features/:id/bind", async (c) => {
+src/board/server.ts:173:  app.post("/api/release/decision", async (c) => {
+src/board/server.ts:177:  app.patch("/api/features/:id", async (c) => {
+src/board/server.ts:181:  app.post("/api/sync", async (c) => {
+src/board/server.ts:184:    const dry = b.dry_run ?? b.dryRun;
+src/board/server.ts:325:/** 某个地址上跑的是不是合流看板（/api/projects 返回 project.list） */
+src/board/server.ts:328:    const r = await fetch(`${base}api/projects`, { signal: AbortSignal.timeout(2000) });
+src/board/api-types.ts:331:/* ───────────── sync（POST /api/sync，结构同 src/core/sync.ts 的 SyncResult，前端只用这些字段） ───────────── */
+src/board/api-types.ts:441:/* ───────────── M7：星图拖到合流点（POST /api/release/decision） ───────────── */
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import urllib.request,json,pathlib
+p=pathlib.Path('/private/tmp/heliu-newuser-u70hcb4h')
+for name in ['status','features']:
+ url='http://127.0.0.1:7796/api/'+name+'?project='+urllib.parse.quote('磁吸背夹')
+ d=json.load(urllib.request.urlopen(url));(p/(name+'.json')).write_text(json.dumps(d,ensure_ascii=False,indent=2));print(name,json.dumps(d,ensure_ascii=False)[:6500])
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 2144ms:
+status {"schemaVersion": 1, "command": "status", "generatedAt": "2026-10-28T08:29:33.658Z", "project": {"name": "磁吸背夹", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/磁吸背夹/project.yaml"}, "data": {"schemaVersion": 1, "generatedAt": "2026-10-28T08:29:29.173Z", "elapsedMs": 4479, "project": {"name": "磁吸背夹", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/磁吸背夹/project.yaml"}, "options": {"precheck": false, "dirty": false, "timeoutMs": 8000}, "repos": [{"id": "docs", "label": "文档仓", "path": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹", "icloud": true, "main": "main", "integration": "claude/merge-features-refactor-143693", "remote": "github", "reachable": true, "error": null, "warnings": [], "counts": {"branches": 80, "worktrees": 59, "mergedIntoMain": 26, "unmergedIntoMain": 54, "inIntegration": 13, "independent": 40, "neverPushed": 64}, "health": {"mainVsRemote": {"remoteRef": "refs/remotes/github/main", "ahead": 7, "behind": 5, "note": null}, "integration": {"branch": "claude/merge-features-refactor-143693", "exists": true, "mergedIntoMain": false, "aheadOfMain": 102, "behindMain": 0, "since": "2026-10-22T14:02:12.000Z", "unmergedDays": 5}, "worktreeDirty": {"clean": 0, "dirty": 0, "unknown": 0, "skipped": 60}, "hygieneWarnings": 13, "hygieneInfos": 16}, "branches": [{"branch": "claude/ai-phone-assistant-routing-a16f5a", "ref": "refs/heads/claude/ai-phone-assistant-routing-a16f5a", "sha": "1298c4cbe08b961473ca08c20892de6dcd8396df", "role": "feature", "mergedState": "unmerged", "label": "AI电话助手来电路由与语气定制", "labelSource": "session", "randomName": false, "lastCommitAt": "2026-10-28T08:26:06.000Z", "lastCommitSubject": "docs: 补记电话秘书写入云端密钥、首通来电失败与串口复位", "vsMain": {"ahead": 3, "behind": 0}, "vsIntegration": {"ahead": 3, "behind": 102}, "upstream": null, "pushed": false, "worktree": {"path": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/ai-phone-assistant-routing-a16f5a", "dirName": "ai-phone-assistant-routing-a16f5a", "isMain": false, "dirty": "skipped"}, "sessions": [{"sessionId": "local_b7ec8a51-a58e-4ef7-bdfc-e12ee36d9804", "title": "AI电话助手来电路由与语气定制", "status": "online", "statusCategory": "completed", "needsAction": null, "isArchived": false, "lastActivityAt": "2026-10-28T08:27:48.471Z", "link": "branch", "prs": []}], "precheck": null}, {"branch": "claude/ai-phone-assistant-flow-514859", "ref": "refs/heads/claude/ai-phone-assistant-flow-514859", "sha": "23c5bd0f6c8d34fa31aa1e5ae8953469c20573aa", "role": "feature", "mergedState": "unmerged", "label": "AI电话助手链路整理", "labelSource": "session", "randomName": false, "lastCommitAt": "2026-10-26T08:01:18.000Z", "lastCommitSubject": "docs: 整理 AI 电话助手当前链路图", "vsMain": {"ahead": 1, "behind": 0}, "vsIntegration": {"ahead": 1, "behind": 102}, "upstream": null, "pushed": false, "worktree": {"path": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/ai-phone-assistant-flow-514859", "dirName": "ai-phone-assistant-flow-514859", "isMain": false, "dirty": "skipped"}, "sessions": [{"sessionId": "local_10081ed7-de6b-44e0-8424-44edef39e399", "title": "AI电话助手链路整理", "status": "completed", "statusCategory": "completed", "needsAction": null, "isArchived": false, "lastActivityAt": "2026-10-26T08:28:34.459Z", "link": "branch", "prs": []}], "precheck": null}, {"branch": "claude/ai-efficiency-system-research-9ddd65", "ref": "refs/heads/claude/ai-efficiency-system-research-9ddd65", "sha": "4768eb0321418d7da0d329eb6c7739f1e8c2ca1a", "role": "feature", "mergedState": "unmerged", "label": "AI单点提效系统化方案调研", "labelSource": "session", "randomName": false, "lastCommitAt": "2026-10-26T04:07:26.000Z", "lastCommitSubject": "docs: 新增 AI 单点提效体系化调研与上层框架", "vsMain": {"ahead": 1, "behind": 0}, "vsIntegration": {"ahead": 1, "behind": 102}, "upstream": null, "pushed": false, "worktree": {"path": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/ai-efficiency-system-research-9ddd65", "dirName": "ai-efficiency-system-research-9ddd65", "isMain": false, "dirty": "skipped"}, "sessions": [{"sessionId": "local_4e03bcfb-95bb-4d58-9ee2-936c399e1e12", "title": "AI单点提效系统化方案调研", "status": "completed", "statusCategory": "completed", "needsAction": null, "isArchived": false, "lastActivityAt": "2026-10-26T04:08:34.476Z", "link": "branch", "prs": []}], "precheck": null}, {"branch": "claude/merge-features-refactor-143693", "ref": "refs/heads/claude/merge-features-refactor-143693", "sha": "4329a384f567f57a44dda7cb2778d06f700510d4", "role": "integration", "mergedState": "unmerged", "label": "功能分支合并与代码重构", "labelSource": "session", "randomName": false, "lastCommitAt": "2026-10-23T12:18:25.000Z", "lastCommitSubject": "docs(AIOS): App 记录页分支/标签装机验证与截图", "vsMain": {"ahead": 102, "behind": 0}, "vsIntegration": null, "upstream": null, "pushed": false, "worktree": {"path": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/ai-engineering-content-bfff84", "dirName": "ai-engineering-content-bfff84", "isMain": false, "dirty": "skipped"}, "sessions": [{"sessionId": "local_6c0dca96-8321-4c28-95d6-47e61f98ce28", "title": "功能分支合并与代码重构", "status": "blocked", "statusCategory": "blocked", "needsAction": "将背夹 USB 线从电脑拔下，等 3 秒后插回，然后告诉助手", "isArchived": false, "lastActivityAt": "2026-10-24T20:47:12.501Z", "link": "branch", "prs": []}], "precheck": null}, {"branch": "claude/api-key-model-selection-7f08ac", "ref": "refs/heads/claude/api-key-model-selection-7f08ac", "sha": "9f6aab6fe11963e2e92881df82c9bbabd03724e6", "role": "feature", "mergedState": "unmerged", "label": "API key model selection configuration", "labelSource": "session", "randomName": false, "lastCommitAt": "2026-10-23T04:15:54.000Z", "lastCommitSubject": "docs: 记录对话模型服务商与思维链深度（App + 固件）", "vsMain": {"ahead": 1, "behind": 0}, "vsIntegration": {"ahead": 1, "behind": 102}, "upstream": null, "pushed": false, "worktree": {"path": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/api-key-model-selection-7f08ac", "dirName": "api-key-model-selection-7f08ac", "isMain": false, "dirty": "skipped"}, "sessions": [{"sessionId": "local_ba9e5735-7aa7-4888-ac03-860eb99bc913", "title": "API key model selection configuration", "status": "completed", "statusCategory": "completed", "needsAction": null, "isArchived": false, "lastActivityAt": "2026-10-
+features {"schemaVersion": 1, "command": "feature.list", "generatedAt": "2026-10-28T08:29:34.688Z", "project": {"name": "磁吸背夹", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/磁吸背夹/project.yaml"}, "data": {"columns": [{"key": "vNext", "kind": "milestone", "title": "vNext", "milestone": {"id": "vNext", "title": "", "status": "规划中", "target_date": null, "integration_branch": null, "notes": ""}, "droppable": true, "dropHint": null, "isNext": true, "owed": 61, "mergeable": 40, "conflict": 11, "precheckFailed": 0, "waiting": 10, "precheckSummary": {"requested": true, "status": "checked", "conflicts": 11, "failed": 0, "unchecked": 0, "firstError": null}, "cards": [{"id": "F-0037", "title": "同步本地 main 与 GitHub main（解决三份总览冲突）", "status": "开发中", "acceptance": "未", "milestone": "vNext", "column": "vNext", "rolledFrom": [], "source": "sync", "group": "blocked", "light": "purple", "lightText": "等你回答", "needsAction": "决定先合并 PR #2 还是 #4（合完后本地 main 快进到 github/main）", "note": null, "suggestion": null, "suggestStatus": null, "variant": "normal", "nextStep": "等你回答：决定先合并 PR #2 还是 #4（合完后本地 main 快进到 github/main）", "tags": [{"kind": "stale", "text": "停滞 9 天"}], "lastActivityAt": "2026-10-19T03:08:43.361Z", "idleDays": 9, "done": false, "doneNote": null, "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/sync-main-github-20261019", "label": "同步本地 main 与 GitHub main（解决三份总览冲突）", "randomName": false, "exists": true, "role": "feature", "mergedState": "in_integration", "vsMain": {"ahead": 6, "behind": 0}, "vsIntegration": {"ahead": 0, "behind": 96}, "integration": "claude/merge-features-refactor-143693", "main": "main", "precheckTarget": null, "conflictFiles": null, "conflicts": [], "precheckError": null, "precheckState": null, "lastCommitAt": "2026-10-19T03:05:53.000Z", "worktree": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/magnetic-clip-video-script-d51364", "session": {"id": "local_2173e07d-558e-47e8-afd5-e8991d6bc7fb", "title": "同步本地 main 与 GitHub main（解决三份总览冲突）", "status": "blocked", "needsAction": "决定先合并 PR #2 还是 #4（合完后本地 main 快进到 github/main）", "lastActivityAt": "2026-10-19T03:08:43.361Z", "link": null}}], "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/磁吸背夹/ledger/features/F-0037-同步本地-main-与-GitHub-main（.md"}, {"id": "F-0035", "title": "语音链路端到端闭环测试", "status": "开发中", "acceptance": "未", "milestone": "vNext", "column": "vNext", "rolledFrom": [], "source": "sync", "group": "blocked", "light": "purple", "lightText": "等你回答", "needsAction": "把背夹 USB 和手机 ADB 接回电脑", "note": null, "suggestion": null, "suggestStatus": null, "variant": "normal", "nextStep": "等你回答：把背夹 USB 和手机 ADB 接回电脑", "tags": [{"kind": "stale", "text": "停滞 9 天"}], "lastActivityAt": "2026-10-18T16:02:00.412Z", "idleDays": 9, "done": false, "doneNote": null, "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/voice-e2e-loop-testing-dee94b", "label": "语音链路端到端闭环测试", "randomName": false, "exists": true, "role": "feature", "mergedState": "in_integration", "vsMain": {"ahead": 15, "behind": 0}, "vsIntegration": {"ahead": 0, "behind": 87}, "integration": "claude/merge-features-refactor-143693", "main": "main", "precheckTarget": null, "conflictFiles": null, "conflicts": [], "precheckError": null, "precheckState": null, "lastCommitAt": "2026-10-16T15:14:12.000Z", "worktree": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/voice-e2e-loop-testing-dee94b", "session": {"id": "local_4264300b-5ffe-4df1-be46-fe62f7703a8a", "title": "语音链路端到端闭环测试", "status": "blocked", "needsAction": "把背夹 USB 和手机 ADB 接回电脑", "lastActivityAt": "2026-10-18T16:02:00.412Z", "link": null}}], "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/磁吸背夹/ledger/features/F-0035-语音链路端到端闭环测试.md"}, {"id": "F-0032", "title": "评估系统首页落地路线：原生 C 重写 vs 主题外壳", "status": "开发中", "acceptance": "未", "milestone": "vNext", "column": "vNext", "rolledFrom": [], "source": "sync", "group": "blocked", "light": "purple", "lightText": "等你回答", "needsAction": "回答 Q1–Q12（建议先答 Q5、Q7、Q10）", "note": null, "suggestion": null, "suggestStatus": null, "variant": "normal", "nextStep": "等你回答：回答 Q1–Q12（建议先答 Q5、Q7、Q10）", "tags": [{"kind": "stale", "text": "停滞 11 天"}], "lastActivityAt": "2026-10-16T15:19:40.304Z", "idleDays": 11, "done": false, "doneNote": null, "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/elegant-gauss-1552b1", "label": "评估系统首页落地路线：原生 C 重写 vs 主题外壳", "randomName": true, "exists": true, "role": "feature", "mergedState": "in_integration", "vsMain": {"ahead": 1, "behind": 0}, "vsIntegration": {"ahead": 0, "behind": 101}, "integration": "claude/merge-features-refactor-143693", "main": "main", "precheckTarget": null, "conflictFiles": null, "conflicts": [], "precheckError": null, "precheckState": null, "lastCommitAt": "2026-10-16T14:38:18.000Z", "worktree": "/Users/linxiansheng/Library/Mobile Documents/com~apple~CloudDocs/磁吸背夹/.claude/worktrees/elegant-gauss-1552b1", "session": {"id": "local_76ea2a7a-2d88-4b7b-8363-7e59b4ccc6f5", "title": "评估系统首页落地路线：原生 C 重写 vs 主题外壳", "status": "blocked", "needsAction": "回答 Q1–Q12（建议先答 Q5、Q7、Q10）", "lastActivityAt": "2026-10-16T15:19:40.304Z", "link": null}}], "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/磁吸背夹/ledger/features/F-0032-评估系统首页落地路线：原生-C-重写-vs-主题.md"}, {"id": "F-0020", "title": "主题系统架构设计", "status": "开发中", "acceptance": "未", "milestone": "vNext", "column": "vNext", "rolledFrom": [], "source": "sync", "group": "blocked", "light": "purple", "lightText": "等你回答", "needsAction": "选要做哪几件：1 刷 c38a2762 语音固件；2 推送小家外壳；3 推送语音固件到公开仓库", "note": null, "suggestion": null, "suggestStatus": null, "variant": "normal", "nextStep": "等你回答：选要做哪几件：1 刷 c38a2762 语音固件；2 推送小家外壳；3 推送语音固件到公开仓库", "tags": [{"kind": "conflict", "text": "冲突 1 文件"}, {"kind": "behind", "text": "落后 ↓116"}, {"kind": "stale", "text": "停滞 13 天"}], "lastActivityAt": "2026-10-15T03:44:25.286Z", "idleDays": 13, "done": false, "doneNote": null, "bindings": [{"repo": "docs", "repoLabel": "文档仓", "branch": "claude/theme-system-architecture-1cbb25", "label": "主题系统架构设计", "randomName": false, "exists": true, "role": "feature", "mergedState": "unmerged", "vsMain": {"ahead": 10, "behind": 14}, "vsIntegration": {"ahead": 10, "behind": 116}, "integration": "claude/merge-features-refacto
+
+exec
+/bin/zsh -lc "sed -n '140,225p' web/galaxy.tsx; sed -n '1,240p' web/galaxy-model.ts; sed -n '150,190p' src/board/server.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 0ms:
+        return;
+      }
+      if (d.target) void drop(d.node, d.target);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+  }, []);
+
+  const startDrag = (n: GNode, e: PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const p = pt(e);
+    setDrag({ node: n, sx: p.x, sy: p.y, x: p.x, y: p.y, moved: false, target: null });
+  };
+
+  const cardIdOf = (n: GNode): string | null => (n.kind === "card" ? n.card.id : (n.card?.id ?? null));
+
+  /** 没卡的分支：先建卡（绑定该分支），返回新卡号 */
+  const ensureCard = async (n: GBranch, milestone: string | null): Promise<string> => {
+    const r = await api<{ feature: { id: string; title: string; milestone: string | null } }>("/api/features", { body: { bind: { repo: n.repo, branch: n.branch }, milestone } });
+    return r.data.feature.id;
+  };
+
+  const drop = async (n: GNode, t: DropTarget) => {
+    setBusy(true);
+    try {
+      if (t.kind === "planet") {
+        const ms = t.planet.kind === "unreserved" ? null : t.planet.key;
+        const id = cardIdOf(n);
+        if (id) {
+          await api(`/api/features/${id}`, { method: "PATCH", body: { milestone: ms } });
+          setToast(`已把 ${id} ${ms ? `预约到 ${t.planet.title}` : "改为未预约"}（已写入台账）`);
+        } else if (n.kind === "branch") {
+          const nid = await ensureCard(n, ms);
+          setToast(`已为「${short(n.label, 20)}」建卡 ${nid}${ms ? `，预约到 ${t.planet.title}` : "（未预约）"}`);
+        }
+      } else if (t.kind === "card") {
+        if (n.kind !== "branch") return;
+        await api(`/api/features/${t.node.card.id}/bind`, { body: { repo: n.repo, branch: n.branch } });
+        setToast(`已把分支 ${short(n.branch, 32)} 绑到 ${t.node.card.id}「${short(t.node.card.title, 16)}」`);
+      } else {
+        let id = cardIdOf(n);
+        if (!id && n.kind === "branch") id = await ensureCard(n, "next");
+        if (!id) return;
+        const r = await api<ReleaseDecisionResult>("/api/release/decision", { body: { feature: id } });
+        setDecision(r.data);
+        setToast(`${id} 已排进 ${r.data.milestone} 合并单：并入（只写合并单，未执行合并）`);
+      }
+      onChanged();
+    } catch (e) {
+      setToast(`没成功：${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return <p class="muted">正在对账…</p>;
+  if (!model) return null;
+  const selNode = model.nodes.find((n) => n.key === sel) ?? null;
+  const related = new Set<string>();
+  if (selNode) {
+    related.add(selNode.key);
+    for (const l of model.links) if (l.from === selNode.key) related.add(l.to);
+  }
+  const planetHL = drag?.target?.kind === "planet" ? drag.target.planet.key : null;
+  const confHL = drag?.target?.kind === "confluence" ? drag.target.conf.key : null;
+  const cardHL = drag?.target?.kind === "card" ? drag.target.node.key : null;
+  const dragging = !!drag?.moved;
+  const latest = model.latest.map((k) => model.nodes.find((n) => n.key === k)).filter((n): n is GBranch => !!n && n.kind === "branch");
+
+  return (
+    <div class="galaxy-page">
+      <div class="galaxy-bar">
+        <Universe projects={projects} />
+        <input type="text" value={query} placeholder="搜分支 / 功能 / 卡号" onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
+        <label class="chk">
+          <input type="checkbox" checked={showMerged} onChange={(e) => setShowMerged((e.target as HTMLInputElement).checked)} />
+          显示已进主线
+        </label>
+        <span class="muted small">
+/**
+ * 星图布局（M7，纯函数，不碰 DOM，便于测试）。
+ *
+ * 纵横：横轴 = 分支最后提交时间（平方根刻度，越右越新），纵轴 = 仓库泳道。
+ * 每个泳道底部两条"星河主流"：主线、集成分支；功能分支是星点，排在主流上方，按时间横向铺开、碰撞时往上叠一层。
+ * 右侧一列是版本行星（里程碑 + 未预约 + 已发布）；功能卡与它预约的版本之间画星座线。
+ * 数据全部来自 /api/status（ReconcileReport）与 /api/features（FeaturesData），不额外请求。
+ */
+import type { BoardCard, FeaturesData, Light } from "../src/board/api-types.ts";
+import type { FeatureView, ReconcileReport, RepoReport } from "../src/types.ts";
+
+export type StarColor = Light | "blue";
+
+export interface GalaxyOptions {
+  width: number;
+  now: number;
+  /** 显示已进主线的分支（缺省隐藏：它们已经完成） */
+  showMerged: boolean;
+  /** 折叠的仓库 id */
+  collapsed: Set<string>;
+}
+
+export interface GBranch {
+  key: string;
+  kind: "branch";
+  repo: string;
+  repoLabel: string;
+  branch: string;
+  label: string;
+  x: number;
+  y: number;
+  r: number;
+  color: StarColor;
+  merged: FeatureView["mergedState"];
+  lastAt: string | null;
+  ahead: number;
+  behind: number | null;
+  /** 绑定的功能卡（没有 = 流浪星，可拖到版本行星建卡） */
+  card: BoardCard | null;
+  waiting: string | null;
+  conflicts: number | null;
+  /** 最新的前几名：1 = 最新 */
+  recent: number | null;
+  sessionTitle: string | null;
+  worktree: string | null;
+  /** 常显标签放在星点哪一侧；null = 不常显（悬停 / 选中 / 搜索命中时才显示） */
+  labelSide: "r" | "l" | "t" | "b" | null;
+  labelText: string;
+}
+
+export interface GCard {
+  key: string;
+  kind: "card";
+  card: BoardCard;
+  x: number;
+  y: number;
+  r: number;
+  color: StarColor;
+  planet: string;
+}
+
+export type GNode = GBranch | GCard;
+
+export interface GLane {
+  repo: string;
+  label: string;
+  y0: number;
+  y1: number;
+  mainY: number;
+  integY: number | null;
+  main: string;
+  integration: string | null;
+  integAhead: number | null;
+  integDays: number | null;
+  collapsed: boolean;
+  /** 本泳道显示 / 总共的功能分支数 */
+  shown: number;
+  total: number;
+  hiddenMerged: number;
+  error: string | null;
+}
+
+export interface GPlanet {
+  key: string;
+  title: string;
+  kind: "milestone" | "unreserved" | "released";
+  x: number;
+  y: number;
+  r: number;
+  isNext: boolean;
+  droppable: boolean;
+  owed: number;
+  waiting: number;
+  conflict: number | null;
+}
+
+export interface GConfluence {
+  key: string;
+  repo: string;
+  label: string;
+  branch: string;
+  x: number;
+  y: number;
+}
+
+export interface GFlow {
+  key: string;
+  node: string;
+  d: string;
+  cls: "in" | "out" | "conflict" | "behind" | "waiting";
+}
+
+export interface GLink {
+  key: string;
+  from: string;
+  to: string;
+  /** 汇向行星的曲线（星座流） */
+  d: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  color: StarColor;
+}
+
+export interface GTick {
+  x: number;
+  label: string;
+}
+
+export interface GalaxyModel {
+  width: number;
+  height: number;
+  xL: number;
+  xR: number;
+  ticks: GTick[];
+  lanes: GLane[];
+  nodes: GNode[];
+  flows: GFlow[];
+  planets: GPlanet[];
+  links: GLink[];
+  confluences: GConfluence[];
+  /** 最新的分支 key（按时间倒序） */
+  latest: string[];
+  counts: { branches: number; unbound: number; cards: number };
+}
+
+const DAY = 86_400_000;
+const LEFT = 150;
+const RIGHT = 250;
+const ROW = 20;
+/** 同一天提交的分支先在横向小范围内错开，放不下再往上叠一层（蜂群布局） */
+const SWARM = [0, -14, 14, -28, 28, -42, 42, -56, 56];
+const LANE_GAP = 28;
+const TOP = 56;
+const LATEST_N = 3;
+
+/** 最后提交距今天数 → 横坐标（平方根刻度：最近几天铺得开） */
+export function xOfAge(ageDays: number, maxAge: number, xL: number, xR: number): number {
+  const a = Math.max(0, Math.min(ageDays, maxAge));
+  return xR - (xR - xL) * Math.sqrt(a / maxAge);
+}
+
+function starRadius(ahead: number): number {
+  return 5 + Math.min(7, Math.log2(1 + Math.max(0, ahead)) * 1.5);
+}
+
+function branchColor(b: FeatureView, card: BoardCard | null): StarColor {
+  if (card && !card.done) return card.light;
+  if (b.mergedState === "in_integration") return "green";
+  if (b.mergedState === "in_main") return "gray";
+  if (!card) return "blue";
+  return "gray";
+}
+
+function flowClass(b: GBranch): GFlow["cls"] {
+  if (b.merged !== "unmerged") return "in";
+  if (b.color === "purple") return "waiting";
+  if (b.color === "red") return "conflict";
+  if (b.behind && b.behind > 0) return "behind";
+  return "out";
+}
+
+const keyOf = (repo: string, branch: string) => `b:${repo}:${branch}`;
+
+/** 汇入主流的曲线：从星点向左下弯进主流 */
+function flowPath(x: number, y: number, riverY: number, xL: number): string {
+  const ex = Math.max(xL + 4, x - 46 - (riverY - y) * 0.35);
+  const c1x = x - 18;
+  const c2x = ex + 22;
+  return `M${x.toFixed(1)},${y.toFixed(1)} C${c1x.toFixed(1)},${y.toFixed(1)} ${c2x.toFixed(1)},${riverY.toFixed(1)} ${ex.toFixed(1)},${riverY.toFixed(1)}`;
+}
+
+export function buildGalaxy(report: ReconcileReport, features: FeaturesData | null, opts: GalaxyOptions): GalaxyModel {
+  const width = Math.max(900, Math.round(opts.width));
+  const xL = LEFT;
+  const xR = width - RIGHT;
+  const now = opts.now;
+
+  // 功能卡索引：仓库|分支 → 卡
+  const cards: BoardCard[] = features ? features.columns.flatMap((c) => c.cards) : [];
+  const byBinding = new Map<string, BoardCard>();
+  for (const c of cards) for (const b of c.bindings) if (b.exists) byBinding.set(`${b.repo}|${b.branch}`, c);
+
+  // 横轴范围：最老的显示中分支，最少 30 天、最多 180 天
+  const repos = report.repos.filter((r) => r.reachable);
+  const visible = (b: FeatureView) => b.role === "feature" && (opts.showMerged || b.mergedState !== "in_main");
+  let maxAge = 30;
+  for (const r of repos) for (const b of r.branches) if (visible(b) && b.lastCommitAt) maxAge = Math.max(maxAge, (now - Date.parse(b.lastCommitAt)) / DAY);
+  maxAge = Math.min(180, Math.ceil(maxAge));
+
+  const ticks: GTick[] = [
+    { x: xOfAge(0, maxAge, xL, xR), label: "今天" },
+    { x: xOfAge(3, maxAge, xL, xR), label: "3 天前" },
+    { x: xOfAge(7, maxAge, xL, xR), label: "1 周前" },
+    { x: xOfAge(30, maxAge, xL, xR), label: "1 个月前" },
+  ];
+  if (maxAge >= 90) ticks.push({ x: xOfAge(90, maxAge, xL, xR), label: "3 个月前" });
+
+  // 最新的分支（未进主线的功能分支里最后提交最新的几条）
+  const all: Array<{ r: RepoReport; b: FeatureView }> = [];
+  for (const r of repos) for (const b of r.branches) if (b.role === "feature" && b.mergedState !== "in_main" && b.lastCommitAt) all.push({ r, b });
+  all.sort((p, q) => Date.parse(q.b.lastCommitAt!) - Date.parse(p.b.lastCommitAt!));
+  const rank = new Map<string, number>();
+  all.slice(0, LATEST_N).forEach((e, i) => rank.set(keyOf(e.r.id, e.b.branch), i + 1));
+
+  const lanes: GLane[] = [];
+  const nodes: GNode[] = [];
+  const flows: GFlow[] = [];
+  const confluences: GConfluence[] = [];
+  let y = TOP;
+
+  for (const r of report.repos) {
+    if (!r.reachable) {
+      lanes.push({ repo: r.id, label: r.label, y0: y, y1: y + 44, mainY: y + 30, integY: null, main: r.main, integration: r.integration, integAhead: null, integDays: null, collapsed: true, shown: 0, total: 0, hiddenMerged: 0, error: r.error ?? "不可达" });
+      y += 44 + LANE_GAP;
+      continue;
+    }
+    const feats = r.branches.filter((b) => b.role === "feature");
+    const shown = feats.filter(visible);
+    return send(c, "overview", r.data, r.meta, 200, s);
+  });
+  app.get("/api/release/preview", async (c) => {
+    const s = svc(c);
+    const r = await s.releasePreview(c.req.query("milestone") ?? "下一版");
+    return send(c, "release.preview", r.data, r.meta, 200, s);
+  });
+
+  /* ───────────── 写台账（项目级） ───────────── */
+
+  app.post("/api/features", async (c) => {
+    const s = svc(c);
+    const b = await body(c);
+    // M7：带 bind: {repo, branch} = 从分支建卡（星图把没卡的分支拖到版本行星）
+    if (b.bind && typeof b.bind === "object") {
+      return send(c, "feature.add", await s.addFeatureFromBranch({ title: b.title, milestone: b.milestone, bind: b.bind as Record<string, unknown> }), null, 201, s);
+    }
+    return send(c, "feature.add", s.addFeature(b), null, 201, s);
+  });
+  app.post("/api/features/:id/bind", async (c) => {
+    const s = svc(c);
+    return send(c, "feature.bind", await s.bindFeature(c.req.param("id"), await body(c)), null, 200, s);
+  });
+  app.post("/api/release/decision", async (c) => {
+    const s = svc(c);
+    return send(c, "release.decision", await s.releaseDecision(await body(c)), null, 200, s);
+  });
+  app.patch("/api/features/:id", async (c) => {
+    const s = svc(c);
+    return send(c, "feature.update", s.patchFeature(c.req.param("id"), await body(c)), null, 200, s);
+  });
+  app.post("/api/sync", async (c) => {
+    const s = svc(c);
+    const b = await body(c);
+    const dry = b.dry_run ?? b.dryRun;
+    return send(c, "sync", await s.sync(dry === true || dry === "true" || dry === 1), null, 200, s);
+  });
+  app.post("/api/release/plan", async (c) => {
+    const s = svc(c);
+    const b = await body(c);
+    const ms = typeof b.milestone === "string" && b.milestone.trim() ? b.milestone : "下一版";
+
+codex
+「接入项目 → 预览 1 张 → 确认登记」已在页面完成，不需要用户输入终端命令。星图的最新分支和版本总数很醒目；但很多星点默认没有名称，我会再点开详情，检查“等我什么、落后多少、预约哪版”是否能顺利读到。
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import pathlib,subprocess,urllib.request,urllib.parse,json,hashlib
+p=pathlib.Path('/private/tmp/heliu-newuser-u70hcb4h');r=p/'demo'
+def git(*args,cwd=r): return subprocess.check_output(['git',*args],cwd=cwd,text=True).strip()
+for name in ['sun','comet']:
+ git('worktree','add','-b','feat/'+name,str(p/name),'main');(p/name/(name+'.txt')).write_text(name+' feature\\n');git('add',name+'.txt',cwd=p/name);git('commit','-m','Add '+name+' feature',cwd=p/name)
+def snapshot():
+ return {str(f.relative_to(p)):hashlib.sha256(f.read_bytes()).hexdigest() for d in [r,p/'moon',p/'sun',p/'comet'] for f in d.rglob('*') if f.is_file()}
+(p/'before.json').write_text(json.dumps(snapshot()))
+base='http://127.0.0.1:7796';q='?project='+urllib.parse.quote('新手星河验收')
+def call(tag,path,body):
+ req=urllib.request.Request(base+path,data=json.dumps(body).encode(),headers={'Content-Type':'application/json'},method='POST')
+ with urllib.request.urlopen(req) as x: status=x.status;data=json.load(x)
+ (p/(tag+'.json')).write_text(json.dumps(data,ensure_ascii=False,indent=2));print(tag,status,json.dumps(data,ensure_ascii=False));return data
+call('detect','/api/projects/detect',{'path':str(r)})
+call('add','/api/projects',{'path':str(r),'name':'新手星河验收','main':'main','integration':'integration'})
+sun=call('create','/api/features'+q,{'bind':{'repo':'demo','branch':'feat/sun'},'milestone':'v1.0'})['data']['feature']['id']
+card=call('unbound','/api/features'+q,{'title':'彗星功能','milestone':'v1.0'})['data']['feature']['id']
+call('bind','/api/features/'+card+'/bind'+q,{'repo':'demo','branch':'feat/comet'})
+call('decision','/api/release/decision'+q,{'feature':sun})
+a=snapshot();b=json.loads((p/'before.json').read_text());print('fixture_tree_unchanged',a==b)
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 605ms:
+Preparing worktree (new branch 'feat/sun')
+Preparing worktree (new branch 'feat/comet')
+detect 200 {"schemaVersion": 1, "command": "project.detect", "generatedAt": "2026-10-28T08:30:06.598Z", "project": null, "data": {"detection": {"root": "/private/tmp/heliu-newuser-u70hcb4h/demo", "icloud": false, "remotes": [], "remote": null, "remoteWhy": "没有远端", "main": "main", "mainWhy": "本地有 main", "mainExists": true, "head": "main", "branches": 5, "worktrees": 3, "candidates": [], "integration": null, "integrationWhy": "没找到候选（名字含 merge/integration/release、或包含 ≥2 条未进主线分支的）", "warnings": []}, "suggestedName": "demo", "existingProjects": ["patent-figure-kit", "新手星河验收", "磁吸背夹"], "registryExists": false, "ledgerDir": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/demo/ledger", "ledgerNote": "放在 heliu 数据目录，不往你的仓库里写任何文件"}, "meta": null}
+add 201 {"schemaVersion": 1, "command": "project.add", "generatedAt": "2026-10-28T08:30:06.629Z", "project": null, "data": {"project": {"name": "新手星河验收", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/project.yaml", "error": null, "repos": [{"id": "demo", "label": "demo", "path": "/private/tmp/heliu-newuser-u70hcb4h/demo", "main": "main", "integration": "integration", "remote": null, "icloud": false, "exists": true}], "ledgerDir": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/ledger", "features": 1, "open": 1, "next": "vNext"}, "created": false, "repo": {"id": "demo", "label": "demo", "path": "/private/tmp/heliu-newuser-u70hcb4h/demo", "main": "main", "integration": "integration", "remote": null, "icloud": false}, "ledger": {"dir": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/ledger", "created": false}}, "meta": null}
+create 201 {"schemaVersion": 1, "command": "feature.add", "generatedAt": "2026-10-28T08:30:06.771Z", "project": {"name": "新手星河验收", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/project.yaml"}, "data": {"feature": {"id": "F-0002", "title": "Add sun feature", "status": "开发中", "milestone": "v1.0", "acceptance": "未", "bindings": [{"repo": "demo", "branch": "feat/sun", "worktree": "/private/tmp/heliu-newuser-u70hcb4h/sun", "session": null, "pr": null}], "rolled_from": [], "source": "board", "created": "2026-10-28", "updated": "2026-10-28", "body": "\nAdd sun feature\n\n<!-- 备注、验收证据链接写在这里；领先/落后/冲突等由 heliu 实时对账，不必手填 -->\n", "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/ledger/features/F-0002-Add-sun-feature.md"}, "milestoneCreated": "v1.0"}, "meta": null}
+unbound 201 {"schemaVersion": 1, "command": "feature.add", "generatedAt": "2026-10-28T08:30:06.773Z", "project": {"name": "新手星河验收", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/project.yaml"}, "data": {"feature": {"id": "F-0003", "title": "彗星功能", "status": "想法", "milestone": "v1.0", "acceptance": "未", "bindings": [], "rolled_from": [], "source": "board", "created": "2026-10-28", "updated": "2026-10-28", "body": "\n彗星功能\n\n<!-- 备注、验收证据链接写在这里；领先/落后/冲突等由 heliu 实时对账，不必手填 -->\n", "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/ledger/features/F-0003-彗星功能.md"}, "milestoneCreated": null}, "meta": null}
+bind 200 {"schemaVersion": 1, "command": "feature.bind", "generatedAt": "2026-10-28T08:30:06.776Z", "project": {"name": "新手星河验收", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/project.yaml"}, "data": {"feature": {"id": "F-0003", "title": "彗星功能", "status": "开发中", "milestone": "v1.0", "acceptance": "未", "bindings": [{"repo": "demo", "branch": "feat/comet", "worktree": "/private/tmp/heliu-newuser-u70hcb4h/comet", "session": null, "pr": null}], "rolled_from": [], "source": "board", "created": "2026-10-28", "updated": "2026-10-28", "body": "\n彗星功能\n\n<!-- 备注、验收证据链接写在这里；领先/落后/冲突等由 heliu 实时对账，不必手填 -->\n\n## 变更记录\n- 2026-10-28 绑定：demo/feat/comet\n", "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/ledger/features/F-0003-彗星功能.md"}, "added": true}, "meta": null}
+decision 200 {"schemaVersion": 1, "command": "release.decision", "generatedAt": "2026-10-28T08:30:06.961Z", "project": {"name": "新手星河验收", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/project.yaml"}, "data": {"feature": "F-0002", "title": "Add sun feature", "milestone": "v1.0", "reservedTo": null, "changed": 1, "file": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/ledger/releases/v1.0.md", "items": [{"repo": "demo", "branch": "feat/sun", "state": "未完成", "decision": "并入", "detail": "功能卡状态「开发中」（做完后改为「待合并」或把决定改成「并入」）", "behind": 0, "conflicts": [], "union": [], "precheckState": "checked"}]}, "meta": null}
+fixture_tree_unchanged True
+
+exec
+/bin/zsh -lc "sed -n '430,485p' src/board/api-types.ts; rg -n 'Decision|command|未执行|yes|终端|behind' web/galaxy.tsx; rg -n 'releaseDecision' src/board/service.ts; sed -n '1,160p' src/core/onboard.ts" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 0ms:
+}
+
+/** 接入向导第二步：写注册表并建台账 */
+export interface OnboardResult {
+  project: ProjectSummary;
+  /** true = 新建项目；false = 往已有项目里加 / 更新仓库 */
+  created: boolean;
+  repo: OnboardedRepo;
+  ledger: { dir: string; created: boolean };
+}
+
+/* ───────────── M7：星图拖到合流点（POST /api/release/decision） ───────────── */
+
+export interface ReleaseDecisionResult {
+  feature: string;
+  title: string;
+  /** 排进的是哪一版的合并单 */
+  milestone: string;
+  /** 这次顺手预约到的版本（原来没预约或换了版本）；没动预约为 null */
+  reservedTo: string | null;
+  /** 决定实际改动的项数（0 = 本来就是这个决定，或已进集成） */
+  changed: number;
+  /** 合并单文件 */
+  file: string;
+  items: Array<{
+    repo: string | null;
+    branch: string | null;
+    state: string;
+    decision: string;
+    detail: string | null;
+    behind: number | null;
+    conflicts: string[];
+    union: string[];
+    precheckState: "checked" | "failed" | "skipped" | null;
+  }>;
+}
+9: *   全部只写台账 / 合并单；真正的 git 合并仍在终端 heliu 合并 <版本>，输入 yes 才执行。
+12:import type { FeaturesData, ProjectsData, ReleaseDecisionResult } from "../src/board/api-types.ts";
+80:  const [decision, setDecision] = useState<ReleaseDecisionResult | null>(null);
+190:        const r = await api<ReleaseDecisionResult>("/api/release/decision", { body: { feature: id } });
+191:        setDecision(r.data);
+192:        setToast(`${id} 已排进 ${r.data.milestone} 合并单：并入（只写合并单，未执行合并）`);
+443:      {decision ? <DecisionPanel d={decision} root={projects.heliuRoot} onClose={() => setDecision(null)} /> : null}
+530:            {node.behind !== null ? ` · 落后基线 ↓${node.behind}` : ""}
+585:function DecisionPanel({ d, root, onClose }: { d: ReleaseDecisionResult; root: string; onClose: () => void }) {
+609:      <p class="small">真正合并：在终端执行下面这条，看完摘要输入 yes 才开始，可以回滚。</p>
+rg: src/board/service.ts: IO error for operation on src/board/service.ts: No such file or directory (os error 2)
+/**
+ * heliu project add 向导（M5）：只读探测一个仓库，猜出主线 / 远端 / 集成分支候选 / 是否 iCloud，
+ * 交给 CLI 打中文摘要、让用户确认后再写注册表并建台账。本模块只读 git、不写任何文件。
+ *
+ * 猜测规则：
+ * - 远端：--remote > origin > 第一个远端。
+ * - 主线：--main > `symbolic-ref refs/remotes/<远端>/HEAD` > 本地有 main / master > 当前检出分支。
+ * - 集成分支候选（都要求未进主线、领先主线 >0）：
+ *     ① 名字含 merge / integration / release，按领先主线提交数从多到少；
+ *     ② 名字不像、但包含 ≥2 条「未进主线的其他分支」（像集成分支在用），按包含数、领先数排序；
+ *        只是叠在另一个候选之上的分支（包含它、但只多包含它本身，典型是从集成分支切出的功能分支）排到后面，
+ *        包含数相同时主目录正检出的优先。
+ *   默认取 ① 的第一个，没有 ① 时取 ② 的第一个，都没有就不设（以后 --integration 指定）。
+ * - iCloud：路径含 Mobile Documents（脏检查默认跳过，避免触发下载）。
+ */
+import { basename } from "node:path";
+import { aheadBehindAll, listLocalBranches, mergedInto, refExists } from "./branches.ts";
+import { gitVersion, lines, runGit, versionAtLeast, type RunGitOptions } from "./git.ts";
+import { canonicalPath, looksLikeICloud } from "./paths.ts";
+import { ProjectError } from "./project.ts";
+
+export interface IntegrationCandidate {
+  branch: string;
+  ahead: number;
+  behind: number;
+  /** 被它包含、但还没进主线的其他本地分支数 */
+  contains: number;
+  /** 名字含 merge / integration / release */
+  byName: boolean;
+  lastCommitAt: string | null;
+  /** 主目录当前检出的就是它 */
+  checkedOut: boolean;
+  /** 它只是叠在另一个候选之上的分支（包含那个候选、却只多包含它自己）→ 排到后面 */
+  onTopOf: string | null;
+}
+
+export interface RepoDetection {
+  root: string;
+  icloud: boolean;
+  remotes: string[];
+  remote: string | null;
+  remoteWhy: string;
+  main: string;
+  mainWhy: string;
+  mainExists: boolean;
+  /** 主目录当前检出的分支 */
+  head: string | null;
+  branches: number;
+  worktrees: number | null;
+  candidates: IntegrationCandidate[];
+  integration: string | null;
+  integrationWhy: string;
+  warnings: string[];
+}
+
+export const INTEGRATION_NAME_RE = /merge|integrat|release/i;
+const MAX_CANDIDATES = 6;
+
+export async function detectRepo(path: string, input: { main?: string; integration?: string; remote?: string; timeoutMs?: number } = {}): Promise<RepoDetection> {
+  const target = canonicalPath(path);
+  const t = input.timeoutMs ?? 8000;
+  const top = await runGit(target, ["rev-parse", "--path-format=absolute", "--show-toplevel"], { timeoutMs: t });
+  if (!top.ok) throw new ProjectError(top.timedOut ? `git 超时：${target}` : `不是 git 仓库：${target}`);
+  const root = canonicalPath(lines(top.stdout)[0] ?? target);
+  const opts: RunGitOptions = { timeoutMs: t, limitKey: root, protect: [root] };
+  const warnings: string[] = [];
+
+  // 远端
+  const rr = await runGit(root, ["remote"], opts);
+  const remotes = rr.ok ? lines(rr.stdout) : [];
+  let remote = input.remote ?? null;
+  let remoteWhy = "参数指定";
+  if (!remote) {
+    remote = remotes.includes("origin") ? "origin" : (remotes[0] ?? null);
+    remoteWhy = !remote ? "没有远端" : remote === "origin" ? "有 origin 就用 origin" : "没有 origin，用第一个远端";
+  } else if (!remotes.includes(remote)) warnings.push(`远端 ${remote} 在本地不存在（已有：${remotes.join("、") || "无"}）`);
+
+  // 主线
+  const hr = await runGit(root, ["symbolic-ref", "-q", "--short", "HEAD"], opts);
+  const head = (hr.ok && lines(hr.stdout)[0]) || null;
+  let main = input.main ?? null;
+  let mainWhy = "参数指定";
+  if (!main && remote) {
+    const sr = await runGit(root, ["symbolic-ref", "-q", "--short", `refs/remotes/${remote}/HEAD`], opts);
+    const v = lines(sr.stdout)[0];
+    if (sr.ok && v && v.startsWith(`${remote}/`)) {
+      main = v.slice(remote.length + 1);
+      mainWhy = `${remote}/HEAD 指向它`;
+    }
+  }
+  if (!main) {
+    for (const cand of ["main", "master"]) {
+      if (await refExists(root, `refs/heads/${cand}`, opts)) {
+        main = cand;
+        mainWhy = `本地有 ${cand}`;
+        break;
+      }
+    }
+  }
+  if (!main) {
+    main = head ?? "main";
+    mainWhy = head ? "没有 main/master，用当前检出分支" : "什么都没探测到，先填 main";
+  }
+  const mainRef = `refs/heads/${main}`;
+  const mainExists = await refExists(root, mainRef, opts);
+  if (!mainExists) warnings.push(`主线 ${main} 在本地不存在：对账会把它标成错误，可用 --main 指定`);
+
+  // 分支与 worktree 规模
+  const lb = await listLocalBranches(root, opts);
+  const wt = await runGit(root, ["worktree", "list", "--porcelain"], opts);
+  const worktrees = wt.ok ? Math.max(0, lines(wt.stdout).filter((l) => l.startsWith("worktree ")).length - 1) : null;
+
+  // 集成分支候选
+  const candidates: IntegrationCandidate[] = [];
+  if (lb.ok && mainExists) {
+    const refs = lb.branches.map((b) => b.ref);
+    const useAtom = versionAtLeast(await gitVersion(), [2, 41]);
+    const [ab, inMain] = await Promise.all([aheadBehindAll(root, mainRef, refs, useAtom, opts), mergedInto(root, mainRef, opts)]);
+    const notInMain = lb.branches.filter((b) => b.ref !== mainRef && !(inMain?.has(b.ref) ?? false) && (ab.get(b.ref)?.ahead ?? 0) > 0);
+    const notInMainRefs = new Set(notInMain.map((b) => b.ref));
+    const base = notInMain.map((b) => ({
+      b,
+      ahead: ab.get(b.ref)?.ahead ?? 0,
+      behind: ab.get(b.ref)?.behind ?? 0,
+      byName: INTEGRATION_NAME_RE.test(b.name),
+    }));
+    // 只对「名字像」的与领先最多的几条算包含数（每条一次 for-each-ref --merged）
+    const probe = [...base.filter((x) => x.byName), ...base.filter((x) => !x.byName).sort((a, c) => c.ahead - a.ahead).slice(0, MAX_CANDIDATES)];
+    const sets = new Map<string, Set<string>>();
+    for (const x of probe) {
+      const m = await mergedInto(root, x.b.ref, opts);
+      const set = new Set(m ? [...m].filter((r) => r !== x.b.ref && notInMainRefs.has(r)) : []);
+      const contains = set.size;
+      if (!x.byName && contains < 2) continue;
+      sets.set(x.b.name, set);
+      candidates.push({
+        branch: x.b.name,
+        ahead: x.ahead,
+        behind: x.behind,
+        contains,
+        byName: x.byName,
+        lastCommitAt: x.b.committedAt ? new Date(x.b.committedAt * 1000).toISOString() : null,
+        checkedOut: x.b.name === head,
+        onTopOf: null,
+      });
+    }
+    const shaOf = new Map(lb.branches.map((b) => [b.name, b.sha]));
+    for (const a of candidates) {
+      if (a.byName) continue;
+      const below = candidates.find(
+        (c) => c !== a && shaOf.get(c.branch) !== shaOf.get(a.branch) && sets.get(a.branch)?.has(`refs/heads/${c.branch}`) && a.contains - c.contains <= 1,
+      );
+      if (below) a.onTopOf = below.branch;
+    }
+    candidates.sort(
+      (a, c) =>
+        Number(c.byName) - Number(a.byName) ||
+        (a.byName
+          ? c.ahead - a.ahead
+          : Number(!!a.onTopOf) - Number(!!c.onTopOf) || c.contains - a.contains || Number(c.checkedOut) - Number(a.checkedOut) || c.ahead - a.ahead) ||
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+codex
+实际拖拽已成功：月亮功能从 vNext 改到 v1.0，拖到合流点后明确显示“只写合并单，没有执行合并”，并给出终端命令和 yes 确认说明。发现一个上手障碍：与 main 指向同一提交的现有 integration 分支没有出现在向导候选里，只能借助接口配置；另外接口原始返回值本身没有重复说明“未执行合并”。
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import json,pathlib,urllib.request,urllib.parse,hashlib
+p=pathlib.Path('/private/tmp/heliu-newuser-u70hcb4h');s=json.loads((p/'status.json').read_text())['data'];f=json.loads((p/'features.json').read_text())['data'];bound={(b['repo'],b['branch']) for c in f['columns'] for card in c['cards'] for b in card['bindings']}
+for r in s['repos']:
+ for b in r['branches']:
+  if b['role']=='feature' and b['mergedState']"'!='"'in_main' and (r['id'],b['branch']) not in bound and any(x['needsAction'] for x in b['sessions']):print('UNBOUND_WAIT',r['id'],b['branch'],b['label'],[(x['needsAction']) for x in b['sessions']])
+q='?project='+urllib.parse.quote('新手星河验收')
+for dry in [True,False]:
+ req=urllib.request.Request('http://127.0.0.1:7796/api/sync'+q,data=json.dumps({'dry_run':dry}).encode(),headers={'Content-Type':'application/json'})
+ d=json.load(urllib.request.urlopen(req));(p/('sync-'+str(dry)+'.json')).write_text(json.dumps(d,ensure_ascii=False,indent=2));print('sync',dry,json.dumps(d,ensure_ascii=False))
+a={str(x.relative_to(p)):hashlib.sha256(x.read_bytes()).hexdigest() for d in [p/'demo',p/'moon',p/'sun',p/'comet'] for x in d.rglob('*') if x.is_file()};print('repository_bytes_unchanged',a==json.loads((p/'before.json').read_text()))
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 262ms:
+UNBOUND_WAIT docs claude/upbeat-mendeleev-83c61c 执行 AI 电话秘书 POC：阶段 0–1（地基与蓝牙通话关） [None, '用小米拨iPhone，iPhone接听后说话，告诉我听筒有没有声音、「音频」按钮显示什么，然后在小米上挂断']
+UNBOUND_WAIT docs claude/tonocard-ai-poc-assessment-c6722f TonoCard AI电话秘书卡 POC评估 ['用小米拨iPhone，iPhone接听后说话，告诉我听筒有没有声音、「音频」按钮显示什么，然后在小米上挂断']
+sync True {"schemaVersion": 1, "command": "sync", "generatedAt": "2026-10-28T08:31:09.696Z", "project": {"name": "新手星河验收", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/project.yaml"}, "data": {"dryRun": true, "ledgerDir": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/ledger", "milestone": "v1.0", "milestoneWillBeCreated": false, "drafts": [], "skipped": {"hasCard": 3, "inMain": 0, "noWorktree": 0, "notFeature": 2}, "created": []}, "meta": null}
+sync False {"schemaVersion": 1, "command": "sync", "generatedAt": "2026-10-28T08:31:09.725Z", "project": {"name": "新手星河验收", "source": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/project.yaml"}, "data": {"dryRun": false, "ledgerDir": "/var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2-heliu-home/projects/新手星河验收/ledger", "milestone": "v1.0", "milestoneWillBeCreated": false, "drafts": [], "skipped": {"hasCard": 3, "inMain": 0, "noWorktree": 0, "notFeature": 2}, "created": []}, "meta": null}
+repository_bytes_unchanged True
+
+exec
+/bin/zsh -lc "sed -n '258,318p' web/galaxy-model.ts; sed -n '375,425p' web/galaxy.tsx; sed -n '585,622p' web/galaxy.tsx" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 0ms:
+        let row = 0;
+        let px = it.x;
+        search: for (;;) {
+          const used = rows[row] ?? (rows[row] = []);
+          for (const dx of SWARM) {
+            const cx = Math.max(xL + 24, Math.min(xR, it.x + dx));
+            if (used.every((ux) => Math.abs(ux - cx) > it.r * 2 + 12)) {
+              used.push(cx);
+              px = cx;
+              break search;
+            }
+          }
+          row += 1;
+        }
+        placed.push({ ...it, x: px, row });
+      }
+    }
+    const nRows = placed.length ? Math.max(...placed.map((p) => p.row)) + 1 : 0;
+    const head = 40;
+    const bodyH = collapsed ? 0 : nRows * ROW;
+    const integY = r.integration ? y + head + bodyH + 18 : null;
+    const mainY = (integY ?? y + head + bodyH) + 26;
+    const y1 = mainY + 16;
+
+    for (const p of placed) {
+      const b = p.b;
+      const key = keyOf(r.id, b.branch);
+      const card = byBinding.get(`${r.id}|${b.branch}`) ?? null;
+      const ny = (integY ?? mainY) - 26 - p.row * ROW;
+      const s = b.sessions[0] ?? null;
+      const conflicts = b.precheck && !b.precheck.timedOut && !b.precheck.error ? (b.precheck.conflictFiles ?? null) : null;
+      const node: GBranch = {
+        key,
+        kind: "branch",
+        repo: r.id,
+        repoLabel: r.label,
+        branch: b.branch,
+        label: card?.title ?? b.label,
+        x: p.x,
+        y: ny,
+        r: p.r,
+        color: branchColor(b, card),
+        merged: b.mergedState,
+        lastAt: b.lastCommitAt,
+        ahead: b.vsIntegration?.ahead ?? b.vsMain?.ahead ?? 0,
+        behind: b.vsIntegration?.behind ?? b.vsMain?.behind ?? null,
+        card,
+        waiting: card?.needsAction ?? (s?.status === "blocked" ? s.needsAction : null),
+        conflicts,
+        recent: rank.get(key) ?? null,
+        sessionTitle: s?.title ?? null,
+        worktree: b.worktree?.dirName ?? null,
+        labelSide: null,
+        labelText: "",
+      };
+      node.labelText = `${node.recent === 1 ? "★ 最新 · " : ""}${short(node.label, 18)}`;
+      nodes.push(node);
+      const river = node.merged === "in_main" ? mainY : (integY ?? mainY);
+      flows.push({ key: `f:${key}`, node: key, d: flowPath(node.x, node.y, river, xL), cls: flowClass(node) });
+    }
+    if (integY !== null && integ) confluences.push({ key: `c:${r.id}`, repo: r.id, label: r.label, branch: integ.branch, x: xR + 26, y: integY });
+              <text y={p.r + 16} text-anchor="middle" class="planet-name">
+                {p.title}
+                {p.isNext ? " · 下一版" : ""}
+              </text>
+              <text y={p.r + 31} text-anchor="middle" class="planet-sub">
+                {p.kind === "released" ? "已发布" : `还欠 ${p.owed}${p.waiting ? ` · 等你 ${p.waiting}` : ""}`}
+              </text>
+            </g>
+          ))}
+
+          {/* 合流点：集成分支的终点 */}
+          {model.confluences.map((c) => (
+            <g class={`conf${confHL === c.key ? " hot" : ""}${dragging ? " can" : ""}`} transform={`translate(${c.x},${c.y})`}>
+              <circle r={13} class="conf-ring" />
+              <circle r={6} class="conf-core" />
+              <text y={-20} text-anchor="middle" class="conf-label">
+                合流点
+              </text>
+            </g>
+          ))}
+
+          {/* 星点 */}
+          <g class="nodes">
+            {model.nodes.map((n, i) => {
+              const m = matches(n);
+              const hl = sel === n.key || cardHL === n.key;
+              const isB = n.kind === "branch";
+              return (
+                <g
+                  class={`star ${n.kind} c-${n.color}${hl ? " sel" : ""}${!m ? " dim" : ""}${isB && n.recent ? " latest" : ""}${isB && !n.card ? " stray" : ""}`}
+                  style={{ transform: `translate(${n.x}px, ${n.y}px)`, animationDelay: `${Math.min(900, i * 9)}ms` }}
+                  onPointerDown={(e) => startDrag(n, e as unknown as PointerEvent)}
+                >
+                  <title>{isB ? `${n.label}\n${n.repoLabel} · ${n.branch}\n${STATE_TEXT[n.color]} · 最后提交 ${mdhm(n.lastAt)}` : `${n.card.id} ${n.card.title}（还没关联分支）`}</title>
+                  {isB && n.recent ? <circle r={n.r + 9} class="halo" /> : null}
+                  <circle r={n.r * 2.2} fill={`url(#star-${n.color})`} class="glow" />
+                  <circle r={n.r} class="core" fill={COLOR[n.color]} />
+                  {isB && (n.labelSide || hl || (q && m)) ? (
+                    <text
+                      x={n.labelSide === "l" ? -(n.r + 6) : n.labelSide === "t" || n.labelSide === "b" ? 0 : n.r + 6}
+                      y={n.labelSide === "t" ? -(n.r + 8) : n.labelSide === "b" ? n.r + 16 : 4}
+                      text-anchor={n.labelSide === "l" ? "end" : n.labelSide === "t" || n.labelSide === "b" ? "middle" : "start"}
+                      class={`star-label${n.recent === 1 ? " newest" : ""}`}
+                    >
+                      {n.labelText}
+                    </text>
+                  ) : null}
+                </g>
+              );
+            })}
+          </g>
+function DecisionPanel({ d, root, onClose }: { d: ReleaseDecisionResult; root: string; onClose: () => void }) {
+  const proj = currentProject();
+  const p = proj ? ` --project ${/\s/.test(proj) ? JSON.stringify(proj) : proj}` : "";
+  const cmd = `"${root}/bin/heliu" 合并 ${d.milestone}${p}`;
+  return (
+    <aside class="detail decision">
+      <button class="menu-btn" onClick={onClose} aria-label="关闭">
+        ×
+      </button>
+      <h3>
+        {d.feature} 已排进 {d.milestone} 合并单
+      </h3>
+      <p class="small">
+        「{d.title}」决定 = 并入{d.reservedTo ? `（顺手预约到了 ${d.reservedTo}）` : ""}。这一步只写合并单，没有执行合并。
+      </p>
+      <ul class="small">
+        {d.items.map((i) => (
+          <li>
+            {i.branch ?? "（没有分支）"} · {i.state}
+            {i.precheckState === "failed" ? " · 未能试合（合并时再试，或人工确认）" : i.precheckState === "checked" ? ` · ${conflictLine(i.conflicts, i.union)}` : ""}
+            {i.detail ? ` · ${i.detail}` : ""}
+          </li>
+        ))}
+      </ul>
+      <p class="small">真正合并：在终端执行下面这条，看完摘要输入 yes 才开始，可以回滚。</p>
+      <p>
+        <code>{cmd}</code>{" "}
+        <button class="btn" onClick={() => void copyText(cmd)}>
+          复制
+        </button>
+      </p>
+      <p class="explain">合并单：{d.file}</p>
+    </aside>
+  );
+}
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import json,pathlib
+p=pathlib.Path('/private/tmp/heliu-newuser-u70hcb4h');s=json.loads((p/'status.json').read_text())['data']
+for r in s['repos']:
+ for b in r['branches']:
+  if 'tonocard-ai-poc-assessment' in b['branch']: print(json.dumps(b,ensure_ascii=False,indent=2))
+PY
+sed -n '505,585p' web/galaxy.tsx
+git status --short" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 0ms:
+{
+  "branch": "claude/tonocard-ai-poc-assessment-c6722f",
+  "ref": "refs/heads/claude/tonocard-ai-poc-assessment-c6722f",
+  "sha": "6b7fc0fbe9a5d9ab268763fc1a29d6b7347fe331",
+  "role": "feature",
+  "mergedState": "unmerged",
+  "label": "TonoCard AI电话秘书卡 POC评估",
+  "labelSource": "session",
+  "randomName": false,
+  "lastCommitAt": "2026-10-19T07:56:32.000Z",
+  "lastCommitSubject": "docs: plan AI call-secretary POC implementation path",
+  "vsMain": {
+    "ahead": 2,
+    "behind": 0
+  },
+  "vsIntegration": {
+    "ahead": 2,
+    "behind": 102
+  },
+  "upstream": "refs/remotes/github/claude/tonocard-ai-poc-assessment-c6722f",
+  "pushed": true,
+  "worktree": null,
+  "sessions": [
+    {
+      "sessionId": "local_5363f964-2f79-46aa-9dec-1358f76f42c7",
+      "title": "TonoCard AI电话秘书卡 POC评估",
+      "status": "archived",
+      "statusCategory": "blocked",
+      "needsAction": "用小米拨iPhone，iPhone接听后说话，告诉我听筒有没有声音、「音频」按钮显示什么，然后在小米上挂断",
+      "isArchived": true,
+      "lastActivityAt": "2026-10-22T01:45:28.002Z",
+      "link": "branch",
+      "prs": []
+    }
+  ],
+  "precheck": null
+}
+        ×
+      </button>
+      <h3>{node.kind === "branch" ? node.label : node.card.title}</h3>
+      <p class="small">
+        <span class="dot" style={{ background: COLOR[node.color] }} /> {STATE_TEXT[node.color]}
+        {node.kind === "branch" && node.recent ? <span class="tag">第 {node.recent} 新</span> : null}
+      </p>
+      {node.kind === "branch" ? (
+        <div class="kv small">
+          <span>仓库</span>
+          <span>{node.repoLabel}</span>
+          <span>分支</span>
+          <span>
+            <code>{node.branch}</code>{" "}
+            <button class="link" onClick={() => void copyText(node.branch)}>
+              复制
+            </button>
+          </span>
+          <span>最后提交</span>
+          <span>
+            {mdhm(node.lastAt)}（{ago(node.lastAt)}）
+          </span>
+          <span>提交</span>
+          <span>
+            自己的 ↑{node.ahead}
+            {node.behind !== null ? ` · 落后基线 ↓${node.behind}` : ""}
+            {node.conflicts !== null ? ` · 试合冲突 ${node.conflicts} 个文件` : ""}
+          </span>
+          {node.sessionTitle ? (
+            <>
+              <span>会话</span>
+              <span>{node.sessionTitle}</span>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+      {node.kind === "branch" && node.waiting ? <p class="needs">等你：{node.waiting}</p> : null}
+      <p class="small">{card ? `功能卡 ${card.id} · 预约 ${card.column === "__unreserved" ? "未预约" : card.column}` : "还没有功能卡：拖到版本行星，或用下面的按钮建卡。"}</p>
+      {card?.nextStep && !(node.kind === "branch" && node.waiting) ? <p class="small muted">下一步：{card.nextStep}</p> : null}
+      <div class="row-actions">
+        <select
+          disabled={busy}
+          value=""
+          onChange={(e) => {
+            const k = (e.target as HTMLSelectElement).value;
+            const p = planets.find((x) => x.key === k);
+            if (p) onDrop({ kind: "planet", planet: p });
+          }}
+        >
+          <option value="">{card ? "改预约到…" : "建卡并预约到…"}</option>
+          {planets.map((p) => (
+            <option value={p.key}>{p.title}</option>
+          ))}
+        </select>
+        {conf ? (
+          <button class="btn" disabled={busy} onClick={() => onDrop({ kind: "confluence", conf })}>
+            排进合并单（并入）
+          </button>
+        ) : null}
+        {prompt ? (
+          <button class="btn" onClick={() => void copyText(prompt)}>
+            复制给 Claude 会话
+          </button>
+        ) : null}
+      </div>
+      <p class="explain">手机上不方便拖时，用这里的下拉和按钮，效果相同。</p>
+    </aside>
+  );
+}
+
+/** 试合结果的一句话：索引文件冲突合流会自动"两边都保留"，只有其余文件才需要解 */
+function conflictLine(conflicts: string[], union: string[]): string {
+  if (!conflicts.length) return "试合无冲突";
+  const u = new Set(union);
+  const other = conflicts.filter((f) => !u.has(f));
+  const auto = conflicts.length - other.length;
+  if (!other.length) return `试合有 ${auto} 个索引文件冲突（${conflicts.slice(0, 3).join("、")}），合并时自动两边都保留，不用你处理`;
+  return `试合有 ${other.length} 个文件需要解冲突（${other.slice(0, 3).join("、")}${other.length > 3 ? "…" : ""}）${auto ? `，另有 ${auto} 个索引文件自动两边保留` : ""}；合并时会交给 Claude 解，或你先在该分支的会话里解`;
+}
+
+function DecisionPanel({ d, root, onClose }: { d: ReleaseDecisionResult; root: string; onClose: () => void }) {
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+import json,pathlib
+s=json.loads(pathlib.Path('/private/tmp/heliu-newuser-u70hcb4h/status.json').read_text())['data']
+for r in s['repos']:
+ for b in r['branches']:
+  if 'upbeat-mendeleev-83c61c' in b['branch']:print(json.dumps(b['sessions'],ensure_ascii=False,indent=2))
+PY" in /var/folders/bw/xbf2cw9s1bz8_nc3h2wlz6yc0000gn/T/heliu-accept/M7-r1-af6a5d2
+ succeeded in 0ms:
+[
+  {
+    "sessionId": "local_0865aa32-7bea-42a6-9a2f-fddc4b4f64b5",
+    "title": "执行 AI 电话秘书 POC：阶段 0–1（地基与蓝牙通话关）",
+    "status": "archived",
+    "statusCategory": null,
+    "needsAction": null,
+    "isArchived": true,
+    "lastActivityAt": "2026-10-22T15:48:22.802Z",
+    "link": "branch",
+    "prs": []
+  },
+  {
+    "sessionId": "local_5363f964-2f79-46aa-9dec-1358f76f42c7",
+    "title": "TonoCard AI电话秘书卡 POC评估",
+    "status": "archived",
+    "statusCategory": "blocked",
+    "needsAction": "用小米拨iPhone，iPhone接听后说话，告诉我听筒有没有声音、「音频」按钮显示什么，然后在小米上挂断",
+    "isArchived": true,
+    "lastActivityAt": "2026-10-22T01:45:28.002Z",
+    "link": "written",
+    "prs": []
+  }
+]
+
+2026-10-28T08:32:08.846069Z ERROR codex_models_manager::manager: failed to refresh available models: request timed out
+codex
+{
+  "verdict": "有保留",
+  "summary": "已用 Chrome 完成环境检查、临时项目接入、分支预览与登记，并验证三个写接口及实际拖拽。最新分支、版本预约和待办数量清楚，拖到合流点后明确提示“没有执行合并”，真正合并需在终端输入 yes。接入向导的集成分支选择和星图的落后提示仍有缺口；未操作真实仓库的合并。",
+  "solved": {
+    "版本遗漏": "部分解决",
+    "分支落后": "部分解决",
+    "大版本待办": "已解决"
+  },
+  "blocking_issues": [
+    {
+      "title": "已有集成分支无法在接入向导中选择",
+      "repro": "临时仓库已有 integration 分支，与 main 指向同一提交；检测后候选为空，页面只提供“不设”，没有手填或全部分支列表。本次通过 POST /api/projects 指定 integration 才完成配置。",
+      "impact": "新手可以完成接入和登记，但无法纯图形化配置这个正常的初始状态；不配置时没有合流点，相关功能合并默认顺延。"
+    },
+    {
+      "title": "星图无法一眼识别落后分支及数量",
+      "repro": "打开磁吸背夹星图，最新的“AI电话助手来电路由与语气定制”星点没有显示落后数；点开详情才看到“落后基线 ↓102”。画布缺少独立的落后数标识和筛选入口。",
+      "impact": "颜色同时承担冲突、等待等状态，落后信息容易被遮蔽；面对几十颗星点，新手需要逐个点开才能找齐需要同步的分支。"
+    }
+  ],
+  "suggestions": [
+    "集成分支选择增加“全部本地分支”和手动指定入口，保留智能推荐。",
+    "星点独立显示 ↓N，并增加“等我处理／落后／未建卡”筛选。",
+    "release/decision 返回中文结果说明、明确的未执行合并标记和终端命令；目前这些信息由页面补充，接口本身没有。",
+    "更新 README 的“五页看板”“一次服务一个项目”等旧说明，与开始页和多项目切换保持一致。"
+  ]
+}
+tokens used
+106,255
+{
+  "verdict": "有保留",
+  "summary": "已用 Chrome 完成环境检查、临时项目接入、分支预览与登记，并验证三个写接口及实际拖拽。最新分支、版本预约和待办数量清楚，拖到合流点后明确提示“没有执行合并”，真正合并需在终端输入 yes。接入向导的集成分支选择和星图的落后提示仍有缺口；未操作真实仓库的合并。",
+  "solved": {
+    "版本遗漏": "部分解决",
+    "分支落后": "部分解决",
+    "大版本待办": "已解决"
+  },
+  "blocking_issues": [
+    {
+      "title": "已有集成分支无法在接入向导中选择",
+      "repro": "临时仓库已有 integration 分支，与 main 指向同一提交；检测后候选为空，页面只提供“不设”，没有手填或全部分支列表。本次通过 POST /api/projects 指定 integration 才完成配置。",
+      "impact": "新手可以完成接入和登记，但无法纯图形化配置这个正常的初始状态；不配置时没有合流点，相关功能合并默认顺延。"
+    },
+    {
+      "title": "星图无法一眼识别落后分支及数量",
+      "repro": "打开磁吸背夹星图，最新的“AI电话助手来电路由与语气定制”星点没有显示落后数；点开详情才看到“落后基线 ↓102”。画布缺少独立的落后数标识和筛选入口。",
+      "impact": "颜色同时承担冲突、等待等状态，落后信息容易被遮蔽；面对几十颗星点，新手需要逐个点开才能找齐需要同步的分支。"
+    }
+  ],
+  "suggestions": [
+    "集成分支选择增加“全部本地分支”和手动指定入口，保留智能推荐。",
+    "星点独立显示 ↓N，并增加“等我处理／落后／未建卡”筛选。",
+    "release/decision 返回中文结果说明、明确的未执行合并标记和终端命令；目前这些信息由页面补充，接口本身没有。",
+    "更新 README 的“五页看板”“一次服务一个项目”等旧说明，与开始页和多项目切换保持一致。"
+  ]
+}

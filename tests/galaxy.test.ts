@@ -186,6 +186,10 @@ describe("星图拖拽接口", () => {
     expect(r.data.milestone).toBe("v1.2");
     expect(r.data.items.length).toBeGreaterThan(0);
     expect(r.data.items.every((i) => i.decision === "并入")).toBe(true);
+    // 接口自己说清楚：没有执行合并，真正合并的终端命令是什么
+    expect(r.data.executed).toBe(false);
+    expect(r.data.message).toContain("没有执行 git 合并");
+    expect(r.data.command).toContain("bin/heliu\" 合并 v1.2 --project 星图演示");
     expect(r.data.file.startsWith(ledgerDir)).toBe(true);
     expect(existsSync(r.data.file)).toBe(true);
     expect(treeSnapshot(fx.repo)).toBe(before);

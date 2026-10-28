@@ -106,6 +106,12 @@ describe("接入向导", () => {
     expect(Array.isArray(r.body.data.detection.candidates)).toBe(true);
     expect(r.body.data.detection.branches).toBeGreaterThan(3);
     expect(r.body.data.suggestedName).toBe("磁吸 仓库");
+    // 候选之外也能手选：全部本地分支（含集成分支），最后提交倒序
+    const names = r.body.data.localBranches.map((b) => b.name);
+    expect(names).toContain("integ");
+    expect(names).toContain("main");
+    const ts = r.body.data.localBranches.map((b) => b.lastCommitAt ?? "");
+    expect([...ts].sort().reverse()).toEqual(ts);
     expect(r.body.data.registryExists).toBe(false);
     expect(r.body.data.ledgerDir).toBe(join(paths.projectsDir, "磁吸 仓库", "ledger"));
     expect(listProjectNames(paths)).toEqual(regBefore);
