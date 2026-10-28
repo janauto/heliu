@@ -8,6 +8,9 @@
  *
  * M8 收纳：每条泳道按类型（修复 / 功能 / 调研 / 文档 / 工程 / 其他）分成几行；收起的行是一个"星团"
  * （成员在时间轴上的小点 + 状态分布 + 数量 + 最新时间），展开的行才画出每颗星点。颜色 = 状态，形状 = 类型。
+ *
+ * M9 会话入口：没有自己提交的分支（FeatureView.sessionEntry，服务端判定）不进类型行，收进每条泳道最下面的
+ * 「会话入口」行（空心小点、默认收起）；「已配对」= 它的卡在别的仓库还绑着有真实改动的分支。
  */
 import type { BoardCard, FeaturesData, Light } from "../src/board/api-types.ts";
 import { FEATURE_TYPES, TYPE_GLYPH, classifyText, inferType, isFeatureType, type FeatureType } from "../src/core/classify.ts";
@@ -57,6 +60,12 @@ export interface GBranch {
   /** M8：类型（卡片上写的 > 推测）与所在类型行 */
   type: FeatureType;
   row: string;
+  /** M9：会话入口（没有自己的提交） */
+  entry: boolean;
+  /** M9：worktree 完整路径（知道去哪回答 / 改代码） */
+  worktreePath: string | null;
+  /** M9：同一张卡上的其他绑定（如「文档仓 claude/xxx · 会话入口」） */
+  mates: string[];
 }
 
 export interface GCard {
@@ -94,6 +103,10 @@ export interface GRow {
   newestAt: string | null;
   /** 含全项目最新的那条分支 */
   hasNewest: boolean;
+  /** M9：会话入口行（不是类型行：不接"改类型"拖放） */
+  entry: boolean;
+  /** M9：会话入口行里已配对的数量 */
+  paired: number;
   /** 收起时的星团：成员在时间轴上的范围与小点；展开时为 null */
   cluster: {
     x0: number;
@@ -124,6 +137,9 @@ export interface GLane {
   shown: number;
   total: number;
   hiddenMerged: number;
+  /** M9：显示中的分支里，有真实改动的 / 会话入口 */
+  work: number;
+  entries: number;
   error: string | null;
 }
 
@@ -167,6 +183,8 @@ export interface GLink {
   d: string;
   /** M8：从收起的星团连出时，代表几颗星 */
   count?: number;
+  /** M9：从会话入口连出（画得更淡） */
+  entry?: boolean;
   x1: number;
   y1: number;
   x2: number;
@@ -198,7 +216,7 @@ export interface GalaxyModel {
   confluences: GConfluence[];
   /** 最新的分支 key（按时间倒序） */
   latest: string[];
-  counts: { branches: number; unbound: number; cards: number };
+  counts: { branches: number; unbound: number; cards: number; entries: number };
 }
 
 const DAY = 86_400_000;
@@ -212,6 +230,9 @@ const TOP = 64;
 const LATEST_N = 3;
 /** M8：收起的类型行高度、行间距、展开行上下留白 */
 const CLUSTER_H = 38;
+/** M9：会话入口行（只是入口，画得更矮） */
+const ENTRY_H = 30;
+export const ENTRY_ROW = "会话入口";
 const ROW_GAP = 6;
 const ROW_PAD = 10;
 
@@ -284,9 +305,16 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
 
   // 横轴范围：最老的显示中分支，最少 30 天、最多 180 天
   const repos = report.repos.filter((r) => r.reachable);
-  const visible = (b: FeatureView) => b.role === "feature" && (opts.showMerged || b.mergedState !== "in_main");
+  // M9：会话入口不算"已完成的工作"，不随「显示已进主线」隐藏（它的会话可能正在等你）
+  const visible = (b: FeatureView) => b.role === "feature" && (opts.showMerged || b.mergedState !== "in_main" || b.sessionEntry === true);
+  // 会话入口没有自己的提交：时间按会话最后活动算（"最后提交"是它出发点的时间，没有意义）
+  const timeOf = (b: FeatureView) => (b.sessionEntry === true ? (b.sessions[0]?.lastActivityAt ?? b.lastCommitAt) : b.lastCommitAt);
   let maxAge = 30;
-  for (const r of repos) for (const b of r.branches) if (visible(b) && b.lastCommitAt) maxAge = Math.max(maxAge, (now - Date.parse(b.lastCommitAt)) / DAY);
+  for (const r of repos)
+    for (const b of r.branches) {
+      const t = visible(b) ? timeOf(b) : null;
+      if (t) maxAge = Math.max(maxAge, (now - Date.parse(t)) / DAY);
+    }
   maxAge = Math.min(180, Math.ceil(maxAge));
 
   const ticks: GTick[] = [
@@ -297,9 +325,9 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
   ];
   if (maxAge >= 90) ticks.push({ x: xOfAge(90, maxAge, xL, xR), label: "3 个月前" });
 
-  // 最新的分支（未进主线的功能分支里最后提交最新的几条）
+  // 最新的分支（未进主线的功能分支里最后提交最新的几条；会话入口的"最后提交"是它出发点的时间，不算）
   const pool: Array<{ r: RepoReport; b: FeatureView }> = [];
-  for (const r of repos) for (const b of r.branches) if (b.role === "feature" && b.mergedState !== "in_main" && b.lastCommitAt) pool.push({ r, b });
+  for (const r of repos) for (const b of r.branches) if (b.role === "feature" && b.mergedState !== "in_main" && b.sessionEntry !== true && b.lastCommitAt) pool.push({ r, b });
   pool.sort((p, q) => Date.parse(q.b.lastCommitAt!) - Date.parse(p.b.lastCommitAt!));
   const rank = new Map<string, number>();
   pool.slice(0, LATEST_N).forEach((e, i) => rank.set(keyOf(e.r.id, e.b.branch), i + 1));
@@ -314,7 +342,7 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
 
   for (const r of report.repos) {
     if (!r.reachable) {
-      lanes.push({ repo: r.id, label: r.label, y0: y, y1: y + 44, mainY: y + 30, integY: null, main: r.main, integration: r.integration, integAhead: null, integDays: null, collapsed: true, shown: 0, total: 0, hiddenMerged: 0, error: r.error ?? "不可达" });
+      lanes.push({ repo: r.id, label: r.label, y0: y, y1: y + 44, mainY: y + 30, integY: null, main: r.main, integration: r.integration, integAhead: null, integDays: null, collapsed: true, shown: 0, total: 0, hiddenMerged: 0, work: 0, entries: 0, error: r.error ?? "不可达" });
       y += 44 + LANE_GAP;
       continue;
     }
@@ -330,11 +358,15 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
     const items = shown.map((b) => {
       const card = byBinding.get(`${r.id}|${b.branch}`) ?? null;
       const type: FeatureType = card && isFeatureType(card.type) ? card.type : inferType(branchText(b));
-      const age = b.lastCommitAt ? (now - Date.parse(b.lastCommitAt)) / DAY : maxAge;
+      const at = timeOf(b);
+      const age = at ? (now - Date.parse(at)) / DAY : maxAge;
       const ahead = b.vsIntegration?.ahead ?? b.vsMain?.ahead ?? 0;
       const key = keyOf(r.id, b.branch);
       const s = b.sessions[0] ?? null;
       const conflicts = b.precheck && !b.precheck.timedOut && !b.precheck.error ? (b.precheck.conflictFiles ?? null) : null;
+      const others = card ? card.bindings.filter((x) => !(x.repo === r.id && x.branch === b.branch)) : [];
+      // 会话开在别的仓库（会话入口）时，这颗星自己没有会话：用同卡上那条绑定的会话（知道去哪回答）
+      const mateSession = others.find((x) => x.session?.title)?.session ?? null;
       const node: GBranch = {
         key,
         kind: "branch",
@@ -347,19 +379,22 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
         r: starRadius(ahead),
         color: branchColor(b, card),
         merged: b.mergedState,
-        lastAt: b.lastCommitAt,
+        lastAt: at,
         ahead,
         behind: b.vsIntegration?.behind ?? b.vsMain?.behind ?? null,
         card,
         waiting: card?.needsAction ?? (s?.status === "blocked" ? s.needsAction : null),
         conflicts,
         recent: rank.get(key) ?? null,
-        sessionTitle: s?.title ?? null,
+        sessionTitle: s?.title ?? mateSession?.title ?? null,
         worktree: b.worktree?.dirName ?? null,
         labelSide: null,
         labelText: "",
         type,
-        row: `${r.id}|${type}`,
+        row: b.sessionEntry === true ? `${r.id}|${ENTRY_ROW}` : `${r.id}|${type}`,
+        entry: b.sessionEntry === true,
+        worktreePath: b.worktree?.path ?? null,
+        mates: others.map((x) => `${x.repoLabel} ${x.branch}${x.sessionEntry ? " · 会话入口" : ""}`),
       };
       node.labelText = `${node.recent === 1 ? "★ 最新 · " : ""}${short(node.label, 18)}`;
       return node;
@@ -367,11 +402,16 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
 
     let cy = y + head;
     const laneRows: GRow[] = [];
+    const work = items.filter((n) => !n.entry);
+    const entryItems = items.filter((n) => n.entry);
+    // 卡在别的仓库还绑着有真实改动的分支 = 这个入口已配对
+    const pairedOf = (n: GBranch) => !!n.card?.bindings.some((x) => x.repo !== r.id && x.exists && x.sessionEntry !== true);
     if (!collapsed) {
-      for (const t of FEATURE_TYPES) {
-        const group = items.filter((n) => n.type === t);
+      const groups: Array<{ t: FeatureType; entry: boolean; group: GBranch[] }> = FEATURE_TYPES.map((t) => ({ t, entry: false, group: work.filter((n) => n.type === t) }));
+      groups.push({ t: "其他", entry: true, group: entryItems });
+      for (const { t, entry, group } of groups) {
         if (!group.length) continue;
-        const rowKey = `${r.id}|${t}`;
+        const rowKey = entry ? `${r.id}|${ENTRY_ROW}` : `${r.id}|${t}`;
         const expanded = !!opts.expandAll || opts.expanded.has(rowKey);
         const colors: Partial<Record<StarColor, number>> = {};
         for (const n of group) colors[n.color] = (colors[n.color] ?? 0) + 1;
@@ -393,7 +433,10 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
           newestAt,
           hasNewest: group.some((n) => n.recent === 1),
           cluster: null,
+          entry,
+          paired: entry ? group.filter(pairedOf).length : 0,
         };
+        if (entry) row.glyph = "◌";
         if (expanded) {
           // 碰撞分层：按横坐标从右往左放，同一层里两个星点至少相隔 2r+18
           const sorted = [...group].sort((p, q) => q.x - p.x);
@@ -426,8 +469,9 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
             nodes.push(p.n);
           }
         } else {
-          row.y1 = cy + CLUSTER_H;
-          row.y = cy + CLUSTER_H / 2;
+          const h = entry ? ENTRY_H : CLUSTER_H;
+          row.y1 = cy + h;
+          row.y = cy + h / 2;
           const xs = group.map((n) => n.x);
           const x0 = Math.min(...xs);
           const x1 = Math.max(...xs);
@@ -435,7 +479,7 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
           for (const n of group) {
             n.y = row.y;
           }
-          const parts = [`${group.length} 条`];
+          const parts = entry ? [`${ENTRY_ROW} ${group.length}${row.paired ? `（${row.paired} 已配对）` : ""}`] : [`${group.length} 条`];
           if (row.waiting) parts.push(`等你 ${row.waiting}`);
           if (row.conflict) parts.push(`冲突 ${row.conflict}`);
           if (newestAt) parts.push(`最新 ${agoAt(newestAt, now)}`);
@@ -463,6 +507,7 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
     const river = (n: GBranch) => (n.merged === "in_main" ? mainY : (integY ?? mainY));
 
     for (const row of laneRows) {
+      if (row.entry) continue; // 会话入口没有自己的提交：不画汇入主流的线
       if (row.expanded) {
         for (const key of row.members) {
           const n = items.find((x) => x.key === key)!;
@@ -490,6 +535,8 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
       shown: shown.length,
       total: feats.length,
       hiddenMerged: feats.length - shown.length,
+      work: work.length,
+      entries: entryItems.length,
       error: null,
     });
     y = y1 + LANE_GAP;
@@ -555,13 +602,13 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
         continue;
       }
       const x = row.cluster.x1;
-      const l: GLink = { key: k, from: row.key, to: p.key, d: curve(x, row.y, p), x1: x, y1: row.y, x2: p.x, y2: p.y, color: row.cluster.color, count: 1 };
+      const l: GLink = { key: k, from: row.key, to: p.key, d: curve(x, row.y, p), x1: x, y1: row.y, x2: p.x, y2: p.y, color: row.cluster.color, count: 1, entry: row.entry };
       agg.set(k, l);
       links.push(l);
       continue;
     }
     if (!row) continue;
-    links.push({ key: `l:${n.key}`, from: n.key, to: p.key, d: curve(n.x, n.y, p), x1: n.x, y1: n.y, x2: p.x, y2: p.y, color: n.color });
+    links.push({ key: `l:${n.key}`, from: n.key, to: p.key, d: curve(n.x, n.y, p), x1: n.x, y1: n.y, x2: p.x, y2: p.y, color: n.color, entry: n.entry });
   }
 
   placeClusterLabels(rows, planets, confluences, xL, width);
@@ -584,7 +631,7 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
     links,
     confluences,
     latest: [...rank.entries()].sort((a, b) => a[1] - b[1]).map(([k]) => k),
-    counts: { branches: all.length, unbound: all.filter((b) => !b.card).length, cards: cards.length },
+    counts: { branches: all.length, unbound: all.filter((b) => !b.card && !b.entry).length, cards: cards.length, entries: all.filter((b) => b.entry).length },
   };
 }
 
@@ -684,7 +731,7 @@ export function hitTarget(m: GalaxyModel, x: number, y: number, dragging: GNode)
   for (const c of m.confluences) if (dragging.kind === "card" || (dragging.kind === "branch" && dragging.merged !== "in_main")) consider({ kind: "confluence", conf: c }, c.x, c.y, 30);
   if (dragging.kind === "branch") for (const n of m.nodes) if (n.kind === "card") consider({ kind: "card", node: n }, n.x, n.y, 16);
   // M8：拖到左侧的类型行头 = 改类型
-  for (const r of m.rows) if (r.type !== dragging.type && x >= 12 && x <= m.xL - 4 && y >= r.y0 && y <= r.y1) consider({ kind: "row", row: r }, x, r.y, 999);
+  for (const r of m.rows) if (!r.entry && r.type !== dragging.type && x >= 12 && x <= m.xL - 4 && y >= r.y0 && y <= r.y1) consider({ kind: "row", row: r }, x, r.y, 999);
   return best ? (best as { t: DropTarget }).t : null;
 }
 
@@ -696,6 +743,13 @@ export function hitConfluence(m: GalaxyModel, x: number, y: number): GConfluence
     if (d <= 34 && (!best || d < best.d)) best = { c, d };
   }
   return best ? best.c : null;
+}
+
+/** M9：选中一颗星时，同一张卡在别处的星（含会话入口）——高亮并画临时虚线 */
+export function matesOf(m: GalaxyModel, key: string): GBranch[] {
+  const n = m.all.find((b) => b.key === key);
+  const id = n?.card?.id;
+  return id ? m.all.filter((b) => b.key !== key && b.card?.id === id) : [];
 }
 
 /** M8：某条分支 / 卡在哪个类型行（跳转定位、搜索时自动展开用） */

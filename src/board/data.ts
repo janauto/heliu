@@ -50,6 +50,9 @@ import type {
   ReleasePlanResult,
   ReleasePreview,
   ReleaseTier,
+  LabelResult,
+  PairingsData,
+  PairJob,
 } from "./api-types.ts";
 import { buildReleasePlan, previewRelease, setPlanDecision, type BuildResult } from "../core/release.ts";
 import { ACTION_TEXT, planCounts, TIER_OF, type ItemState } from "../core/release-plan.ts";
@@ -60,6 +63,8 @@ import { loadModules } from "../core/modules.ts";
 import { afterMerge, mergedSuggestions } from "../core/after-merge.ts";
 import { buildMergePrompt } from "../core/merge-prompt.ts";
 import { buildHygiene } from "./hygiene.ts";
+import { analyzeTranscripts, applyPairings, loadEvidence, ownCommitsOf, PAIR_PRIVACY, suggestPairings, type ApplyResult } from "../core/pairing.ts";
+import { setRepoLabel } from "../core/project.ts";
 
 export const STATUS_TTL_MS = 20_000;
 export const UNRESERVED = "__unreserved";
@@ -76,6 +81,8 @@ export interface Scan {
   zero: Map<string, boolean>;
   /** M8：合并后同步的建议（卡号 → 可改成的状态）；台账里卡的状态 / 绑定变了就重算 */
   merged?: { sig: string; p: Promise<Map<string, "已合入" | "已进主线">> };
+  /** M9：「会话入口」判定（写进 FeatureView.sessionEntry），每次扫描做一次 */
+  entries?: Promise<void>;
 }
 
 export interface BoardOptions {
@@ -113,6 +120,8 @@ export class BoardService {
   private readonly scans = new Map<string, Scan>();
   private readonly inflight = new Map<string, Promise<Scan>>();
   private readonly linkCache = new Map<string, { mtimeMs: number; link: string | null }>();
+  /** M9：后台分析对话记录（同一时间只跑一个） */
+  private pairJob: PairJob | null = null;
 
   constructor(opts: BoardOptions) {
     this.paths = opts.paths;
@@ -185,15 +194,37 @@ export class BoardService {
     }
   }
 
+  /** 「尚无独有提交」判定，结果记进本次扫描的缓存（scan.zero） */
+  private async fillZero(scan: Scan, want: Array<{ repo: string; branch: string }>): Promise<void> {
+    const missing = want.filter((c) => !scan.zero.has(bindingKey(c.repo, c.branch)));
+    if (!missing.length) return;
+    const hit = await zeroCommitBranches(scan.result.report, missing, { sourceOf: sourceBranchIndex(this.paths, scan.result.report) });
+    for (const c of missing) scan.zero.set(bindingKey(c.repo, c.branch), hit.has(bindingKey(c.repo, c.branch)));
+  }
+
   /** M2 第 2 轮「尚无独有提交」：与 heliu 待办 同一个函数（zeroCommitBranches），结果按扫描缓存 */
   private async zeroCommit(scan: Scan, features: LedgerFeature[]): Promise<Set<string>> {
-    const want = features.flatMap((f) => f.bindings.map((b) => ({ repo: b.repo, branch: b.branch })));
-    const missing = want.filter((c) => !scan.zero.has(bindingKey(c.repo, c.branch)));
-    if (missing.length) {
-      const hit = await zeroCommitBranches(scan.result.report, missing, { sourceOf: sourceBranchIndex(this.paths, scan.result.report) });
-      for (const c of missing) scan.zero.set(bindingKey(c.repo, c.branch), hit.has(bindingKey(c.repo, c.branch)));
-    }
+    await this.fillZero(scan, features.flatMap((f) => f.bindings.map((b) => ({ repo: b.repo, branch: b.branch }))));
     return new Set([...scan.zero].filter(([, v]) => v).map(([k]) => k));
+  }
+
+  /**
+   * M9「会话入口」：已被主线 / 集成分支包含、但没有自己提交的功能分支（与「尚无独有提交」同一判定、同一份缓存），
+   * 结果写进 FeatureView.sessionEntry——星图、结构页、卡片只读这个字段，不自己再算。独立未合并的分支一律 false。
+   */
+  private markEntries(scan: Scan): Promise<void> {
+    if (!scan.entries) {
+      const report = scan.result.report;
+      const repos = report.repos.filter((r) => r.reachable);
+      const want = repos.flatMap((r) => r.branches.filter((b) => b.role === "feature" && b.mergedState !== "unmerged").map((b) => ({ repo: r.id, branch: b.branch })));
+      scan.entries = this.fillZero(scan, want)
+        .catch(() => undefined)
+        .then(() => {
+          for (const r of repos)
+            for (const b of r.branches) if (b.role === "feature") b.sessionEntry = b.mergedState === "unmerged" ? false : (scan.zero.get(bindingKey(r.id, b.branch)) ?? null);
+        });
+    }
+    return scan.entries;
   }
 
   /** M8：与「同步一下」同一条规则（mergedSuggestions），每次扫描算一次；卡的状态或绑定变了就重算 */
@@ -234,6 +265,7 @@ export class BoardService {
 
   async status(precheck: boolean, fresh = false): Promise<{ data: ReconcileReport; meta: BoardMeta }> {
     const { scan, cached } = await this.scan(precheck, fresh);
+    await this.markEntries(scan);
     return { data: scan.result.report, meta: this.meta(scan, cached) };
   }
 
@@ -301,6 +333,7 @@ export class BoardService {
     const report = scan.result.report;
     const sessions = scan.result.sessions;
     const zeroCommit = await this.zeroCommit(scan, features.filter(countsTowardTodo));
+    await this.markEntries(scan);
     const nextMilestone = this.nextOf(milestones);
 
     // 1) 分列：里程碑（按 milestones.yaml 顺序，已发布的并入「已发布」列）+ 未登记里程碑 + 未预约 + 已发布
@@ -511,6 +544,7 @@ export class BoardService {
       lastCommitAt: fv?.lastCommitAt ?? null,
       worktree: b.worktree ?? fv?.worktree?.path ?? null,
       session,
+      sessionEntry: fv ? (fv.sessionEntry ?? null) : null,
     };
   }
 
@@ -559,6 +593,78 @@ export class BoardService {
       },
       meta: this.meta(scan, cached),
     };
+  }
+
+  /* ───────────── M9：跨仓配对 ───────────── */
+
+  /** 当前的配对建议：从缓存里的证据现算（分析对话记录是单独的显式动作） */
+  async pairings(): Promise<PairingsData> {
+    const project = this.project;
+    const { scan } = await this.scan(false);
+    await this.markEntries(scan);
+    const ev = loadEvidence(this.paths, project.name);
+    const report = ev.analyzedAt
+      ? suggestPairings({
+          report: scan.result.report,
+          sessions: scan.result.sessions,
+          features: this.ledger(project).load().features,
+          evidence: ev.rows,
+          hasOwnCommits: await ownCommitsOf(this.paths, scan.result.report),
+        })
+      : null;
+    return { analyzedAt: ev.analyzedAt, job: this.pairJob, report, privacy: PAIR_PRIVACY };
+  }
+
+  /** 开始分析对话记录（后台跑，GET /api/pairings 看进度）；已经在跑就直接返回当前进度 */
+  analyzePairings(force: boolean): PairJob {
+    if (this.pairJob?.running) return this.pairJob;
+    const job: PairJob = { running: true, done: 0, total: 0, startedAt: new Date().toISOString(), finishedAt: null, error: null, result: null };
+    this.pairJob = job;
+    void (async () => {
+      try {
+        const { scan } = await this.scan(false);
+        job.result = await analyzeTranscripts(this.paths, this.project.name, scan.result.report, scan.result.sessions, {
+          force,
+          onProgress: (p) => {
+            job.done = p.done;
+            job.total = p.total;
+          },
+        });
+      } catch (e) {
+        job.error = (e as Error).message;
+      } finally {
+        job.running = false;
+        job.finishedAt = new Date().toISOString();
+      }
+    })();
+    return job;
+  }
+
+  /** 确认配对：keys = 建议的稳定键；只写台账（加绑定 / 建卡），不碰仓库 */
+  async confirmPairings(body: Record<string, unknown>): Promise<ApplyResult> {
+    const keys = Array.isArray(body.keys) ? body.keys.map((x) => String(x)) : [];
+    if (!keys.length) throw new LedgerError("请给出要确认的建议 keys（先 GET /api/pairings 看建议）");
+    const data = await this.pairings();
+    if (!data.report) throw new LedgerError("还没分析过对话记录：先点「分析对话记录」");
+    const all = data.report.groups.flatMap((g) => g.items);
+    const chosen = all.filter((i) => keys.includes(i.key));
+    const missing = keys.filter((k) => !all.some((i) => i.key === k));
+    const ms = body.milestone;
+    const milestone = ms === null || ms === UNRESERVED ? null : typeof ms === "string" && ms.trim() ? ms.trim() : undefined;
+    const { scan } = await this.scan(false);
+    const r = applyPairings(this.ledger(), data.report, scan.result.report, chosen, { milestone, source: "board", now: this.now() });
+    for (const k of missing) r.skipped.push({ key: k, reason: "这条建议已经不在了（可能刚被处理过），刷新后再看" });
+    return r;
+  }
+
+  /** 改仓库显示名（只改 project.yaml 里那一行），并让下次扫描用上新名字 */
+  setLabel(body: Record<string, unknown>): LabelResult {
+    const repo = typeof body.repo === "string" ? body.repo.trim() : "";
+    const label = typeof body.label === "string" ? body.label : "";
+    if (!repo) throw new LedgerError("需要给出仓库（repo）");
+    const r = setRepoLabel(this.paths, this.initial.name, repo, label);
+    this.scans.clear();
+    return { repo, from: r.from, to: r.to, file: r.file };
   }
 
   /* ───────────── 写台账 ───────────── */

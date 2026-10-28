@@ -553,6 +553,19 @@ main .col:nth-child(4) { animation-delay: 210ms; }
 .cluster-label.below { font-size: 11px !important; fill: #b9c4ee !important; }
 .galaxy-svg .flow.cf { opacity: 0.2; }
 .galaxy-svg .flow.cf.hover { opacity: 0.75; }
+/* M9 会话入口：没有自己提交的分支，空心、偏暗，不抢真实改动的注意力 */
+.row.entry .row-name { fill: #9aa5d6 !important; font-weight: 550; }
+.row.entry .row-head-bg { opacity: 0.55; }
+.cluster.entry .cluster-band { opacity: 0.45; }
+.cluster.entry .cluster-dot { stroke-width: 1.2; opacity: 0.75; }
+.cluster.entry .cluster-label { fill: #9aa5d6 !important; }
+.entry-core { stroke-width: 1.6; }
+.star.entry .entry-core { stroke-width: 1.4; opacity: 0.85; }
+.star.entry.sel .entry-core, .star.entry.mate .entry-core { stroke: #fff; opacity: 1; }
+.galaxy-svg .link.entry { opacity: 0.04; }
+.galaxy-svg .link.entry.on { opacity: 0.5; }
+.star.mate .core { stroke: #fff; stroke-width: 2; stroke-dasharray: 3 2; }
+.mate-line { fill: none; stroke: #e8ecff; stroke-width: 1.2; stroke-dasharray: 4 4; opacity: 0.7; animation: flow 1.4s linear infinite; pointer-events: none; }
 .cluster-halo { fill: none; stroke: #ffe28a; stroke-width: 1.5; transform-box: fill-box; transform-origin: center; animation: breathe 2.2s ease-in-out infinite; }
 .star .core.hollow { fill-opacity: 0.25; }
 .planet.grab { cursor: grab; touch-action: none; }
@@ -733,3 +746,17 @@ main .col:nth-child(4) { animation-delay: 210ms; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* M9 跨仓配对面板 */
+.detail.pairing { border-color: color-mix(in srgb, #2a9fd6 50%, transparent); max-width: 560px; background: var(--surface-solid); }
+.detail.pairing .row-actions { position: sticky; bottom: calc(-1 * var(--s5)); margin: var(--s3) calc(-1 * var(--s5)) 0; padding: var(--s3) var(--s5); background: color-mix(in srgb, var(--surface-solid) 96%, transparent); border-top: 1px solid var(--line); }
+.pair-groups { display: grid; gap: var(--s3); margin-top: var(--s3); }
+.pair-group { border: 1px solid var(--line); border-radius: 12px; padding: var(--s2) var(--s3); }
+.pair-group .sync-list { margin: var(--s2) 0 0; }
+.pg-head { margin: 0; line-height: 1.5; }
+.pg-head .tag { margin-left: 6px; }
+.tag.t-green { background: var(--green-bg); color: var(--green); }
+.tag.t-yellow { background: var(--yellow-bg); color: var(--yellow); }
+.tag.t-gray { background: color-mix(in srgb, var(--gray) 14%, transparent); color: var(--muted); }
+.tag.t-purple { background: var(--purple-bg); color: var(--purple); }
+.entries-note { margin-top: var(--s3); }

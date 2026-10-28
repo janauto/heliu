@@ -69,7 +69,15 @@ export interface StructureModel {
   /** 每种"该决定"状态下的全部条目（跨模块） */
   decisions: Partial<Record<SState, SItem[]>>;
   total: number;
+  /** M9：各仓库的会话入口分支（没有自己的提交，不计入上面任何一类） */
+  entries: Array<{ repo: string; repoLabel: string; count: number; paired: number; branches: number }>;
+  /** M9：会话几乎都从一个仓库开时，建议给它起个如实的名字 */
+  renameHint: { repo: string; label: string; suggested: string; entries: number; branches: number; sessions: number; allSessions: number } | null;
 }
+
+/** 至少这么多个会话、其中这个比例以上都开在同一个仓库，且它有会话入口时，建议改名（例：文档仓 → 总仓（会话入口 + 文档）） */
+export const RENAME_MIN_SESSIONS = 10;
+export const RENAME_MIN_SHARE = 0.8;
 
 function cardState(c: BoardCard): SState {
   if (c.done) return "done";
@@ -100,7 +108,8 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
   for (const col of features.columns)
     for (const c of col.cards) {
       for (const b of c.bindings) if (b.exists) bound.add(`${b.repo}|${b.branch}`);
-      const live = c.bindings.find((b) => b.exists);
+      // 「星图里看」优先跳到有真实改动的那条（会话入口只是入口）
+      const live = c.bindings.find((b) => b.exists && b.sessionEntry !== true) ?? c.bindings.find((b) => b.exists);
       items.push({
         key: live ? `b:${live.repo}:${live.branch}` : `k:${c.id}`,
         cardId: c.id,
@@ -125,8 +134,32 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
   for (const r of report.repos) {
     if (!r.reachable) continue;
     for (const b of r.branches) {
-      if (b.role !== "feature" || b.mergedState === "in_main" || bound.has(`${r.id}|${b.branch}`)) continue;
+      if (b.role !== "feature" || bound.has(`${r.id}|${b.branch}`)) continue;
       const text = branchText(b);
+      // M9：会话入口（没有自己的提交）不算「还没建卡」；但它的会话在等你时照样列进「等你回答」（与星图同口径）
+      if (b.sessionEntry === true) {
+        const s = b.sessions[0];
+        if (s?.status !== "blocked") continue;
+        items.push({
+          key: `b:${r.id}:${b.branch}`,
+          cardId: null,
+          title: s.title ?? b.label,
+          type: inferType(text),
+          typeSource: "guess",
+          module: inferModule(text, defs.length ? defs : undefined),
+          moduleSource: "guess",
+          state: "waiting",
+          nextStep: `会话在等你回答${s.needsAction ? `：${s.needsAction}` : ""}（这是会话入口，真实改动可能在别的仓库）`,
+          milestone: null,
+          lastAt: s.lastActivityAt ?? b.lastCommitAt,
+          repos: [r.label],
+          bind: { repo: r.id, branch: b.branch },
+          alsoMerged: false,
+          behind: 0,
+        });
+        continue;
+      }
+      if (b.mergedState === "in_main") continue;
       items.push({
         key: `b:${r.id}:${b.branch}`,
         cardId: null,
@@ -180,5 +213,36 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
     if (list.length) decisions[s.key] = list;
   }
   const types = FEATURE_TYPES.filter((t) => items.some((i) => i.type === t));
-  return { modules, types, matrix, decisions, total: items.length };
+
+  // M9：会话入口（与星图「会话入口」行同一个字段）；已配对 = 它的卡在别的仓库还绑着有真实改动的分支
+  const cardOf = new Map<string, BoardCard>();
+  for (const col of features.columns) for (const c of col.cards) for (const b of c.bindings) cardOf.set(`${b.repo}|${b.branch}`, c);
+  const entries: StructureModel["entries"] = [];
+  for (const r of report.repos) {
+    if (!r.reachable) continue;
+    const feats = r.branches.filter((b) => b.role === "feature");
+    const list = feats.filter((b) => b.sessionEntry === true);
+    if (!list.length) continue;
+    const paired = list.filter((b) => cardOf.get(`${r.id}|${b.branch}`)?.bindings.some((x) => x.repo !== r.id && x.exists && x.sessionEntry !== true)).length;
+    entries.push({ repo: r.id, repoLabel: r.label, count: list.length, paired, branches: feats.length });
+  }
+  // 会话开在哪个仓库：按分支上关联的会话数
+  const sessionsIn = new Map<string, Set<string>>();
+  for (const r of report.repos) if (r.reachable) sessionsIn.set(r.id, new Set(r.branches.flatMap((b) => b.sessions.map((x) => x.sessionId))));
+  const allSessions = new Set([...sessionsIn.values()].flatMap((x) => [...x])).size;
+  const host = [...sessionsIn].sort((a, b) => b[1].size - a[1].size)[0];
+  const hostEntries = host ? entries.find((e) => e.repo === host[0]) : undefined;
+  const renameHint =
+    report.repos.length > 1 && host && hostEntries && allSessions >= RENAME_MIN_SESSIONS && host[1].size / allSessions >= RENAME_MIN_SHARE && !hostEntries.repoLabel.includes("入口")
+      ? {
+          repo: hostEntries.repo,
+          label: hostEntries.repoLabel,
+          suggested: hostEntries.repoLabel.includes("文档") ? "总仓（会话入口 + 文档）" : `${hostEntries.repoLabel}（会话入口）`,
+          entries: hostEntries.count,
+          branches: hostEntries.branches,
+          sessions: host[1].size,
+          allSessions,
+        }
+      : null;
+  return { modules, types, matrix, decisions, total: items.length, entries, renameHint };
 }

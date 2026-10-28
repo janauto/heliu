@@ -280,13 +280,15 @@ export function whereamiContext(w: WhereAmI): string | null {
   if (w.behindIntegration !== null) behindParts.push(`落后集成分支 ${w.behindIntegration}`);
   const behind = behindParts.length ? `；${behindParts.join("、")}` : "";
   const cwdHint = `调用 heliu 工具时请传 cwd="${w.cwd}"。`;
+  // M9：会话常开在一个仓库、去另一个仓库的 worktree 里改代码——那条分支也要绑回同一张卡
+  const crossRepo = "去别的仓库开了分支 / worktree，就用 heliu_feature_bind（cwd 传那个 worktree）绑到同一张卡。";
   if (w.role === "main" || w.role === "integration") {
     const what = w.role === "main" ? "主线" : "集成分支";
     return `【合流】你在 ${where}（${what}）${behind}。主线/集成分支不建功能卡；若要做新功能，建议开新会话（独立 worktree）后用 heliu_feature_add 登记。${cwdHint}`;
   }
   if (w.feature) {
     const ms = w.feature.milestone ? `预约 ${w.milestone?.id ?? w.feature.milestone}` : "未预约版本";
-    return `【合流】你在 ${where}，功能卡 ${w.feature.id}『${w.feature.title}』（${w.feature.status}）${ms}${behind}。${cwdHint}`;
+    return `【合流】你在 ${where}，功能卡 ${w.feature.id}『${w.feature.title}』（${w.feature.status}）${ms}${behind}。${cwdHint}${crossRepo}`;
   }
-  return `【合流】你在 ${where}${behind}。本分支暂无功能卡；若本会话在做新功能，请在明确需求后调用 heliu_feature_add 登记（标题用用户的一句话），否则忽略。${cwdHint}`;
+  return `【合流】你在 ${where}${behind}。本分支暂无功能卡；若本会话在做新功能，请在明确需求后调用 heliu_feature_add 登记（标题用用户的一句话），否则忽略。${cwdHint}${crossRepo}`;
 }

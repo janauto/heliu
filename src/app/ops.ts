@@ -10,6 +10,7 @@ import { loadProject, resolveProject, type ProjectConfig } from "../core/project
 import { reconcile } from "../core/reconcile.ts";
 import { syncLedger, type SyncResult } from "../core/sync.ts";
 import { afterMerge, type AfterMergeResult } from "../core/after-merge.ts";
+import { analyzeTranscripts, applyPairings, loadEvidence, ownCommitsOf, renderApply, renderPairings, selectPairings, suggestPairings, type AnalyzeResult, type ApplyResult, type PairReport } from "../core/pairing.ts";
 import { sourceBranchIndex, zeroCommitBranches } from "../core/owncommits.ts";
 import { countsTowardTodo, groupTodo, todoFeatures } from "../core/todo.ts";
 import { whereami } from "../core/whereami.ts";
@@ -204,6 +205,40 @@ export async function opAfterMerge(ctx: OpContext, opts: { dryRun: boolean; ids?
     else lines.push(`已更新 ${r.changed.length} 张卡的状态（只改台账，不碰仓库）。`);
   }
   return { text: lines.join("\n"), data: r, project: ref(p) };
+}
+
+/* ───────────── M9：跨仓配对 ───────────── */
+
+export interface PairOpData {
+  analyzedAt: string | null;
+  analyze: AnalyzeResult | null;
+  report: PairReport;
+  applied: ApplyResult | null;
+  unknown: string[];
+}
+
+/**
+ * 会话开在一个仓库、在别的仓库干活：先（增量）分析对话记录，再列建议；confirm 给了才写台账。
+ * 对话记录只读；缓存只存路径与次数。
+ */
+export async function opPair(
+  ctx: OpContext,
+  opts: { reanalyze?: boolean; confirm?: string[] | null; milestone?: string | null; weak?: boolean; transcriptsRoot?: string } = {},
+): Promise<OpResult<PairOpData>> {
+  const p = await projectOf(ctx);
+  const { report, sessions } = await reconcile(p, ctx.paths, { precheck: false, dirty: false, timeoutMs: 8000 }, { now: ctx.now });
+  const analyze = await analyzeTranscripts(ctx.paths, p.name, report, sessions, { force: !!opts.reanalyze, root: opts.transcriptsRoot });
+  const ev = loadEvidence(ctx.paths, p.name);
+  const ledger = Ledger.of(p);
+  const rep = suggestPairings({ report, sessions, features: ledger.load().features, evidence: ev.rows, hasOwnCommits: await ownCommitsOf(ctx.paths, report) });
+  const head = `合流 · ${p.name} · 跨仓配对（分析了 ${analyze.files} 份对话记录：新提取 ${analyze.extracted}、没变跳过 ${analyze.skipped}${analyze.missing ? `、找不到 ${analyze.missing}` : ""}，用时 ${(analyze.ms / 1000).toFixed(1)} 秒）`;
+  if (!opts.confirm?.length) {
+    return { text: `${head}\n${renderPairings(rep, ev.analyzedAt, { weak: opts.weak })}`, data: { analyzedAt: ev.analyzedAt, analyze, report: rep, applied: null, unknown: [] }, project: ref(p) };
+  }
+  const { chosen, unknown } = selectPairings(rep, opts.confirm);
+  const applied = applyPairings(ledger, rep, report, chosen, { milestone: opts.milestone, source: ctx.source, now: ctx.now });
+  const extra = unknown.length ? `\n没找到这些编号：${unknown.join("、")}（先不带 --确认 运行一次看编号）` : "";
+  return { text: `${head}\n${renderApply(applied)}${extra}`, data: { analyzedAt: ev.analyzedAt, analyze, report: rep, applied, unknown }, project: ref(p) };
 }
 
 /* ───────────── 里程碑 ───────────── */

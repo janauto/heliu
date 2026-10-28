@@ -5,13 +5,16 @@
  * ② 模块 × 类型矩阵：整机由哪些部分组成、每部分在做修复还是功能迭代。点格子定位到模块。
  * ③ 模块卡：进度、各状态数、最需要决定的三项；展开看全部并改类型 / 模块（改一次就写进卡片，推测不再覆盖）。
  * 只是汇总 + 下钻，不另做第二个看板；写操作只有"改类型 / 模块"（没卡的分支会顺手建卡）与合并后同步。
+ * M9：会话入口（没有自己提交的分支）不计入任何一类，页脚单列；「跨仓配对」把会话和它在别的仓库真正改的分支连到同一张卡；
+ * 某个仓库多半只是会话入口时，建议给它改个如实的名字（只改 project.yaml 那一行，确认后才改）。
  */
 import { useMemo, useState } from "preact/hooks";
-import type { FeaturesData } from "../src/board/api-types.ts";
+import type { FeaturesData, PairingsData } from "../src/board/api-types.ts";
 import { FEATURE_TYPES, OTHER_MODULE, TYPE_GLYPH, type FeatureType } from "../src/core/classify.ts";
 import type { ReconcileReport } from "../src/types.ts";
 import { ago, api, useApi } from "./lib.ts";
 import { MergedPanel } from "./merge-flow.tsx";
+import { PairingPanel } from "./pairing.tsx";
 import { buildStructure, STATES, stateMeta, type SItem, type SModule, type SState, type StructureModel } from "./structure-model.ts";
 
 type Focus = { state: SState } | { module: string; type: FeatureType | null } | null;
@@ -25,6 +28,9 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
   const [focus, setFocus] = useState<Focus>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [syncOpen, setSyncOpen] = useState(false);
+  const [pairOpen, setPairOpen] = useState(false);
+  const pairings = useApi<PairingsData>("/api/pairings", [tick, pairOpen]);
+  const pd = pairings.env?.data ?? null;
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -54,6 +60,24 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
   };
   const decideKeys = STATES.filter((s) => s.decide && model.decisions[s.key]?.length);
   const focusState = focus && "state" in focus ? focus.state : null;
+  const entriesTotal = model.entries.reduce((n, e) => n + e.count, 0);
+  const pairedTotal = model.entries.reduce((n, e) => n + e.paired, 0);
+  const pairPending = pd?.report ? pd.report.counts.strong + pd.report.counts.medium : null;
+  const rename = async () => {
+    const h = model.renameHint;
+    if (!h) return;
+    setBusy(true);
+    try {
+      const r = await api<{ from: string; to: string }>("/api/project/label", { body: { repo: h.repo, label: h.suggested } });
+      setToast(`已把「${r.data.from}」改名为「${r.data.to}」（只改了 project.yaml 里那一行）`);
+      onChanged();
+    } catch (e) {
+      setToast(`没改成：${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+      setTimeout(() => setToast(null), 4200);
+    }
+  };
 
   return (
     <div class="structure">
@@ -72,7 +96,7 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
       {/* ① 现在该决定的 */}
       <section class="panel decide">
         <h3>现在该决定的</h3>
-        {decideKeys.length ? (
+        {decideKeys.length || entriesTotal ? (
           <div class="dchips">
             {decideKeys.map((s) => (
               <button
@@ -87,11 +111,32 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
                 {s.title}
               </button>
             ))}
+            {entriesTotal || pd?.analyzedAt ? (
+              <button class={`dchip t-blue${pairOpen ? " on" : ""}`} onClick={() => setPairOpen(true)} title="会话开在一个仓库、真实改动在别的仓库：按本机对话记录，把那条分支配到会话的卡上（建议，确认后才写台账）">
+                <b>{pairPending === null ? "?" : pairPending}</b>
+                跨仓配对{pairPending === null ? "（先分析）" : ""}
+              </button>
+            ) : null}
           </div>
         ) : (
           <p class="small muted">没有需要你决定的：都在开发中或已完成。</p>
         )}
         {focusState ? <DecisionList state={focusState} items={model.decisions[focusState] ?? []} onSync={() => setSyncOpen(true)} /> : <p class="explain">点上面的数字，列出这一类的全部条目；每条都能跳到星图里定位。</p>}
+        {entriesTotal ? (
+          <p class="small muted entries-note">
+            另有 {entriesTotal} 条会话入口分支
+            {pairedTotal ? `（${pairedTotal} 已配对）` : ""}：它们没有自己的提交，只是会话开出来的入口（{model.entries.map((e) => `${e.repoLabel} ${e.count}`).join("、")}）；除了会话正在等你的那几条（算进「等你回答」），不计入上面任何一类。
+            {model.renameHint ? (
+              <>
+                {" "}
+                {model.renameHint.allSessions} 个会话里 {model.renameHint.sessions} 个都开在「{model.renameHint.label}」，它的 {model.renameHint.branches} 条分支里有 {model.renameHint.entries} 条只是会话入口：它更像「会话入口 + 文档」，建议改名为「{model.renameHint.suggested}」：{" "}
+                <button class="link" disabled={busy} onClick={() => void rename()} title="只改 project.yaml 里这个仓库的 label 一行，手写注释保留">
+                  改名
+                </button>
+              </>
+            ) : null}
+          </p>
+        ) : null}
       </section>
 
       {/* ② 模块 × 类型 */}
@@ -176,6 +221,7 @@ export function StructurePage({ tick, status, precheck, onChanged }: { tick: num
       </div>
 
       {syncOpen ? <MergedPanel onClose={() => setSyncOpen(false)} onChanged={onChanged} /> : null}
+      {pairOpen && !syncOpen ? <PairingPanel onClose={() => setPairOpen(false)} onChanged={onChanged} /> : null}
       {toast ? <div class="toast">{toast}</div> : null}
     </div>
   );

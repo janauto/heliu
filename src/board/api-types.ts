@@ -2,6 +2,7 @@
  * 看板（M3）API 的响应结构：服务端（src/board/*）与前端（web/*）共用，只含类型。
  * 复用 src/types.ts 的 M1/M2 结构；这里只追加看板派生出来的视图。
  */
+import type { AnalyzeResult, PairReport } from "../core/pairing-types.ts";
 import type {
   AcceptanceLevel,
   AheadBehind,
@@ -79,6 +80,8 @@ export interface CardBinding {
   lastCommitAt: string | null;
   worktree: string | null;
   session: CardSession | null;
+  /** M9：这条绑定是「会话入口」（分支没有自己的提交）；null = 未判定 */
+  sessionEntry: boolean | null;
 }
 
 export type ColumnKind = "milestone" | "unreserved" | "released";
@@ -504,3 +507,32 @@ export interface MergedData {
   suggestions: Array<{ id: string; title: string; milestone: string | null; from: string; to: string; branches: Array<{ repo: string; repoLabel: string; branch: string; mergedState: string }> }>;
   changed: Array<{ id: string; title: string; from: string; to: string }>;
 }
+
+/** M9 跨仓配对：后台分析对话记录的进度 */
+export interface PairJob {
+  running: boolean;
+  done: number;
+  total: number;
+  startedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+  result: AnalyzeResult | null;
+}
+
+/** M9 GET /api/pairings：会话开在一个仓库、真实改动在别的仓库时的配对建议（建议 ≠ 事实，确认后才写台账） */
+export interface PairingsData {
+  /** 上次分析对话记录的时间；null = 还没分析过（report 也为 null） */
+  analyzedAt: string | null;
+  job: PairJob | null;
+  report: PairReport | null;
+  privacy: string[];
+}
+
+/** M9 POST /api/project/label：改仓库显示名（只改 project.yaml 里那一行） */
+export interface LabelResult {
+  repo: string;
+  from: string;
+  to: string;
+  file: string;
+}
+

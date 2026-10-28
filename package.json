@@ -1,6 +1,6 @@
 {
   "name": "heliu",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "合流（heliu）：分支 × worktree × 桌面会话对账单 + 功能卡/里程碑台账（CLI · MCP · hooks · Skill）",
   "type": "module",
   "private": true,

@@ -89,7 +89,8 @@ describe("星图布局", () => {
     const m = buildGalaxy(report, features, { width: 1200, now: Date.now(), showMerged: false, collapsed: new Set(), expanded: new Set(), expandAll: true });
     const branches = m.nodes.filter((n): n is GBranch => n.kind === "branch");
     expect(branches.length).toBeGreaterThan(2);
-    expect(branches.some((b) => b.merged === "in_main")).toBe(false);
+    // M9：会话入口（没有自己的提交）不随「显示已进主线」隐藏；其余已进主线的分支默认不画
+    expect(branches.some((b) => b.merged === "in_main" && !b.entry)).toBe(false);
     expect(branches.every((b) => b.x >= m.xL && b.x <= m.xR)).toBe(true);
     // 已进集成且有卡的分支：卡片灯色
     const integ = branches.find((b) => b.branch === B.inInteg)!;
@@ -162,13 +163,13 @@ describe("M8 星团：按类型分行、默认收起", () => {
       expect(r.cluster!.x0).toBeLessThanOrEqual(r.cluster!.x1);
       expect(r.cluster!.x0).toBeGreaterThanOrEqual(m.xL);
       expect(r.cluster!.x1).toBeLessThanOrEqual(m.xR);
-      expect(r.cluster!.labelText).toContain(`${r.count} 条`);
+      expect(r.cluster!.labelText).toContain(r.entry ? `会话入口 ${r.count}` : `${r.count} 条`);
       expect(r.members.every((k) => m.all.find((b) => b.key === k)!.row === r.key)).toBe(true);
     }
     const sorted = [...m.rows].sort((a, b) => a.y0 - b.y0);
     for (let i = 1; i < sorted.length; i++) expect(sorted[i]!.y0).toBeGreaterThanOrEqual(sorted[i - 1]!.y1);
-    // 每个星团一条汇流线（不再每颗星一条）
-    expect(m.flows.length).toBe(m.rows.length);
+    // 每个星团一条汇流线（不再每颗星一条）；M9：会话入口行没有自己的提交，不画汇流线
+    expect(m.flows.length).toBe(m.rows.filter((r) => !r.entry).length);
     // 收起的星团连到行星：合成一条，count = 这一行里预约到该版本的卡星数
     for (const l of m.links) {
       const row = m.rows.find((r) => r.key === l.from)!;

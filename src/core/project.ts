@@ -344,3 +344,47 @@ export async function addRepoToProject(paths: HeliuPaths, input: AddRepoInput): 
   writeFileSync(file, stringifyProject(name, repos, extras), "utf8");
   return { file, project: { ...(existing ?? {}), name, repos, source: file }, repo, created: !existing };
 }
+
+/**
+ * M9：改仓库的显示名。只替换 project.yaml 里该仓库那一块的 `label:` 一行（不整文件重写，手写注释原样保留）；
+ * 找不到那一行就报错让用户手动改。写完重新解析一遍，读回来的名字不对就恢复原文件。
+ */
+export function setRepoLabel(paths: HeliuPaths, name: string, repoId: string, label: string): { file: string; from: string; to: string } {
+  const to = label.trim();
+  if (!to) throw new ProjectError("新名字不能为空");
+  if (/[\r\n]/.test(to)) throw new ProjectError("新名字不能换行");
+  const file = projectFile(paths, name);
+  if (!existsSync(file)) throw new ProjectError(`项目「${name}」的 project.yaml 不存在：${file}`);
+  const before = readFileSync(file, "utf8");
+  const ls = before.split("\n");
+  const idRe = new RegExp(`^(\\s*)-\\s+id:\\s*["']?${repoId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']?\\s*(#.*)?$`);
+  const start = ls.findIndex((l) => idRe.test(l));
+  if (start < 0) throw new ProjectError(`project.yaml 里没找到仓库 ${repoId}（${file}），请手动编辑`);
+  const indent = idRe.exec(ls[start]!)![1]!.length;
+  let at = -1;
+  for (let i = start + 1; i < ls.length; i++) {
+    const l = ls[i]!;
+    if (!l.trim() || l.trimStart().startsWith("#")) continue;
+    const ind = l.length - l.trimStart().length;
+    if (ind <= indent) break; // 下一个仓库或别的字段
+    if (/^\s*label:/.test(l)) {
+      at = i;
+      break;
+    }
+  }
+  if (at < 0) throw new ProjectError(`project.yaml 里仓库 ${repoId} 没有 label 这一行（${file}），请手动加上：label: ${to}`);
+  const m = /^(\s*label:\s*)(.*?)(\s+#.*)?$/.exec(ls[at]!)!;
+  const plain = /^[^\s"'#&*!|>%@`{}[\],:?-][^#:]*$/.test(to) && !/\s$/.test(to);
+  ls[at] = `${m[1]}${plain ? to : JSON.stringify(to)}${m[3] ?? ""}`;
+  writeFileSync(file, ls.join("\n"));
+  try {
+    const p = loadProject(paths, name);
+    const got = p.repos.find((r) => r.id === repoId)?.label;
+    if (got !== to) throw new Error(`读回来是「${got}」`);
+    const from = (YAML.parse(before) as { repos?: Array<{ id?: string; label?: string }> })?.repos?.find((r) => r.id === repoId)?.label ?? "";
+    return { file, from, to };
+  } catch (e) {
+    writeFileSync(file, before);
+    throw new ProjectError(`改名没成功，已恢复原文件（${(e as Error).message}）`);
+  }
+}

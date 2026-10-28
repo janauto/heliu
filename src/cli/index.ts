@@ -18,7 +18,7 @@ import { runDoctor } from "../core/doctor.ts";
 import { DEFAULT_TIMEOUT_MS } from "../core/git.ts";
 import { applyEntry, globalClaudeMdPath, loadEntry, removeEntry } from "../core/global-entry.ts";
 import { heliuPaths } from "../core/paths.ts";
-import { addRepoToProject, expandPath, listProjectNames, loadProject, projectFile, ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
+import { addRepoToProject, expandPath, listProjectNames, loadProject, projectFile, ProjectError, resolveProject, setRepoLabel, type ProjectConfig } from "../core/project.ts";
 import { reconcile } from "../core/reconcile.ts";
 import { TODO_GROUP_DEFS } from "../core/todo.ts";
 import { SCHEMA_VERSION, type JsonEnvelope, type MergedState, type ProjectRef, type ScanOptions } from "../types.ts";
@@ -28,6 +28,7 @@ import {
   opFeatureList,
   opFeatureReserve,
   opAfterMerge,
+  opPair,
   opFeatureSet,
   opInit,
   opMilestoneAdd,
@@ -104,7 +105,7 @@ const program = new Command();
 program
   .name("heliu")
   .description("合流：分支 × worktree × 桌面会话 对账单 + 功能卡/版本台账")
-  .version("0.3.0", "-V, --version", "显示版本")
+  .version("0.4.0", "-V, --version", "显示版本")
   .helpOption("-h, --help", "显示帮助")
   .addHelpCommand(false)
   .option("-p, --project <name>", "项目名（默认按当前目录自动识别）")
@@ -376,6 +377,16 @@ projectCmd
     if (!res.repo.integration && det.candidates.length) out(`  集成分支候选：${det.candidates.map(candidateLine).join("；")}（--integration <分支> 指定）`);
   });
 projectCmd
+  .command("set-label <repo> <名字>")
+  .description("改仓库的显示名（M9）：只改 project.yaml 里该仓库那一行 label，手写注释原样保留；例：heliu project set-label docs \"总仓（会话入口 + 文档）\"")
+  .action(async (repoId: string, label: string, _o, cmd: Command) => {
+    const g = globals(cmd);
+    const p = await project(g);
+    const r = setRepoLabel(heliuPaths(), p.name, repoId, label);
+    if (g.json) printJson(envelope("project.set-label", { name: p.name, source: p.source }, { repo: repoId, ...r }));
+    else out(`已把仓库 ${repoId} 的显示名从「${r.from}」改成「${r.to}」（只改了 ${r.file} 里的那一行）。看板重新对账后生效。`);
+  });
+projectCmd
   .command("list")
   .description("列出已注册项目")
   .action(async (_o, cmd: Command) => {
@@ -585,6 +596,40 @@ program
   .option("--dry-run", "只列出，不写入")
   .option("--ids <卡号>", "只同步这些卡（逗号分隔）")
   .action(mergedAction);
+
+/** M9 跨仓配对：会话开在一个仓库、在别的仓库干活 → 把那条分支配到会话的卡上（建议，确认后才写） */
+async function pairAction(o: { 确认?: string; confirm?: string; 重新分析?: boolean; reanalyze?: boolean; 全部?: boolean; all?: boolean; 预约?: string; milestone?: string }, cmd: Command): Promise<void> {
+  const g = globals(cmd);
+  const pick = o.确认 ?? o.confirm;
+  const ms = o.预约 ?? o.milestone;
+  emit(
+    g,
+    "pair",
+    await opPair(opCtx(g), {
+      reanalyze: !!(o.重新分析 ?? o.reanalyze),
+      confirm: pick ? [pick] : null,
+      milestone: ms === undefined ? undefined : ms === "无" || ms === "none" ? null : ms,
+      weak: !!(o.全部 ?? o.all),
+    }),
+  );
+}
+for (const [name, desc] of [
+  ["pair", "跨仓配对（M9）：会话开在一个仓库、真实改动在别的仓库的 worktree 时，按对话记录给出「把那条分支绑到会话的卡」的建议；--确认 才写台账"],
+  ["配对", "= pair"],
+] as const) {
+  program
+    .command(name)
+    .description(desc)
+    .option("--确认 <编号>", "写入这些建议（逗号分隔的编号，或 all = 全部强档）")
+    .option("--confirm <编号>", "同 --确认")
+    .option("--重新分析", "不用缓存，全部对话记录重新提取")
+    .option("--reanalyze", "同 --重新分析")
+    .option("--全部", "也列出弱证据")
+    .option("--all", "同 --全部")
+    .option("--预约 <版本>", "没卡的会话建卡时预约到哪一版（默认下一版；无 = 不预约）")
+    .option("--milestone <版本>", "同 --预约")
+    .action(pairAction);
+}
 
 async function whereamiAction(_o: unknown, cmd: Command): Promise<void> {
   const g = globals(cmd);

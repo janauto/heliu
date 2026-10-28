@@ -106,6 +106,12 @@ export interface FeatureView {
   /** 关联会话，按关联强度、最后活动倒序；第一个为主会话 */
   sessions: SessionRef[];
   precheck: PrecheckResult | null;
+  /**
+   * M9「会话入口」：没有自己提交的功能分支（多是桌面会话开出来的入口，真实改动在别的仓库）。
+   * 与「尚无独有提交」同一判定（owncommits.isZeroCommit），只在看板 /api/status 里填；
+   * 未判定（CLI 对账、仓库不可达）时缺省；false = 有自己的提交或独立未合并。
+   */
+  sessionEntry?: boolean | null;
 }
 
 export interface WorktreeInfo {

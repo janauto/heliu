@@ -188,6 +188,24 @@ export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: Boa
     if (!ids || !ids.length) throw new ProjectError("请给出要同步的卡号 ids（先 GET /api/merged 看建议）");
     return send(c, "merged", await s.merged(false, ids), null, 200, s);
   });
+  // M9 跨仓配对：建议（从缓存现算）、分析对话记录（后台）、确认写入（只写台账）
+  app.get("/api/pairings", async (c) => {
+    const s = svc(c);
+    return send(c, "pairings", await s.pairings(), null, 200, s);
+  });
+  app.post("/api/pairings/analyze", async (c) => {
+    const s = svc(c);
+    const b = await body(c);
+    return send(c, "pairings.analyze", s.analyzePairings(b.force === true), null, 200, s);
+  });
+  app.post("/api/pairings", async (c) => {
+    const s = svc(c);
+    return send(c, "pairings.confirm", await s.confirmPairings(await body(c)), null, 200, s);
+  });
+  app.post("/api/project/label", async (c) => {
+    const s = svc(c);
+    return send(c, "project.label", s.setLabel(await body(c)), null, 200, s);
+  });
   app.post("/api/release/decision", async (c) => {
     const s = svc(c);
     return send(c, "release.decision", await s.releaseDecision(await body(c)), null, 200, s);

@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { FeaturesData, MergePromptData, ProjectsData, ReleaseDecisionResult } from "../src/board/api-types.ts";
 import { FEATURE_TYPES, OTHER_MODULE, TYPE_GLYPH, classifyText, inferModule, type FeatureType } from "../src/core/classify.ts";
 import type { ReconcileReport } from "../src/types.ts";
-import { buildGalaxy, hitConfluence, hitTarget, rowKeyOf, type DropTarget, type GBranch, type GConfluence, type GNode, type GPlanet, type GRow, type GalaxyModel, type StarColor } from "./galaxy-model.ts";
+import { buildGalaxy, ENTRY_ROW, hitConfluence, hitTarget, matesOf, rowKeyOf, type DropTarget, type GBranch, type GConfluence, type GNode, type GPlanet, type GRow, type GalaxyModel, type StarColor } from "./galaxy-model.ts";
 import { ago, api, copyText, copyWhenReady, currentProject, mdhm, store, switchProject, useApi } from "./lib.ts";
 import { MergedPanel, MergePromptPanel, PromptBlock, type PromptState } from "./merge-flow.tsx";
 
@@ -405,6 +405,9 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
     related.add(selNode.key);
     for (const l of model.links) if (l.from === selNode.key) related.add(l.to);
   }
+  // M9：同一张卡在别处的星（含会话入口）一起亮，并画临时虚线
+  const mates = selNode && selNode.kind === "branch" ? matesOf(model, selNode.key) : [];
+  const mateKeys = new Set(mates.map((m) => m.key));
   const planetHL = drag?.target?.kind === "planet" ? drag.target.planet.key : null;
   const confHL = drag?.target?.kind === "confluence" ? drag.target.conf.key : drag?.conf ? drag.conf.key : null;
   const cardHL = drag?.target?.kind === "card" ? drag.target.node.key : null;
@@ -434,7 +437,7 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
           刚合并完？同步一下
         </button>
         <span class="galaxy-meta">
-          {model.counts.branches} 颗分支星 · {model.rows.length} 个星团 · {model.counts.unbound} 颗没卡 · {model.counts.cards} 张功能卡
+          {model.counts.branches - model.counts.entries} 颗分支星{model.counts.entries ? ` + ${model.counts.entries} 个会话入口` : ""} · {model.counts.unbound} 颗没卡 · {model.counts.cards} 张功能卡
         </span>
       </div>
       <div class="galaxy-tools">
@@ -543,7 +546,9 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
                   {l.collapsed ? "▸" : "▾"} {l.label}
                 </text>
                 <text x={20} y={l.y0 + 38} class="lane-sub">
-                  {l.error ? l.error : `${l.shown} / ${l.total} 条分支${l.hiddenMerged && !showMerged ? `（${l.hiddenMerged} 条已进主线未显示）` : ""}`}
+                  {l.error
+                    ? l.error
+                    : `${l.entries ? `工作 ${l.work} + 会话入口 ${l.entries}` : `${l.shown}`} / ${l.total} 条分支${l.hiddenMerged && !showMerged ? `（${l.hiddenMerged} 条已进主线未显示）` : ""}`}
                 </text>
               </g>
               {l.integY !== null ? (
@@ -579,17 +584,21 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
               const total = r.count;
               let acc = 0;
               return (
-                <g class={`row${r.expanded ? " open" : ""}${dim ? " dim" : ""}${rowHL === r.key ? " hot" : ""}${dragging && !draggingPlanet && draggingType !== r.type ? " can" : ""}`}>
+                <g class={`row${r.expanded ? " open" : ""}${r.entry ? " entry" : ""}${dim ? " dim" : ""}${rowHL === r.key ? " hot" : ""}${dragging && !draggingPlanet && !r.entry && draggingType !== r.type ? " can" : ""}`}>
                   {r.expanded ? <rect x={model.xL - 4} y={r.y0} width={model.xR - model.xL + 30} height={r.y1 - r.y0} rx={12} class="row-band" /> : null}
                   <g class="row-head" onClick={() => toggleRow(r.key)} onPointerEnter={() => setHoverRow(r.key)} onPointerLeave={() => setHoverRow((h) => (h === r.key ? null : h))}>
-                    <title>{`${r.type}：${r.count} 条分支。点一下${r.expanded ? "收起" : "展开"}；把星点拖到这里 = 改成「${r.type}」`}</title>
+                    <title>
+                      {r.entry
+                        ? `会话入口：${r.count} 条分支没有自己的提交（多是会话开出来的入口，真实改动在别的仓库）${r.paired ? `，其中 ${r.paired} 条已配对` : ""}。点一下${r.expanded ? "收起" : "展开"}；去结构页「跨仓配对」把会话和它真正改的分支连起来`
+                        : `${r.type}：${r.count} 条分支。点一下${r.expanded ? "收起" : "展开"}；把星点拖到这里 = 改成「${r.type}」`}
+                    </title>
                     <rect x={14} y={r.y - 15} width={model.xL - 26} height={30} rx={9} class="row-head-bg" />
                     <text x={22} y={r.y + 1} class="row-name">
                       <tspan class="caret">{r.expanded ? "▾" : "▸"}</tspan>
                       <tspan class={`glyph c-${dominantOf(r)}`} dx={4}>
                         {r.glyph}
                       </tspan>
-                      <tspan dx={5}>{r.type}</tspan>
+                      <tspan dx={5}>{r.entry ? ENTRY_ROW : r.type}</tspan>
                     </text>
                     <text x={model.xL - 18} y={r.y + 1} text-anchor="end" class="row-count">
                       {r.count}
@@ -623,7 +632,7 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
             {model.links.map((l) => (
               <path
                 d={l.d}
-                class={`link${sel === l.from || hoverPlanet === l.to || selPlanet === l.to || hoverRow === l.from ? " on" : ""}`}
+                class={`link${l.entry ? " entry" : ""}${sel === l.from || hoverPlanet === l.to || selPlanet === l.to || hoverRow === l.from ? " on" : ""}`}
                 stroke={COLOR[l.color]}
                 style={l.count && l.count > 1 ? { strokeWidth: `${Math.min(4, 0.8 + Math.log2(l.count))}px` } : undefined}
               />
@@ -638,20 +647,24 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
               const dim = filtering && !rowHit(r);
               return (
                 <g
-                  class={`cluster c-${c.color}${dim ? " dim" : ""}${hoverRow === r.key ? " hover" : ""}`}
+                  class={`cluster c-${c.color}${r.entry ? " entry" : ""}${dim ? " dim" : ""}${hoverRow === r.key ? " hover" : ""}`}
                   onClick={() => toggleRow(r.key)}
                   onPointerEnter={() => setHoverRow(r.key)}
                   onPointerLeave={() => setHoverRow((h) => (h === r.key ? null : h))}
                 >
-                  <title>{`${r.type} · ${r.count} 条：点一下展开成星点`}</title>
+                  <title>{r.entry ? `会话入口 ${r.count} 条：点一下展开` : `${r.type} · ${r.count} 条：点一下展开成星点`}</title>
                   <rect x={c.x0 - 12} y={r.y - 9} width={c.x1 - c.x0 + 24} height={18} rx={9} class="cluster-band" />
-                  {c.dots.map((d) => (
-                    <circle cx={d.x} cy={r.y + d.dy} r={2.3} fill={COLOR[d.color]} class="cluster-dot" />
-                  ))}
+                  {c.dots.map((d) =>
+                    r.entry ? (
+                      <circle cx={d.x} cy={r.y + d.dy} r={2.3} fill="none" stroke={COLOR[d.color]} class="cluster-dot" />
+                    ) : (
+                      <circle cx={d.x} cy={r.y + d.dy} r={2.3} fill={COLOR[d.color]} class="cluster-dot" />
+                    ),
+                  )}
                   <g transform={`translate(${c.x1}, ${r.y})`}>
                     {r.hasNewest ? <circle r={17} class="cluster-halo" /> : null}
-                    <circle r={18} fill={`url(#star-${c.color})`} class="glow" />
-                    <Shape type={r.type} r={9} fill={COLOR[c.color]} cls="cluster-core" />
+                    {r.entry ? null : <circle r={18} fill={`url(#star-${c.color})`} class="glow" />}
+                    {r.entry ? <circle r={8} fill="none" stroke={COLOR[c.color]} class="cluster-core entry-core" /> : <Shape type={r.type} r={9} fill={COLOR[c.color]} cls="cluster-core" />}
                     <text y={3.5} text-anchor="middle" class="cluster-n">
                       {r.count}
                     </text>
@@ -699,22 +712,44 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
             </g>
           ))}
 
+          {/* M9：选中一颗星时，同一张卡在别处的星（会话入口 ↔ 固件 / App 分支）用临时虚线连起来 */}
+          {selNode && mates.length ? (
+            <g class="mate-lines">
+              {mates.map((m) => (
+                <path d={`M${selNode.x},${selNode.y} L${m.x},${m.y}`} class="mate-line" />
+              ))}
+            </g>
+          ) : null}
+
           {/* 星点（展开行里的分支 + 没分支的小卡星）：颜色 = 状态，形状 = 类型 */}
           <g class="nodes">
             {model.nodes.map((n, i) => {
               const m = matches(n);
-              const hl = sel === n.key || cardHL === n.key;
+              const hl = sel === n.key || cardHL === n.key || mateKeys.has(n.key);
               const isB = n.kind === "branch";
               return (
                 <g
-                  class={`star ${n.kind} c-${n.color}${hl ? " sel" : ""}${!m ? " dim" : ""}${isB && n.recent ? " latest" : ""}${isB && !n.card ? " stray" : ""}`}
+                  class={`star ${n.kind} c-${n.color}${hl ? " sel" : ""}${mateKeys.has(n.key) ? " mate" : ""}${!m ? " dim" : ""}${isB && n.recent ? " latest" : ""}${isB && !n.card && !n.entry ? " stray" : ""}${isB && n.entry ? " entry" : ""}`}
                   style={{ transform: `translate(${n.x}px, ${n.y}px)`, animationDelay: `${Math.min(900, i * 9)}ms` }}
                   onPointerDown={(e) => startDrag(n, e as unknown as PointerEvent)}
                 >
-                  <title>{isB ? `${n.label}\n${n.type} · ${n.repoLabel} · ${n.branch}\n${STATE_TEXT[n.color]} · 最后提交 ${mdhm(n.lastAt)}` : `${n.card.id} ${n.card.title}（${n.type}，还没关联分支）`}</title>
+                  <title>
+                    {isB
+                      ? [
+                          n.label,
+                          `${n.entry ? "会话入口（没有自己的提交）" : n.type} · ${n.repoLabel} · ${n.branch}`,
+                          `${STATE_TEXT[n.color]} · ${n.entry ? "会话最后活动" : "最后提交"} ${mdhm(n.lastAt)}`,
+                          n.sessionTitle ? `会话：${n.sessionTitle}` : "",
+                          n.worktreePath ? `worktree：${n.worktreePath}` : "",
+                          n.mates.length ? `同一张卡还绑着：${n.mates.join("；")}` : "",
+                        ]
+                          .filter(Boolean)
+                          .join("\n")
+                      : `${n.card.id} ${n.card.title}（${n.type}，还没关联分支）`}
+                  </title>
                   {isB && n.recent ? <circle r={n.r + 9} class="halo" /> : null}
-                  <circle r={n.r * 2.2} fill={`url(#star-${n.color})`} class="glow" />
-                  <Shape type={n.type} r={n.r} fill={COLOR[n.color]} cls="core" />
+                  {isB && n.entry ? null : <circle r={n.r * 2.2} fill={`url(#star-${n.color})`} class="glow" />}
+                  {isB && n.entry ? <circle r={4.5} fill="none" stroke={COLOR[n.color]} class="core entry-core" /> : <Shape type={n.type} r={n.r} fill={COLOR[n.color]} cls="core" />}
                   {isB && n.behind && n.behind > 0 && n.merged === "unmerged" && (n.color === "yellow" || filter === "behind") ? (
                     <text y={n.r + 13} text-anchor="middle" class="behind-badge">
                       ↓{n.behind}
@@ -804,7 +839,8 @@ function filterHit(f: Filter, n: GNode): boolean {
   if (f === "waiting") return n.color === "purple" || !!n.waiting;
   if (f === "behind") return n.merged === "unmerged" && (n.behind ?? 0) > 0;
   if (f === "conflict") return n.color === "red" || (n.conflicts ?? 0) > 0;
-  return !n.card;
+  // M9：会话入口不算「还没建卡」（与结构页同口径）
+  return !n.card && !n.entry;
 }
 
 function dropText(n: GNode, t: DropTarget): string {
@@ -853,6 +889,9 @@ function Legend() {
       <span>
         <i class="halo-i" />
         最新（呼吸光晕）
+      </span>
+      <span class="shape-i">
+        <b>◌</b>会话入口（没有自己的提交，真实改动多在别的仓库）
       </span>
       <span>星团 = 同一类分支收在一起，数字是条数、小点是每条的时间</span>
       <span>虚线 = 还没并进集成分支；亮实线 = 已汇入</span>
@@ -910,7 +949,7 @@ function Detail({
               复制
             </button>
           </span>
-          <span>最后提交</span>
+          <span>{node.entry ? "会话最后活动" : "最后提交"}</span>
           <span>
             {mdhm(node.lastAt)}（{ago(node.lastAt)}）
           </span>
@@ -926,7 +965,27 @@ function Detail({
               <span>{node.sessionTitle}</span>
             </>
           ) : null}
+          {node.worktreePath ? (
+            <>
+              <span>worktree</span>
+              <span>
+                <code>{node.worktreePath}</code>
+              </span>
+            </>
+          ) : null}
+          {node.mates.length ? (
+            <>
+              <span>同一张卡</span>
+              <span>{node.mates.join("；")}</span>
+            </>
+          ) : null}
         </div>
+      ) : null}
+      {node.kind === "branch" && node.entry ? (
+        <p class="small muted">
+          这条分支没有自己的提交，是会话的入口；会话真正改的代码可能在别的仓库。
+          {node.mates.length ? "" : "到「结构」页的「跨仓配对」，按对话记录把会话和它真正改的分支连到同一张卡。"}
+        </p>
       ) : null}
       <div class="classify small">
         <label>

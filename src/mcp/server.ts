@@ -18,6 +18,7 @@ import { opAfterMerge,
   opFeatureSet,
   opMilestoneList,
   opMilestoneTodo,
+  opPair,
   opSync,
   opWhereami,
   projectOf,
@@ -26,6 +27,7 @@ import { opAfterMerge,
 } from "../app/ops.ts";
 import { clampText } from "../cli/render-ledger.ts";
 import { renderHygiene, renderSessions, renderStatusSummary } from "../cli/render.ts";
+import { LedgerError } from "../core/ledger.ts";
 import { heliuPaths } from "../core/paths.ts";
 import { reconcile } from "../core/reconcile.ts";
 import { ACCEPTANCE_LEVELS, FEATURE_STATUSES } from "../types.ts";
@@ -44,6 +46,7 @@ export const MCP_TOOL_NAMES = [
   "heliu_milestone_list",
   "heliu_sync",
   "heliu_after_merge",
+  "heliu_pair",
   ...RELEASE_TOOL_NAMES,
 ] as const;
 
@@ -86,7 +89,7 @@ async function run(cliHint: string, fn: () => Promise<OpResult | string>): Promi
 
 export function buildServer(): McpServer {
   const server = new McpServer(
-    { name: "heliu", version: "0.3.0" },
+    { name: "heliu", version: "0.4.0" },
     {
       instructions:
         "合流（heliu）：把 git 分支 × worktree × 桌面会话 对上账，并管理「功能卡 → 预约到哪一版」。用户说「我有个新点子/做个 X」→ heliu_feature_add；「这个预约到 1.2」→ heliu_feature_reserve；「1.2 还欠什么」→ heliu_milestone_todo；「合并完了」→ heliu_after_merge（先列出、用户确认再写）。真正合并只由用户在终端运行 heliu 合并 <版本>。调用时尽量传 cwd（会话所在 worktree）。永不 push、不删分支。",
@@ -278,6 +281,28 @@ export function buildServer(): McpServer {
       },
     },
     async (a) => run("heliu 同步合并结果 --dry-run", () => opAfterMerge(ctxOf(a), { dryRun: a.dry_run !== false, ids: a.ids ?? null })),
+  );
+
+  server.registerTool(
+    "heliu_pair",
+    {
+      title: "跨仓配对：把会话在别的仓库开的分支绑到同一张卡",
+      description:
+        "会话开在一个仓库（如文档仓）、真实改动在另一个仓库的 worktree（如固件仓）时用：分析本项目会话的对话记录（只读，只提取路径与次数），给出「把那条分支绑到会话的卡」的建议，分强 / 中 / 弱三档，每条带依据。默认 dry_run=true 只列出；逐条念给用户（编号、仓库分支、依据、绑到哪张卡），用户确认后再用 dry_run=false + ids 写入。只写台账，不碰仓库；已绑在别的卡上的只提示，不合卡。",
+      inputSchema: {
+        dry_run: z.boolean().optional().describe("true（默认）= 只列出；false = 写入 ids 里的建议"),
+        ids: z.array(z.string()).optional().describe("要写入的建议编号（列表里的 #3 写 3）或 all（= 全部强档）"),
+        reanalyze: z.boolean().optional().describe("不用缓存，重新提取全部对话记录"),
+        milestone: z.string().optional().describe("没卡的会话建卡时预约到哪一版；不传 = 下一版"),
+        weak: z.boolean().optional().describe("也列出弱证据"),
+        ...common,
+      },
+    },
+    async (a) =>
+      run("heliu 配对", () => {
+        if (a.dry_run === false && !a.ids?.length) throw new LedgerError("要写入请给出 ids（先 dry_run 看编号，用户确认后再写）");
+        return opPair(ctxOf(a), { reanalyze: !!a.reanalyze, confirm: a.dry_run === false ? (a.ids ?? []) : null, milestone: a.milestone, weak: !!a.weak });
+      }),
   );
 
   registerReleaseTools(server, { ctxOf, run, common });
