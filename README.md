@@ -2,7 +2,7 @@
 
 # 合流（heliu）— 十几个 AI 会话并行开发，每一版还欠什么一眼看清
 
-[![版本](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-0.2.0-blue)](package.json)
+[![版本](https://img.shields.io/badge/%E7%89%88%E6%9C%AC-0.3.0-blue)](package.json)
 ![许可：私有](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF-%E7%A7%81%E6%9C%89%20%28UNLICENSED%29-lightgrey)
 ![Bun ≥ 1.3](https://img.shields.io/badge/Bun-%E2%89%A5%201.3-000000?logo=bun&logoColor=white)
 ![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
@@ -149,6 +149,7 @@ $ bin/heliu status --project 磁吸背夹
   git clone https://github.com/janauto/heliu.git "$HOME/heliu" && cd "$HOME/heliu" && scripts/install.sh && bin/heliu doctor
 验收：doctor 最后一行以「结论：可用」或「结论：一切正常」开头；claude plugin list 里有 heliu@heliu-local 且 Status: ✔ enabled。
 install.sh 不需要输入任何凭据；重复执行无害。注意：如果这台机器已经从另一个目录装过 heliu-local，第 5 步会把 marketplace 改指到当前目录（脚本会打印一行警告），原目录的安装随之失效。
+第 7 步会在全局 CLAUDE.md（~/CLAUDE.md，没有它时 ~/.claude/CLAUDE.md）末尾追加一段带 heliu 标记的规则，改前备份；不想动它加 --no-claude-md。
 接入项目的非交互写法：bin/heliu project add <仓库路径> --name <项目名> --yes
 -->
 
@@ -186,17 +187,34 @@ cd "$HOME/heliu"
 scripts/install.sh
 ```
 
-`scripts/install.sh` 依次做五步，每条命令先打印再执行（想先看会做什么：`scripts/install.sh --dry-run`）：
+`scripts/install.sh` 依次做七步，每条命令先打印再执行（想先看会做什么：`scripts/install.sh --dry-run`）：
 
 1. 找 bun：依次查 PATH、`~/.bun/bin`、`/opt/homebrew/bin`、`/usr/local/bin`、`$BUN_BIN`。
 2. `bun install`：`node_modules` 软链到 `node_modules.nosync`，iCloud 不同步。
 3. 找 Claude CLI：优先用桌面应用内置的最高版本，其次用 PATH 里的 `claude`。
 4. 注册 user 级 MCP：**默认跳过**。插件已自带同名 MCP；确实需要时加 `--with-mcp`。
-5. 把本仓库加成本地 marketplace `heliu-local`，并安装插件 `heliu@heliu-local`（带 `/heliu` Skill、hooks、MCP）。
+5. 把本仓库加成本地 marketplace `heliu-local`，并安装插件 `heliu@heliu-local`（带 `/heliu` Skill、hooks、MCP）；重装时再跑一次 `plugin update`，刷新登记的版本号。
+6. 终端命令：在 PATH 里的 `~/.bun/bin`（没有就 `~/.local/bin`）建软链 `heliu → bin/heliu`，终端里可以直接敲 `heliu 合并 v1.2`。那里已有同名的普通文件时不覆盖；不想建加 `--no-link`。
+7. 全局入口：在全局 CLAUDE.md 末尾追加一段「合流什么时候用」（原文是 [`examples/全局入口.md`](examples/全局入口.md)），见下面「全局入口」。不想动它加 `--no-claude-md`，想写到别的文件加 `--claude-md=<路径>`。
 
 > [!NOTE]
-> 插件从克隆目录原地加载，改代码不用重装。因此装好后不要移动或删除这个目录；要换位置，先在旧目录跑 `scripts/uninstall.sh`，再在新目录重新安装。
+> 插件从克隆目录原地加载，改代码不用重装：新开的会话就用上新工具和新 Skill（已经开着的会话要重开，或在会话里输入 `/reload-plugins`）。因此装好后不要移动或删除这个目录；要换位置，先在旧目录跑 `scripts/uninstall.sh`，再在新目录重新安装。
 > 如果这台机器已经从别的目录装过 `heliu-local`，第 5 步会把它改指到当前目录并打印警告；旧目录那份安装随之失效，这是预期行为。
+
+#### 全局入口：每个会话都知道什么时候用合流
+
+装好后，合流分三层进入你所有的 Claude 会话：
+
+| 层 | 装在哪 | 管什么 |
+|---|---|---|
+| 插件 | `heliu@heliu-local`（user 级，所有项目都加载） | 14 个 `heliu_*` 工具、`/heliu` Skill；已接入的仓库在会话开头注入【合流】提示（你在哪条分支、对应哪张卡、预约哪一版、落后多少） |
+| 全局入口 | 全局 CLAUDE.md 里带 `<!-- heliu:begin` / `<!-- heliu:end -->` 标记的一段 | 什么时候用合流：新点子登记、合并完同步、没接入的仓库建议接入一次（不自己接入）、只有你在终端输入 yes 才合并 |
+| 终端命令 | `~/.bun/bin/heliu` 软链 | 在任何目录直接敲 `heliu` |
+
+全局入口只写"什么时候用"，具体用法留在 `/heliu` Skill 里，避免全局规则越写越长。这一段由 `heliu 全局入口` 维护：重跑安装只替换标记之间的内容，标记以外一个字都不动，改前把原文件备份到 `~/Library/Application Support/heliu/backups/`；标记缺了一半时不改，提示你手动检查。想改措辞，改仓库里的 `examples/全局入口.md` 再重跑 `scripts/install.sh`。
+
+> [!NOTE]
+> 缺省写进 `~/CLAUDE.md`（存在时），它是家目录下所有项目的上级规则文件，家目录以外的项目读不到它。项目放在家目录以外时，改用 Claude Code 的用户级记忆：`scripts/install.sh --claude-md=$HOME/.claude/CLAUDE.md`。
 
 ### 3. 验证安装
 
@@ -204,7 +222,7 @@ scripts/install.sh
 bin/heliu doctor
 ```
 
-预期：最后一行是 `结论：一切正常` 或 `结论：可用，N 项警告`。警告不影响使用，例如刚装好时的「注册表……（尚无项目）」，或无头 claude 未登录。看到 `结论：N 项失败` 时命令退出码为 1，按 `✗` 开头的那几行处理。这条命令要检查无头 claude 能否登录，最长约 20 秒。
+预期：最后一行是 `结论：一切正常` 或 `结论：可用，N 项警告`。紧跟环境检查的三行「装进 Claude」（插件、全局入口、终端命令）应都是 `✓`；是 `!` 时按那一行说的重跑 `scripts/install.sh`。警告不影响使用，例如刚装好时的「注册表……（尚无项目）」，或无头 claude 未登录。看到 `结论：N 项失败` 时命令退出码为 1，按 `✗` 开头的那几行处理。这条命令要检查无头 claude 能否登录，最长约 20 秒。
 
 本机实测输出（节选）：
 
@@ -231,7 +249,7 @@ CLAUDE="$(ls -d "$HOME/Library/Application Support/Claude/claude-code/"*/*/claud
 
 ```text
   ❯ heliu@heliu-local
-    Version: 0.2.0
+    Version: 0.3.0
     Read from: /Users/<你的用户名>/heliu
     Scope: user
     Status: ✔ enabled
@@ -262,7 +280,7 @@ bin/heliu status --project <项目名>   # 健康条 + 现在最该做的（刚�
 bin/heliu board --project <项目名>    # 打开看板，缺省 http://127.0.0.1:7788，并自动打开浏览器；无桌面环境加 --no-open
 ```
 
-想在任何目录直接敲 `heliu`：把 `bin/heliu` 链到你 PATH 里的某个目录，例如 `ln -s "$PWD/bin/heliu" /usr/local/bin/heliu`。`bin/heliu` 是个 sh 包装，自己找 bun，不依赖 PATH 里有 bun。
+安装脚本第 6 步已把 `heliu` 链进 `~/.bun/bin`，任何目录都能直接敲 `heliu`。PATH 里没有 `~/.bun/bin` 或 `~/.local/bin` 时脚本会跳过，你可以自己链到别处，例如 `ln -s "$PWD/bin/heliu" /usr/local/bin/heliu`。`bin/heliu` 是个 sh 包装，自己找 bun，不依赖 PATH 里有 bun。
 
 ### 常见问题
 
@@ -272,6 +290,7 @@ bin/heliu board --project <项目名>    # 打开看板，缺省 http://127.0.0.
 | 运行 `bin/heliu` 报「heliu：找不到 bun」 | bun 装在非常规位置：`export BUN_BIN=<bun 的绝对路径>` 后再运行 |
 | 安装脚本打印「没找到 claude CLI」 | 第 4、5 步会被跳过。装好 Claude 桌面应用或 Claude Code 后重跑 `scripts/install.sh` |
 | 某一步打印「！上面这条没成功（可能已经装过）」 | 脚本不会中断。用上面的 `plugin list` 确认 `heliu@heliu-local` 是否已启用 |
+| 已经开着的会话里没有新工具，或没读到全局入口 | 会话只在启动时加载插件和 CLAUDE.md：重开会话，或在会话里输入 `/reload-plugins` |
 | 以前从别的目录装过 | 直接在新目录跑 `scripts/install.sh` 即可：第 5 步会把 `heliu-local` 改指到新目录并打印警告，旧目录那份随之失效；旧目录有空再跑 `scripts/uninstall.sh` 做清理（可选） |
 | `git clone` 报 `Repository not found` 或要求登录 | 仓库是私有的，需要用有权限的 GitHub 账号登录（HTTPS 凭据或 SSH） |
 | `git clone` 报 `destination path ... already exists` | `$HOME/heliu` 已被占用：换一个目录名克隆，后面的 `cd` 跟着改 |
@@ -284,7 +303,7 @@ bin/heliu board --project <项目名>    # 打开看板，缺省 http://127.0.0.
 scripts/uninstall.sh            # 想先看会做什么：scripts/uninstall.sh --dry-run
 ```
 
-依次卸插件、删本地 marketplace、删 user 级 MCP（默认安装没有这一项，脚本会跳过）。不删台账与缓存：`~/Library/Application Support/heliu/`（注册表、台账、索引缓存）和 `~/.cache/heliu/`（合并演练与临时 worktree）都会保留，也不删 `node_modules`。
+依次卸插件、删本地 marketplace、删 user 级 MCP（默认安装没有这一项，脚本会跳过）、删指向本目录的 `heliu` 终端软链、删全局 CLAUDE.md 里带 heliu 标记的那一段（改前备份，其他内容不动）。不删台账与缓存：`~/Library/Application Support/heliu/`（注册表、台账、索引缓存）和 `~/.cache/heliu/`（合并演练与临时 worktree）都会保留，也不删 `node_modules`。
 
 ## 命令速查
 
@@ -306,6 +325,7 @@ scripts/uninstall.sh            # 想先看会做什么：scripts/uninstall.sh -
 | 合并 · 回滚 | `heliu 回滚 v1.2` | — |
 | 合并后同步（在别处合并了分支，把台账补上） | `heliu 同步合并结果 [--dry-run]` | `heliu_after_merge`（默认只预览） |
 | 会话 / 卫生 / 环境 | `heliu sessions` · `heliu hygiene` · `heliu doctor` | `heliu_sessions`、`heliu_hygiene` |
+| 全局入口（写进 / 更新 / 删掉全局 CLAUDE.md 里的合流一段） | `heliu 全局入口 [--dry-run] [--remove] [--file <路径>]`（安装、卸载脚本会调用） | — |
 | 里程碑 | `heliu milestone add / list / freeze / rename` | `heliu_milestone_list` |
 | 接入新仓库 | `heliu project add <路径> [--integration <分支>] [--ledger repo] [--yes]` | — |
 

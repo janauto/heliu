@@ -74,6 +74,7 @@ function Step({ n, title, hint, done, children }: { n: number; title: string; hi
 const ICON: Record<DoctorCheck["level"], string> = { ok: "✓", warn: "!", fail: "✗" };
 const ENV_IDS = new Set(["git", "git-ahead-behind", "bun", "sandbox", "headless-claude"]);
 const DATA_IDS = new Set(["desktop-sessions", "git-worktrees-json", "running-sessions", "registry", "registry-icloud"]);
+const INSTALL_IDS = new Set(["plugin", "global-entry", "terminal-cli"]);
 
 function DoctorPanel() {
   const [full, setFull] = useState(false);
@@ -82,8 +83,9 @@ function DoctorPanel() {
   const groups: Array<[string, DoctorCheck[]]> = data
     ? [
         ["运行环境", data.checks.filter((c) => ENV_IDS.has(c.id))],
+        ["装进 Claude", data.checks.filter((c) => INSTALL_IDS.has(c.id))],
         ["桌面会话与注册表", data.checks.filter((c) => DATA_IDS.has(c.id))],
-        ["已接入的项目", data.checks.filter((c) => !ENV_IDS.has(c.id) && !DATA_IDS.has(c.id))],
+        ["已接入的项目", data.checks.filter((c) => !ENV_IDS.has(c.id) && !INSTALL_IDS.has(c.id) && !DATA_IDS.has(c.id))],
       ]
     : [];
   return (

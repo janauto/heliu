@@ -4,6 +4,7 @@
 import { accessSync, constants, existsSync } from "node:fs";
 import type { DoctorCheck } from "../types.ts";
 import { gitVersion, lines, runGit, sandboxAvailable, versionAtLeast } from "./git.ts";
+import { binLinkDirs, globalClaudeMdPath, installChecks } from "./global-entry.ts";
 import { probeResolver } from "./resolver.ts";
 import { looksLikeICloud, type HeliuPaths } from "./paths.ts";
 import { listProjectNames, loadProject, type ProjectConfig } from "./project.ts";
@@ -57,6 +58,9 @@ export async function runDoctor(paths: HeliuPaths, projectName: string | undefin
       ),
     );
   }
+
+  // 装进 Claude：插件 / 全局 CLAUDE.md 入口 / 终端命令（只读）
+  out.push(...installChecks({ claudeHome: paths.claudeHome, claudeMd: globalClaudeMdPath(), binDirs: binLinkDirs() }));
 
   // 数据目录
   const ds = loadDesktopSessions(paths);

@@ -8,14 +8,15 @@
  * 全局：--project <name>  --cwd <dir>  --json  --precheck  --dirty  --timeout <ms>  --wide
  */
 import { Command, Option } from "commander";
-import { existsSync, readFileSync, writeSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import YAML from "yaml";
 import { Ledger } from "../core/ledger.ts";
 import { candidateLine, detectRepo, renderOnboard, repoIdOf, type OnboardPlan } from "../core/onboard.ts";
 import { runDoctor } from "../core/doctor.ts";
 import { DEFAULT_TIMEOUT_MS } from "../core/git.ts";
+import { applyEntry, globalClaudeMdPath, loadEntry, removeEntry } from "../core/global-entry.ts";
 import { heliuPaths } from "../core/paths.ts";
 import { addRepoToProject, expandPath, listProjectNames, loadProject, projectFile, ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
 import { reconcile } from "../core/reconcile.ts";
@@ -103,7 +104,7 @@ const program = new Command();
 program
   .name("heliu")
   .description("合流：分支 × worktree × 桌面会话 对账单 + 功能卡/版本台账")
-  .version("0.2.0", "-V, --version", "显示版本")
+  .version("0.3.0", "-V, --version", "显示版本")
   .helpOption("-h, --help", "显示帮助")
   .addHelpCommand(false)
   .option("-p, --project <name>", "项目名（默认按当前目录自动识别）")
@@ -196,6 +197,65 @@ program
     else out(renderDoctor(checks));
     if (checks.some((c) => c.level === "fail")) process.exitCode = 1;
   });
+
+/** 全局入口：把 examples/全局入口.md 带标记写进全局 CLAUDE.md（scripts/install.sh / uninstall.sh 调用） */
+async function globalEntryAction(o: { file?: string; remove?: boolean; dryRun?: boolean }, cmd: Command): Promise<void> {
+  const g = globals(cmd);
+  const file = o.file ? expandPath(o.file, process.cwd()) : globalClaudeMdPath();
+  const exists = existsSync(file);
+  const before = exists ? readFileSync(file, "utf8") : "";
+  const block = loadEntry();
+  let next = before;
+  let action: "added" | "updated" | "unchanged" | "removed" | "absent" | "broken";
+  if (o.remove) {
+    const r = removeEntry(before);
+    action = r.broken ? "broken" : r.removed ? "removed" : "absent";
+    next = r.text;
+  } else {
+    const r = applyEntry(before, block);
+    action = r.action;
+    next = r.text;
+  }
+  let backup: string | null = null;
+  const write = !o.dryRun && next !== before && action !== "broken";
+  if (write) {
+    if (exists) {
+      const dir = join(heliuPaths().heliuHome, "backups");
+      mkdirSync(dir, { recursive: true });
+      backup = join(dir, `CLAUDE.md.${new Date().toLocaleString("sv-SE").replace(/[-:]/g, "").replace(" ", "-")}`);
+      copyFileSync(file, backup);
+    }
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, next);
+  }
+  if (action === "broken") process.exitCode = 1;
+  if (g.json) {
+    printJson(envelope("global-entry", null, { file, action, dryRun: !!o.dryRun, written: write, backup }));
+    return;
+  }
+  const bak = backup ? `\n原文件备份：${backup}` : "";
+  const text: Record<typeof action, string> = {
+    added: o.dryRun ? `预演：将在 ${file} 文末追加下面这段（其他内容不动）：\n\n${block}` : `已在 ${file} 文末追加合流入口（其他内容没动）。${bak}`,
+    updated: o.dryRun ? `预演：${file} 里的合流入口是旧版，将换成下面这段（其他内容不动）：\n\n${block}` : `已更新 ${file} 里的合流入口（只改了带 heliu 标记的那一段）。${bak}`,
+    unchanged: `${file} 里的合流入口已是最新，不用改。`,
+    removed: o.dryRun ? `预演：将从 ${file} 删掉合流入口（其他内容不动）。` : `已从 ${file} 删掉合流入口（其他内容没动）。${bak}`,
+    absent: `${file} 里没有合流入口，不用删。`,
+    broken: `${file} 里合流段落的开始 / 结束标记不成对，这次没有改动。请手动检查 <!-- heliu:begin 与 <!-- heliu:end --> 两行。`,
+  };
+  out(text[action]);
+}
+for (const [name, desc] of [
+  ["global-entry", "全局入口：把「合流什么时候用」写进全局 CLAUDE.md（带标记，重复执行只更新这一段；--remove 删掉）"],
+  ["全局入口", "= global-entry"],
+] as const) {
+  program
+    .command(name)
+    .description(desc)
+    .option("--file <path>", "全局 CLAUDE.md 路径（默认 ~/CLAUDE.md，没有它时用 ~/.claude/CLAUDE.md）")
+    .option("--remove", "删掉合流入口")
+    .option("--dry-run", "只显示会怎么改，不写文件")
+    .action(globalEntryAction);
+}
 
 const projectCmd = program.command("project").description("项目注册表");
 /** 交互时直接写 stdout（out() 要到命令结束才写出，提问前摘要必须先出来） */

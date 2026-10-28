@@ -117,6 +117,6 @@ describe("plugin 骨架", () => {
     expect(p.name).toBe("heliu");
     expect(p.description).toMatch(/[一-龥]/);
     const skill = readFileSync(join(ROOT, "skills", "heliu", "SKILL.md"), "utf8");
-    for (const k of ["name: heliu", "description:", "when_to_use:", "## ① 查待办", "## ② 为某个功能开新会话", "## ③ `heliu_sync` 之后", "## ④ 禁止事项"]) expect(skill).toContain(k);
+    for (const k of ["name: heliu", "description:", "when_to_use:", "## ① 查待办", "## ② 为某个功能开新会话", "## ③ `heliu_sync` 之后", "## ④ 合并一版", "## ⑤ 禁止事项"]) expect(skill).toContain(k);
   });
 });
