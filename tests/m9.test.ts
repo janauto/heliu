@@ -22,7 +22,7 @@ import { addRepoToProject, loadProject, projectFile, setRepoLabel, stringifyProj
 import { buildMatcher, extractEvidence, indexTranscripts, matchSuffix } from "../src/core/transcripts.ts";
 import { whereamiContext } from "../src/core/whereami.ts";
 import type { FeatureView, LedgerFeature, ReconcileReport, SessionView, WhereAmI } from "../src/types.ts";
-import { buildGalaxy, hitTarget, matesOf } from "../web/galaxy-model.ts";
+import { buildGalaxy, countItems, hitTarget, matesOf } from "../web/galaxy-model.ts";
 import { buildStructure } from "../web/structure-model.ts";
 import { B, buildFixture, type Fixture } from "./helpers/fixture.ts";
 
@@ -269,6 +269,16 @@ describe("会话入口（看板）", () => {
     const s = buildStructure(st, fe);
     expect(s.decisions.stray?.some((i) => i.key === entry.key) ?? false).toBe(false);
     expect(s.entries[0]!.count).toBe(m.counts.entries);
+  }, 60_000);
+
+  test("星图筛选数字 = 结构页同名数字：按件计（同卡多星只算一件），开不开「显示已进主线」都一样", async () => {
+    const st = await get<ReconcileReport>("/api/status");
+    const fe = await get<FeaturesData>("/api/features");
+    const s = buildStructure(st, fe);
+    for (const showMerged of [false, true]) {
+      const m = buildGalaxy(st, fe, { width: 1400, now: Date.parse("2026-10-28T00:00:00Z"), showMerged, collapsed: new Set(), expanded: new Set() });
+      for (const k of ["waiting", "stray", "behind"] as const) expect([showMerged, k, countItems(m, k)]).toEqual([showMerged, k, s.decisions[k]?.length ?? 0]);
+    }
   }, 60_000);
 
   test("还没分析过对话记录：/api/pairings 给出隐私说明，report 为空；分析完成后有分析时间", async () => {

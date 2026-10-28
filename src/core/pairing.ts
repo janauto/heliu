@@ -229,19 +229,18 @@ export function suggestPairings(input: PairInput): PairReport {
       const hits = e.reads + e.writes + e.commits;
       const share = total ? hits / total : 0;
       const wrote = e.writes + e.commits > 0;
-      const parts = [`${w.name}：出现 ${hits} 次（占 ${Math.round(share * 100)}%）`];
-      if (e.writes) parts.push(`改文件 ${e.writes} 次`);
-      if (e.commits) parts.push(`提交 ${e.commits} 次`);
+      // 写入 / 提交 0 次也写出来：强弱一眼可比
+      const parts = [`${w.name}：出现 ${hits} 次（占 ${Math.round(share * 100)}%）`, `改文件 ${e.writes} 次`, `提交 ${e.commits} 次`];
       if (e.lastSeenAt) parts.push(`最近 ${mmdd(e.lastSeenAt)}`);
       if (!w.branch) {
-        if (wrote && !w.isMain) notes.push({ sessionId: s.sessionId, title, text: `在${w.repo.label}的 ${w.name}（分离 HEAD，没有检出分支）里改动（${parts.join(" · ")}）：定位不到分支，没法出配对建议` });
+        if (wrote && !w.isMain) notes.push({ sessionId: s.sessionId, title, text: `记录显示曾在${w.repo.label}的 ${w.name}（现在是分离 HEAD，没有检出分支）里改动（${parts.join(" · ")}）：定位不到分支，没法出配对建议` });
         continue;
       }
       const fv = w.repo.branches.find((b) => b.branch === w.branch);
       if (!fv || fv.role !== "feature") {
         // 在主线 / 集成分支的 worktree 里直接改：不能当功能分支绑，但值得告诉用户这项工作在哪
         if (fv && !w.isMain && wrote) {
-          notes.push({ sessionId: s.sessionId, title, text: `直接在${w.repo.label}${fv.role === "main" ? "主线" : "集成分支"} ${w.branch} 上改动（${parts.join(" · ")}）：这条分支不能绑到功能卡，这部分工作已经在它里面了` });
+          notes.push({ sessionId: s.sessionId, title, text: `记录显示曾在${w.repo.label}的 ${w.name}（现在检出${fv.role === "main" ? "主线" : "集成分支"} ${w.branch}）里改动（${parts.join(" · ")}）：主线 / 集成分支不能绑到功能卡；这不代表这些改动现在一定还在这条分支里` });
         }
         continue;
       }
@@ -421,7 +420,7 @@ const TIER_TEXT: Record<PairTier, string> = { strong: "强", medium: "中", weak
 /** CLI / MCP 的中文列表（弱档只给数量，--全部 才逐条列） */
 export function renderPairings(rep: PairReport, analyzedAt: string | null, opts: { weak?: boolean } = {}): string {
   const lines: string[] = [];
-  if (!analyzedAt) return "还没分析过对话记录：运行 heliu 配对 会先分析一遍（只读，约几十秒）。";
+  if (!analyzedAt) return `还没分析过对话记录：运行 heliu 配对 会先分析一遍（只读，通常几秒）。\n隐私：${PAIR_PRIVACY.join("")}`;
   const c = rep.counts;
   lines.push(`上次分析：${analyzedAt.replace("T", " ").slice(0, 16)}。会话开在一个仓库、在别的仓库里干活的建议（建议 ≠ 事实，确认后才写台账）：`);
   lines.push(`  强 ${c.strong} · 中 ${c.medium} · 弱 ${c.weak}${c.other ? ` · 已绑在别的卡 ${c.other}（只提示）` : ""}${c.paired ? ` · 已配好 ${c.paired}` : ""}`);
@@ -448,6 +447,8 @@ export function renderPairings(rep: PairReport, analyzedAt: string | null, opts:
   const hiddenWeak = rep.groups.flatMap((g) => g.items).filter((i) => i.tier === "weak" && i.target.kind !== "other").length;
   if (!opts.weak && hiddenWeak) lines.push("", `另有 ${hiddenWeak} 条弱证据没列出（加 --全部 显示）。`);
   lines.push("", "确认：heliu 配对 --确认 <编号,编号…>（或 all = 全部强档）；只写台账，不碰仓库。");
+  lines.push("依据是建议不是事实：worktree 按现在检出的分支对应，可能后来换过；仓库主目录常切换分支，只算弱证据。");
+  lines.push(`隐私：${PAIR_PRIVACY.join("")}`);
   return lines.join("\n");
 }
 

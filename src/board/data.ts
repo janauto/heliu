@@ -555,6 +555,14 @@ export class BoardService {
     const report = scan.result.report;
     const waiting = scan.result.sessions.filter((s) => s.status === "blocked").length;
     const actions = topActions(report, waiting).map(boardWording);
+    // M9：分析过对话记录、还有强 / 中档配对建议没处理时，给一行入口（没分析过就不提，免得每次打开都催）
+    try {
+      const pr = (await this.pairings()).report;
+      const pending = pr ? pr.counts.strong + pr.counts.medium : 0;
+      if (pending) actions.push(`${pending} 条跨仓配对建议待确认：会话开在一个仓库、代码改在别的仓库 → 见「结构」页「跨仓配对」`);
+    } catch {
+      /* 配对是锦上添花：读不到证据就不提 */
+    }
     const integrations: OverviewData["integrations"] = [];
     let neverPushed = 0;
     let hygieneWarnings = 0;

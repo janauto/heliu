@@ -47,6 +47,8 @@ export interface SItem {
   alsoMerged: boolean;
   /** 还没合并的分支里最多落后基线几个提交（0 = 不落后）；主状态不是「落后」时也列进「落后需同步」 */
   behind: number;
+  /** M9：没卡的分支，会话在等你：主状态是「还没建卡」时也列进「等你回答」（与星图同口径） */
+  waitingSession?: boolean;
 }
 
 export interface SModule {
@@ -176,6 +178,7 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
         bind: { repo: r.id, branch: b.branch },
         alsoMerged: false,
         behind: b.mergedState === "unmerged" ? Math.max(0, b.vsIntegration?.behind ?? b.vsMain?.behind ?? 0) : 0,
+        waitingSession: b.sessions[0]?.status === "blocked",
       });
     }
   }
@@ -208,7 +211,13 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
   const decisions: StructureModel["decisions"] = {};
   for (const s of STATES) if (s.decide) {
     const list = items
-      .filter((i) => i.state === s.key || (s.key === "merged" && i.alsoMerged) || (s.key === "behind" && i.behind > 0 && i.state !== "done" && i.state !== "merged"))
+      .filter(
+        (i) =>
+          i.state === s.key ||
+          (s.key === "merged" && i.alsoMerged) ||
+          (s.key === "behind" && i.behind > 0 && i.state !== "done" && i.state !== "merged") ||
+          (s.key === "waiting" && !!i.waitingSession),
+      )
       .sort(byUrgency);
     if (list.length) decisions[s.key] = list;
   }

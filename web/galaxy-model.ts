@@ -66,6 +66,8 @@ export interface GBranch {
   worktreePath: string | null;
   /** M9：同一张卡上的其他绑定（如「文档仓 claude/xxx · 会话入口」） */
   mates: string[];
+  /** M9：没卡的分支，它的会话在等你（有卡时看卡的灯） */
+  sessionBlocked: boolean;
 }
 
 export interface GCard {
@@ -305,14 +307,27 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
 
   // 横轴范围：最老的显示中分支，最少 30 天、最多 180 天
   const repos = report.repos.filter((r) => r.reachable);
-  // M9：会话入口不算"已完成的工作"，不随「显示已进主线」隐藏（它的会话可能正在等你）
-  const visible = (b: FeatureView) => b.role === "feature" && (opts.showMerged || b.mergedState !== "in_main" || b.sessionEntry === true);
+  // M9：会话入口不算"已完成的工作"，不随「显示已进主线」隐藏（它的会话可能正在等你）；
+  // 跨仓配对过的卡：别的仓库那条还在进行（没进主线 / 是会话入口）时，这条已进主线的也画出来，同卡的星才看得见、连得上
+  const live = new Set<string>();
+  for (const r of repos)
+    for (const b of r.branches)
+      if (b.role === "feature" && (b.mergedState !== "in_main" || b.sessionEntry === true)) {
+        const c = byBinding.get(`${r.id}|${b.branch}`);
+        if (c && !c.done) live.add(`${c.id}|${r.id}`);
+      }
+  const mateLive = (repo: string, b: FeatureView) => {
+    const c = byBinding.get(`${repo}|${b.branch}`);
+    return !!c && !c.done && [...new Set(c.bindings.map((x) => x.repo))].some((x) => x !== repo && live.has(`${c.id}|${x}`));
+  };
+  const visibleIn = (repo: string, b: FeatureView) =>
+    b.role === "feature" && (opts.showMerged || b.mergedState !== "in_main" || b.sessionEntry === true || mateLive(repo, b));
   // 会话入口没有自己的提交：时间按会话最后活动算（"最后提交"是它出发点的时间，没有意义）
   const timeOf = (b: FeatureView) => (b.sessionEntry === true ? (b.sessions[0]?.lastActivityAt ?? b.lastCommitAt) : b.lastCommitAt);
   let maxAge = 30;
   for (const r of repos)
     for (const b of r.branches) {
-      const t = visible(b) ? timeOf(b) : null;
+      const t = visibleIn(r.id, b) ? timeOf(b) : null;
       if (t) maxAge = Math.max(maxAge, (now - Date.parse(t)) / DAY);
     }
   maxAge = Math.min(180, Math.ceil(maxAge));
@@ -347,7 +362,7 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
       continue;
     }
     const feats = r.branches.filter((b) => b.role === "feature");
-    const shown = feats.filter(visible);
+    const shown = feats.filter((b) => visibleIn(r.id, b));
     const collapsed = opts.collapsed.has(r.id);
     const integ = r.branches.find((b) => b.role === "integration") ?? null;
     const integAhead = r.health?.integration?.aheadOfMain ?? integ?.vsMain?.ahead ?? null;
@@ -395,6 +410,7 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
         entry: b.sessionEntry === true,
         worktreePath: b.worktree?.path ?? null,
         mates: others.map((x) => `${x.repoLabel} ${x.branch}${x.sessionEntry ? " · 会话入口" : ""}`),
+        sessionBlocked: !card && s?.status === "blocked",
       };
       node.labelText = `${node.recent === 1 ? "★ 最新 · " : ""}${short(node.label, 18)}`;
       return node;
@@ -755,4 +771,28 @@ export function matesOf(m: GalaxyModel, key: string): GBranch[] {
 /** M8：某条分支 / 卡在哪个类型行（跳转定位、搜索时自动展开用） */
 export function rowKeyOf(m: GalaxyModel, key: string): string | null {
   return m.all.find((b) => b.key === key)?.row ?? null;
+}
+
+/** 星图顶部筛选 */
+export type Filter = "all" | "waiting" | "behind" | "conflict" | "stray";
+
+export function filterHit(f: Filter, n: GNode): boolean {
+  if (f === "all") return true;
+  if (n.kind === "card") return f === "waiting" ? n.card.light === "purple" : f === "conflict" ? n.card.light === "red" : false;
+  if (f === "waiting") return n.color === "purple" || n.sessionBlocked || !!n.waiting;
+  if (f === "behind") return n.merged === "unmerged" && (n.behind ?? 0) > 0;
+  if (f === "conflict") return n.color === "red" || (n.conflicts ?? 0) > 0;
+  // M9：会话入口、已进主线的分支都不算「还没建卡」（与结构页同口径）
+  return !n.card && !n.entry && n.merged !== "in_main";
+}
+
+/**
+ * 筛选按钮上的数字 = 几件事（与结构页同口径）：同一张卡绑了几颗星也只算一件；没卡的分支一条算一件。
+ * 星点之外，没有可见分支的小卡星也算（它的卡同样在等你 / 有冲突）。
+ */
+export function countItems(m: GalaxyModel, f: Filter): number {
+  const keys = new Set<string>();
+  for (const n of m.all) if (filterHit(f, n)) keys.add(n.card ? `k:${n.card.id}` : n.key);
+  for (const n of m.nodes) if (n.kind === "card" && filterHit(f, n)) keys.add(`k:${n.card.id}`);
+  return keys.size;
 }

@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { FeaturesData, MergePromptData, ProjectsData, ReleaseDecisionResult } from "../src/board/api-types.ts";
 import { FEATURE_TYPES, OTHER_MODULE, TYPE_GLYPH, classifyText, inferModule, type FeatureType } from "../src/core/classify.ts";
 import type { ReconcileReport } from "../src/types.ts";
-import { buildGalaxy, ENTRY_ROW, hitConfluence, hitTarget, matesOf, rowKeyOf, type DropTarget, type GBranch, type GConfluence, type GNode, type GPlanet, type GRow, type GalaxyModel, type StarColor } from "./galaxy-model.ts";
+import { buildGalaxy, countItems, ENTRY_ROW, filterHit, hitConfluence, hitTarget, matesOf, rowKeyOf, type DropTarget, type Filter, type GBranch, type GConfluence, type GNode, type GPlanet, type GRow, type GalaxyModel, type StarColor } from "./galaxy-model.ts";
 import { ago, api, copyText, copyWhenReady, currentProject, mdhm, store, switchProject, useApi } from "./lib.ts";
 import { MergedPanel, MergePromptPanel, PromptBlock, type PromptState } from "./merge-flow.tsx";
 
@@ -443,7 +443,7 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
       <div class="galaxy-tools">
         <div class="filters" role="group" aria-label="筛选星点">
           {FILTERS.map((f) => {
-            const n = f.key === "all" ? model.all.length : model.all.filter((x) => filterHit(f.key, x)).length;
+            const n = f.key === "all" ? model.all.length : countItems(model, f.key);
             return (
               <button class={`fchip f-${f.key}${filter === f.key ? " on" : ""}`} onClick={() => setFilter(f.key)} disabled={f.key !== "all" && n === 0}>
                 {f.title} <b>{n}</b>
@@ -825,7 +825,6 @@ function focusFromHash(): string | null {
   }
 }
 
-type Filter = "all" | "waiting" | "behind" | "conflict" | "stray";
 const FILTERS: Array<{ key: Filter; title: string }> = [
   { key: "all", title: "全部" },
   { key: "waiting", title: "等你回答" },
@@ -833,16 +832,6 @@ const FILTERS: Array<{ key: Filter; title: string }> = [
   { key: "conflict", title: "有冲突" },
   { key: "stray", title: "还没建卡" },
 ];
-function filterHit(f: Filter, n: GNode): boolean {
-  if (f === "all") return true;
-  if (n.kind === "card") return false;
-  if (f === "waiting") return n.color === "purple" || !!n.waiting;
-  if (f === "behind") return n.merged === "unmerged" && (n.behind ?? 0) > 0;
-  if (f === "conflict") return n.color === "red" || (n.conflicts ?? 0) > 0;
-  // M9：会话入口不算「还没建卡」（与结构页同口径）
-  return !n.card && !n.entry;
-}
-
 function dropText(n: GNode, t: DropTarget): string {
   const hasCard = n.kind === "card" || !!n.card;
   if (t.kind === "planet") return t.planet.kind === "unreserved" ? "松手：取消预约" : hasCard ? `松手：预约到 ${t.planet.title}` : `松手：建卡并预约到 ${t.planet.title}`;
