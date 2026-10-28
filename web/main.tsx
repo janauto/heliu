@@ -5,16 +5,18 @@
  */
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import type { OverviewData } from "../src/board/api-types.ts";
+import type { OverviewData, ProjectsData } from "../src/board/api-types.ts";
 import type { ReconcileReport } from "../src/types.ts";
 import { BoardPage } from "./board.tsx";
-import { api, hms, secs, useApi } from "./lib.ts";
+import { api, currentProject, hms, secs, setCurrentProject, store, switchProject, useApi } from "./lib.ts";
 import { OverviewPage } from "./overview.tsx";
 import { HygienePage, SessionsPage } from "./pages.tsx";
 import { ReleasePage } from "./release.tsx";
+import { StartPage } from "./start.tsx";
 
-export type Tab = "overview" | "board" | "hygiene" | "sessions" | "release";
+export type Tab = "start" | "overview" | "board" | "hygiene" | "sessions" | "release";
 const TABS: Array<{ key: Tab; title: string }> = [
+  { key: "start", title: "开始" },
   { key: "overview", title: "总览" },
   { key: "board", title: "版本列" },
   { key: "hygiene", title: "卫生" },
@@ -23,16 +25,43 @@ const TABS: Array<{ key: Tab; title: string }> = [
 ];
 const REFRESH_MS = 30_000;
 
-function tabFromHash(): Tab {
-  const h = location.hash.replace(/^#\/?/, "") as Tab;
-  return TABS.some((t) => t.key === h) ? h : "overview";
+function tabFromHash(fallback: Tab): Tab {
+  const h = location.hash.replace(/^#\/?/, "").split("/")[0] as Tab;
+  return TABS.some((t) => t.key === h) ? h : fallback;
 }
 
-function App() {
-  const [tab, setTab] = useState<Tab>(tabFromHash());
+/** 选当前项目：地址 ?project= > 上次选的 > 看板默认 > 只有一个项目时就它 */
+function pickProject(pd: ProjectsData): string | null {
+  const names = new Set(pd.projects.filter((p) => !p.error).map((p) => p.name));
+  const url = new URLSearchParams(location.search).get("project");
+  for (const n of [url, store.get("heliu.project"), pd.default]) if (n && names.has(n)) return n;
+  return names.size === 1 ? [...names][0]! : null;
+}
+
+/** M6 外壳：先读项目列表、定当前项目，再渲染看板（没有项目时只有「开始」可用） */
+function Root() {
+  const projects = useApi<ProjectsData>("/api/projects", []);
+  if (!projects.env) {
+    return projects.error ? <p class="err boot">读取项目列表失败：{projects.error}</p> : <p class="boot">正在载入…</p>;
+  }
+  const pd = projects.env.data;
+  const cur = pickProject(pd);
+  setCurrentProject(cur);
+  if (cur) store.set("heliu.project", cur);
+  return <App projects={pd} reloadProjects={projects.reload} />;
+}
+
+function App({ projects, reloadProjects }: { projects: ProjectsData; reloadProjects: () => void }) {
+  const cur = currentProject();
+  // 第一次打开、或还没有项目时落在「开始」；之后默认总览
+  const firstVisit = !store.get("heliu.seenStart");
+  const [tab, setTab] = useState<Tab>(tabFromHash(!cur || firstVisit ? "start" : "overview"));
+  useEffect(() => {
+    if (tab === "start") store.set("heliu.seenStart", "1");
+  }, [tab]);
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    const onHash = () => setTab(tabFromHash());
+    const onHash = () => setTab(tabFromHash(cur ? "overview" : "start"));
     window.addEventListener("hashchange", onHash);
     const timer = setInterval(() => setTick((t) => t + 1), REFRESH_MS);
     return () => {
@@ -41,6 +70,7 @@ function App() {
     };
   }, []);
   const go = (t: Tab) => {
+    if (!cur && t !== "start") return;
     location.hash = `/${t}`;
     setTab(t);
     window.scrollTo(0, 0);
@@ -58,15 +88,15 @@ function App() {
     }
   };
   useEffect(() => {
-    void check(false);
+    if (cur) void check(false);
   }, []);
   const precheck = pc.state === "on" || (pc.state === "checking" && !!pc.at);
-  const status = useApi<ReconcileReport>("/api/status", [tick]);
-  const overview = useApi<OverviewData>(`/api/overview?precheck=${precheck ? 1 : 0}`, [tick]);
+  const status = useApi<ReconcileReport>(cur ? "/api/status" : null, [tick]);
+  const overview = useApi<OverviewData>(cur ? `/api/overview?precheck=${precheck ? 1 : 0}` : null, [tick]);
   const refresh = () => setTick((t) => t + 1);
   const meta = status.env?.meta;
   const ov = overview.env?.data;
-  const projectName = status.env?.project?.name ?? overview.env?.project?.name ?? "";
+  const projectName = cur ?? "";
   useEffect(() => {
     document.title = projectName ? `合流看板 · ${projectName}` : "合流看板";
   }, [projectName]);
@@ -75,31 +105,38 @@ function App() {
     <div>
       <header class="top">
         <div class="top-row">
-          <div class="brand">
-            合流看板<small>{projectName}</small>
-          </div>
+          <div class="brand">合流看板</div>
+          <ProjectSwitcher projects={projects} cur={cur} go={go} />
           <span class="datatime" title="对账结果在服务端缓存 20 秒；页面每 30 秒自动刷新">
-            {meta ? `数据时间 ${hms(meta.scannedAt)} · 用时 ${secs(meta.scanMs)}` : status.error ? "数据加载失败" : "正在扫描…"}
+            {!cur ? "还没有选项目" : meta ? `数据时间 ${hms(meta.scannedAt)} · 用时 ${secs(meta.scanMs)}` : status.error ? "数据加载失败" : "正在扫描…"}
             {status.loading || overview.loading ? " · 刷新中" : ""}
           </span>
-          <button class="btn" onClick={refresh} disabled={status.loading}>
+          <button
+            class="btn"
+            onClick={() => {
+              refresh();
+              reloadProjects();
+            }}
+            disabled={status.loading}
+          >
             刷新
           </button>
         </div>
         <nav class="tabs">
           {TABS.map((t) => (
-            <button class={`tab${tab === t.key ? " on" : ""}`} onClick={() => go(t.key)}>
+            <button class={`tab${tab === t.key ? " on" : ""}`} onClick={() => go(t.key)} disabled={!cur && t.key !== "start"} aria-label={t.title} title={!cur && t.key !== "start" ? "先在「开始」里接入或选择一个项目" : undefined}>
               {t.title}
               {t.key === "sessions" && ov && ov.waiting > 0 ? <span class="badge">{ov.waiting}</span> : null}
               {t.key === "hygiene" && ov && ov.hygieneWarnings > 0 ? <span class="badge">{ov.hygieneWarnings}</span> : null}
             </button>
           ))}
         </nav>
-        <NextLine ov={ov ?? null} pc={pc} onCheck={() => void check(pc.state === "on")} />
+        {cur ? <NextLine ov={ov ?? null} pc={pc} onCheck={() => void check(pc.state === "on")} /> : null}
       </header>
-      {ov ? <Strip ov={ov} go={go} /> : null}
+      {ov && tab !== "start" ? <Strip ov={ov} go={go} /> : null}
       <main>
-        {status.error ? <p class="err">读取对账失败：{status.error}</p> : null}
+        {status.error && tab !== "start" ? <p class="err">读取对账失败：{status.error}</p> : null}
+        {tab === "start" ? <StartPage projects={projects} reloadProjects={reloadProjects} go={go} /> : null}
         {tab === "overview" ? <OverviewPage tick={tick} status={status.env?.data ?? null} overview={ov ?? null} go={go} /> : null}
         {tab === "board" ? <BoardPage tick={tick} precheck={precheck} onChanged={refresh} /> : null}
         {tab === "hygiene" ? <HygienePage tick={tick} /> : null}
@@ -107,6 +144,31 @@ function App() {
         {tab === "release" ? <ReleasePage tick={tick} /> : null}
       </main>
     </div>
+  );
+}
+
+/** 顶栏项目切换：切换 = 记住选择并带 ?project= 重新载入；最后一项跳到「开始」的接入向导 */
+function ProjectSwitcher({ projects, cur, go }: { projects: ProjectsData; cur: string | null; go: (t: Tab) => void }) {
+  const names = projects.projects.map((p) => p.name);
+  const onChange = (el: HTMLSelectElement) => {
+    const v = el.value;
+    el.value = cur ?? ""; // 受控下拉：选完「接入新项目」后显示回当前项目
+    if (v === "__add__") {
+      go("start");
+      location.hash = "/start/add";
+      setTimeout(() => window.dispatchEvent(new Event("heliu:open-add")), 50);
+      return;
+    }
+    if (v && v !== cur) switchProject(v);
+  };
+  return (
+    <select class="proj-switch" value={cur ?? ""} onChange={(e) => onChange(e.target as HTMLSelectElement)} title="切换项目">
+      {!cur ? <option value="">选择项目…</option> : null}
+      {names.map((n) => (
+        <option value={n}>{n}</option>
+      ))}
+      <option value="__add__">＋ 接入新项目…</option>
+    </select>
   );
 }
 
@@ -172,4 +234,4 @@ function Strip({ ov, go }: { ov: OverviewData; go: (t: Tab) => void }) {
   );
 }
 
-render(<App />, document.getElementById("app")!);
+render(<Root />, document.getElementById("app")!);

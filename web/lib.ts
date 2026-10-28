@@ -2,9 +2,49 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { BoardEnvelope } from "../src/board/api-types.ts";
 
+/* ───────────── 当前项目（M6）：页面地址 ?project= > 上次选的 > 看板默认 ───────────── */
+
+let CURRENT_PROJECT: string | null = null;
+export const currentProject = (): string | null => CURRENT_PROJECT;
+export function setCurrentProject(name: string | null): void {
+  CURRENT_PROJECT = name;
+}
+
+/** localStorage 读写（隐私窗口 / 被禁用时静默失败） */
+export const store = {
+  get(k: string): string | null {
+    try {
+      return localStorage.getItem(k);
+    } catch {
+      return null;
+    }
+  },
+  set(k: string, v: string): void {
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+      /* 忽略 */
+    }
+  },
+};
+
+/** 切换项目：记住选择，带着 ?project= 重新载入（保留当前页签） */
+export function switchProject(name: string, tab?: string): void {
+  store.set("heliu.project", name);
+  const hash = tab ? `#/${tab}` : location.hash;
+  location.assign(`${location.pathname}?project=${encodeURIComponent(name)}${hash}`);
+}
+
+/** 项目级接口自动带上当前项目；/api/projects* 与 /api/doctor 不分项目；已显式带 project= 的不动 */
+function withProject(path: string): string {
+  if (!CURRENT_PROJECT || !path.startsWith("/api/")) return path;
+  if (path.startsWith("/api/projects") || path.startsWith("/api/doctor") || /[?&]project=/.test(path)) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}project=${encodeURIComponent(CURRENT_PROJECT)}`;
+}
+
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<BoardEnvelope<T>> {
   const hasBody = init.body !== undefined;
-  const res = await fetch(path, {
+  const res = await fetch(withProject(path), {
     method: init.method ?? (hasBody ? "POST" : "GET"),
     headers: hasBody ? { "Content-Type": "application/json" } : {},
     body: hasBody ? JSON.stringify(init.body) : undefined,

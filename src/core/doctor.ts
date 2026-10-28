@@ -22,7 +22,12 @@ function readable(p: string): boolean {
 
 const check = (id: string, level: DoctorCheck["level"], message: string): DoctorCheck => ({ id, ok: level !== "fail", level, message });
 
-export async function runDoctor(paths: HeliuPaths, projectName: string | undefined, timeoutMs: number): Promise<DoctorCheck[]> {
+export interface DoctorOptions {
+  /** 跳过无头 claude 探测（最长约 20 秒）；看板「开始」页默认跳过，点「完整检查」才做 */
+  skipClaude?: boolean;
+}
+
+export async function runDoctor(paths: HeliuPaths, projectName: string | undefined, timeoutMs: number, opts: DoctorOptions = {}): Promise<DoctorCheck[]> {
   const out: DoctorCheck[] = [];
   const v = await gitVersion();
   if (!v) out.push(check("git", "fail", "找不到 git 或无法执行 git version"));
@@ -40,7 +45,8 @@ export async function runDoctor(paths: HeliuPaths, projectName: string | undefin
     out.push(check("sandbox", "warn", `sandbox-exec 不可用${process.env.HELIU_NO_SANDBOX === "1" ? "（HELIU_NO_SANDBOX=1）" : "（非 macOS，或已处在不允许嵌套的沙箱里）"}：预演会把待合项标为「未能试合」，演练会拒绝执行，真实合并只靠白名单约束`));
   }
   // M4：无头 claude（解冲突子代理）
-  if (process.env.HELIU_DOCTOR_SKIP_CLAUDE === "1") out.push(check("headless-claude", "warn", "无头 claude：未检查（HELIU_DOCTOR_SKIP_CLAUDE=1）"));
+  if (opts.skipClaude) out.push(check("headless-claude", "warn", "无头 claude：这次没检查（约 20 秒，点「完整检查」才做）"));
+  else if (process.env.HELIU_DOCTOR_SKIP_CLAUDE === "1") out.push(check("headless-claude", "warn", "无头 claude：未检查（HELIU_DOCTOR_SKIP_CLAUDE=1）"));
   else {
     const pr = await probeResolver({ timeoutMs: 20_000 });
     out.push(

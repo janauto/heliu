@@ -254,3 +254,70 @@ button.link { border: none; background: none; color: var(--accent); cursor: poin
 .tag.precheck_failed { color: var(--yellow); border-color: var(--yellow); }
 .tier.precheck_failed { color: var(--yellow); }
 .tier.unmergeable { color: var(--gray); }
+
+/* ───────────── M6：「开始」页 ───────────── */
+.tab:disabled { opacity: 0.4; cursor: not-allowed; }
+.proj-switch { font-weight: 600; max-width: 220px; }
+.start { max-width: 980px; }
+.hero h1 { font-size: 24px; margin: 4px 0 8px; }
+.hero p { margin: 6px 0; }
+.step { display: flex; gap: 14px; margin-top: 22px; }
+.step-n {
+  flex: none; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; font-weight: 700; margin-top: 2px;
+}
+.step-n.done { background: var(--green); }
+.step-body { flex: 1 1 auto; min-width: 0; }
+.step-body > h2 { margin: 2px 0 2px; }
+.step-body > p.muted { margin: 0 0 10px; }
+h3 { font-size: 16px; margin: 4px 0 8px; }
+.checks ul { list-style: none; margin: 0 0 10px; padding: 0; }
+.checks li { display: flex; gap: 8px; padding: 3px 0; font-size: 14px; word-break: break-word; }
+.checks .ic { flex: none; width: 18px; text-align: center; font-weight: 700; }
+.lv-ok .ic { color: var(--green); }
+.lv-warn .ic { color: var(--yellow); }
+.lv-fail { color: var(--red); }
+.proj-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.proj.on { border-color: var(--accent); }
+.proj-h { display: flex; gap: 8px; align-items: center; font-size: 17px; }
+.proj-repos { list-style: none; margin: 8px 0; padding: 0; font-size: 14px; }
+.proj-repos li { padding: 2px 0; word-break: break-word; }
+.proj-repos .tag { margin-left: 6px; }
+.wizard { margin-top: 4px; }
+.wiz-steps { display: flex; gap: 8px; list-style: none; padding: 0; margin: 0 0 12px; flex-wrap: wrap; }
+.wiz-steps li { font-size: 14px; color: var(--muted); padding: 2px 10px; border-radius: 999px; background: var(--soft); }
+.wiz-steps li.on { background: var(--accent); color: #fff; }
+.wiz-steps li.done { color: var(--green); }
+.field { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 2px; }
+.field > span, .field > legend { font-weight: 600; font-size: 15px; }
+.field input[type="text"] { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); width: 100%; }
+fieldset.field { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 10px; }
+.radio { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; cursor: pointer; word-break: break-word; }
+.radio input { margin-top: 5px; }
+.radio .tag { margin-left: 6px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 14px; margin-bottom: 6px; }
+.kv > span:nth-child(odd) { color: var(--muted); }
+.kv code { word-break: break-all; }
+.drafts { margin: 8px 0; padding-left: 20px; font-size: 15px; }
+.drafts li { padding: 2px 0; word-break: break-word; }
+.daily { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.daily .toolbar input[type="text"] { flex: 1 1 160px; }
+.say { list-style: none; margin: 0; padding: 0; font-size: 15px; }
+.say li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+.say button { white-space: nowrap; flex: none; }
+.cmds { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmds td { border-top: 1px solid var(--line); padding: 8px 6px; vertical-align: top; }
+.cmds tr:first-child td { border-top: none; }
+.cmds td:nth-child(2) code { word-break: break-all; }
+.cmds td:last-child { width: 1%; }
+@media (max-width: 760px) {
+  .step { gap: 10px; }
+  .step-n { width: 28px; height: 28px; font-size: 14px; }
+  .proj-switch { max-width: 160px; }
+  .cmds tr { display: grid; grid-template-columns: 1fr auto; }
+  .cmds td:first-child { grid-column: 1 / -1; padding-bottom: 0; border-top: 1px solid var(--line); }
+  .cmds td:nth-child(2) { border-top: none; }
+  .cmds td:last-child { border-top: none; width: auto; }
+  .kv { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) { .step-body .btn { white-space: normal; text-align: left; } }

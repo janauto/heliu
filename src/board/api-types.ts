@@ -6,6 +6,7 @@ import type {
   AcceptanceLevel,
   AheadBehind,
   BranchRole,
+  DoctorCheck,
   FeatureSource,
   FeatureStatus,
   HygieneIssue,
@@ -337,4 +338,102 @@ export interface SyncView {
   drafts: Array<{ repo: string; repoLabel: string; branch: string; title: string; status: FeatureStatus; id: string | null; noCommits?: boolean }>;
   skipped: { hasCard: number; inMain: number; noWorktree: number; notFeature: number };
   created: Array<{ id: string; title: string }>;
+}
+
+/* ───────────── M6：上手入口（项目中枢 / 环境检查 / 接入向导） ───────────── */
+
+/** 注册表里一个项目的摘要（只读文件，不扫 git；扫 git 的健康数字请用 /api/overview?project=） */
+export interface ProjectSummary {
+  name: string;
+  /** project.yaml 路径 */
+  source: string;
+  /** project.yaml 读不出来时的中文原因；此时 repos 为空 */
+  error: string | null;
+  repos: Array<{ id: string; label: string; path: string; main: string; integration: string | null; remote: string | null; icloud: boolean; exists: boolean }>;
+  ledgerDir: string | null;
+  /** 功能卡总数；台账还没建或读不出来时为 null */
+  features: number | null;
+  /** 台账状态为 想法 / 开发中 / 待合并 的卡数（还欠的） */
+  open: number | null;
+  /** 下一版（第一个「规划中」的里程碑） */
+  next: string | null;
+}
+
+export interface ProjectsData {
+  /** 注册表目录 */
+  registry: string;
+  /** 合流自己的安装目录（页面里生成可复制的终端命令用） */
+  heliuRoot: string;
+  /** 看板启动时指定或识别出的项目；识别不出时为 null（页面里自己选） */
+  default: string | null;
+  projects: ProjectSummary[];
+}
+
+export interface DoctorData {
+  checks: DoctorCheck[];
+  /** 是否做了无头 claude 探测（完整检查） */
+  full: boolean;
+  ms: number;
+  counts: { ok: number; warn: number; fail: number };
+}
+
+/** 与 src/core/onboard.ts 的 RepoDetection 同构（这里重复声明，保持本文件不依赖 node 模块，前端可直接引用） */
+export interface DetectedCandidate {
+  branch: string;
+  ahead: number;
+  behind: number;
+  contains: number;
+  byName: boolean;
+  lastCommitAt: string | null;
+  checkedOut: boolean;
+  onTopOf: string | null;
+}
+export interface DetectedRepo {
+  root: string;
+  icloud: boolean;
+  remotes: string[];
+  remote: string | null;
+  remoteWhy: string;
+  main: string;
+  mainWhy: string;
+  mainExists: boolean;
+  head: string | null;
+  branches: number;
+  worktrees: number | null;
+  candidates: DetectedCandidate[];
+  integration: string | null;
+  integrationWhy: string;
+  warnings: string[];
+}
+/** 与 src/core/project.ts 的 RepoConfig 同构 */
+export interface OnboardedRepo {
+  id: string;
+  label: string;
+  path: string;
+  main: string;
+  integration: string | null;
+  remote: string | null;
+  icloud: boolean;
+}
+
+/** 接入向导第一步：只读检测一个仓库 */
+export interface DetectData {
+  detection: DetectedRepo;
+  /** 建议的项目名（仓库目录名） */
+  suggestedName: string;
+  existingProjects: string[];
+  /** 建议名对应的项目已存在（接入 = 往这个项目里再加一个仓库） */
+  registryExists: boolean;
+  /** 台账会放在哪（已有项目沿用它的设置） */
+  ledgerDir: string;
+  ledgerNote: string;
+}
+
+/** 接入向导第二步：写注册表并建台账 */
+export interface OnboardResult {
+  project: ProjectSummary;
+  /** true = 新建项目；false = 往已有项目里加 / 更新仓库 */
+  created: boolean;
+  repo: OnboardedRepo;
+  ledger: { dir: string; created: boolean };
 }

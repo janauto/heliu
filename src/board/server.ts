@@ -13,17 +13,21 @@ import { Hono, type Context } from "hono";
 import { SCHEMA_VERSION } from "../types.ts";
 import type { HeliuPaths } from "../core/paths.ts";
 import { Ledger } from "../core/ledger.ts";
+import { runDoctor } from "../core/doctor.ts";
 import { ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
-import type { BoardEnvelope, BoardMeta } from "./api-types.ts";
+import type { BoardEnvelope, BoardMeta, DoctorData } from "./api-types.ts";
 import { DIST_DIR, ensureWebBuild } from "./build.ts";
-import { BoardService } from "./data.ts";
+import type { BoardService } from "./data.ts";
+import { BoardHub } from "./hub.ts";
+import { addForBoard, detectForBoard } from "./onboard.ts";
 
 export const DEFAULT_PORT = 7788;
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 export interface BoardAppOptions {
   paths: HeliuPaths;
-  project: ProjectConfig;
+  /** 默认项目；null / 不传 = 没有默认，页面里选（M6） */
+  project?: ProjectConfig | null;
   ttlMs?: number;
   now?: () => Date;
   distDir?: string;
@@ -37,18 +41,20 @@ function hostAllowed(host: string | undefined): boolean {
 
 const truthy = (v: string | undefined) => v === "1" || v === "true" || v === "yes";
 
-export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: BoardService } {
-  const service = new BoardService({ paths: opts.paths, project: opts.project, ttlMs: opts.ttlMs, now: opts.now });
+export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: BoardService | null; hub: BoardHub } {
+  const hub = new BoardHub({ paths: opts.paths, project: opts.project ?? null, ttlMs: opts.ttlMs, now: opts.now });
   const dist = opts.distDir ?? DIST_DIR;
   const app = new Hono();
+  /** 项目级接口：?project=<名> 选项目，不带时用默认项目 */
+  const svc = (c: Context) => hub.service(c.req.query("project"));
 
-  const send = <T>(c: Context, command: string, data: T, meta: BoardMeta | null = null, status: 200 | 201 = 200) => {
-    const p = service.project;
+  const send = <T>(c: Context, command: string, data: T, meta: BoardMeta | null = null, status: 200 | 201 = 200, service: BoardService | null = null) => {
+    const p = service?.project ?? null;
     const body: BoardEnvelope<T> = {
       schemaVersion: SCHEMA_VERSION,
       command,
       generatedAt: new Date().toISOString(),
-      project: { name: p.name, source: p.source },
+      project: p ? { name: p.name, source: p.source } : null,
       data,
       meta,
     };
@@ -83,54 +89,93 @@ export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: Boa
     return c.json({ error: err.message }, status);
   });
 
-  /* ───────────── 只读 ───────────── */
+  /* ───────────── M6：项目中枢 / 环境检查 / 接入向导（不分项目） ───────────── */
+
+  app.get("/api/projects", (c) => send(c, "project.list", hub.projects()));
+  app.get("/api/doctor", async (c) => {
+    const full = truthy(c.req.query("full"));
+    const t0 = performance.now();
+    const checks = await runDoctor(opts.paths, c.req.query("project") || undefined, 8000, { skipClaude: !full });
+    const counts = { ok: 0, warn: 0, fail: 0 };
+    for (const k of checks) counts[k.level] += 1;
+    return send<DoctorData>(c, "doctor", { checks, full, ms: Math.round(performance.now() - t0), counts });
+  });
+  app.post("/api/projects/detect", async (c) => send(c, "project.detect", await detectForBoard(opts.paths, await body(c))));
+  app.post("/api/projects", async (c) => {
+    const r = await addForBoard(opts.paths, await body(c));
+    hub.forget(r.project.name);
+    return send(c, "project.add", r, null, 201);
+  });
+
+  /* ───────────── 只读（项目级） ───────────── */
 
   app.get("/api/status", async (c) => {
-    const r = await service.status(truthy(c.req.query("precheck")), truthy(c.req.query("fresh")));
-    return send(c, "status", r.data, r.meta);
+    const s = svc(c);
+    const r = await s.status(truthy(c.req.query("precheck")), truthy(c.req.query("fresh")));
+    return send(c, "status", r.data, r.meta, 200, s);
   });
   app.get("/api/sessions", async (c) => {
-    const r = await service.sessions();
-    return send(c, "sessions", r.data, r.meta);
+    const s = svc(c);
+    const r = await s.sessions();
+    return send(c, "sessions", r.data, r.meta, 200, s);
   });
   app.get("/api/hygiene", async (c) => {
-    const r = await service.hygiene();
-    return send(c, "hygiene", r.data, r.meta);
+    const s = svc(c);
+    const r = await s.hygiene();
+    return send(c, "hygiene", r.data, r.meta, 200, s);
   });
-  app.get("/api/milestones", (c) => send(c, "milestone.list", service.milestones()));
+  app.get("/api/milestones", (c) => {
+    const s = svc(c);
+    return send(c, "milestone.list", s.milestones(), null, 200, s);
+  });
   app.get("/api/features", async (c) => {
     // 版本列默认试合（灯色要分出「有冲突」）；precheck=0 时冲突「未检查」
+    const s = svc(c);
     const pc = c.req.query("precheck");
-    const r = await service.features(c.req.query("milestone") ?? null, pc === undefined ? true : truthy(pc));
-    return send(c, "feature.list", r.data, r.meta);
+    const r = await s.features(c.req.query("milestone") ?? null, pc === undefined ? true : truthy(pc));
+    return send(c, "feature.list", r.data, r.meta, 200, s);
   });
-  app.get("/api/features/:id/baseline", async (c) => send(c, "feature.baseline", await service.baseline(c.req.param("id"))));
+  app.get("/api/features/:id/baseline", async (c) => {
+    const s = svc(c);
+    return send(c, "feature.baseline", await s.baseline(c.req.param("id")), null, 200, s);
+  });
   app.get("/api/todo", async (c) => {
-    const r = await service.todo(c.req.query("milestone") ?? "下一版", truthy(c.req.query("precheck")));
-    return send(c, "milestone.todo", r.data, r.meta);
+    const s = svc(c);
+    const r = await s.todo(c.req.query("milestone") ?? "下一版", truthy(c.req.query("precheck")));
+    return send(c, "milestone.todo", r.data, r.meta, 200, s);
   });
   app.get("/api/overview", async (c) => {
-    const r = await service.overview(truthy(c.req.query("precheck")));
-    return send(c, "overview", r.data, r.meta);
+    const s = svc(c);
+    const r = await s.overview(truthy(c.req.query("precheck")));
+    return send(c, "overview", r.data, r.meta, 200, s);
   });
   app.get("/api/release/preview", async (c) => {
-    const r = await service.releasePreview(c.req.query("milestone") ?? "下一版");
-    return send(c, "release.preview", r.data, r.meta);
+    const s = svc(c);
+    const r = await s.releasePreview(c.req.query("milestone") ?? "下一版");
+    return send(c, "release.preview", r.data, r.meta, 200, s);
   });
 
-  /* ───────────── 写台账 ───────────── */
+  /* ───────────── 写台账（项目级） ───────────── */
 
-  app.post("/api/features", async (c) => send(c, "feature.add", service.addFeature(await body(c)), null, 201));
-  app.patch("/api/features/:id", async (c) => send(c, "feature.update", service.patchFeature(c.req.param("id"), await body(c))));
+  app.post("/api/features", async (c) => {
+    const s = svc(c);
+    return send(c, "feature.add", s.addFeature(await body(c)), null, 201, s);
+  });
+  app.patch("/api/features/:id", async (c) => {
+    const s = svc(c);
+    return send(c, "feature.update", s.patchFeature(c.req.param("id"), await body(c)), null, 200, s);
+  });
   app.post("/api/sync", async (c) => {
+    const s = svc(c);
     const b = await body(c);
     const dry = b.dry_run ?? b.dryRun;
-    return send(c, "sync", await service.sync(dry === true || dry === "true" || dry === 1));
+    return send(c, "sync", await s.sync(dry === true || dry === "true" || dry === 1), null, 200, s);
   });
   app.post("/api/release/plan", async (c) => {
+    const s = svc(c);
     const b = await body(c);
     const ms = typeof b.milestone === "string" && b.milestone.trim() ? b.milestone : "下一版";
-    return send(c, "release.plan", await service.releasePlan(ms), null, 201);
+    return send(c, "release.plan", await s.releasePlan(ms), null, 201, s);
   });
 
   app.all("/api/*", (c) => c.json({ error: `没有这个接口：${c.req.method} ${c.req.path}` }, 404));
@@ -147,7 +192,7 @@ export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: Boa
   app.get("/app.js", file("app.js", "text/javascript; charset=utf-8"));
   app.get("/app.css", file("app.css", "text/css; charset=utf-8"));
 
-  return { app, service };
+  return { app, service: hub.defaultService(), hub };
 }
 
 export interface RunBoardOptions {
@@ -187,22 +232,43 @@ export async function runBoard(opts: RunBoardOptions): Promise<void> {
   dbg(`开始：pid=${process.pid} cwd=${opts.cwd} bun=${Bun.version} HELIU_HOME=${opts.paths.heliuHome}`);
   const log = opts.log ?? ((l: string) => console.log(l));
   dbg(`加载项目…（--project=${opts.projectName ?? "未指定，按目录识别"}）`);
-  const project = await resolveProject(opts.paths, opts.projectName, opts.cwd);
-  dbg(`项目已加载：${project.name}（${project.repos.length} 个仓库，${project.source}）`);
-  dbg("读台账…");
-  try {
-    const ledger = Ledger.of(project);
-    const ms = ledger.listMilestones().length;
-    const n = ledger.load().features.length;
-    dbg(`台账可读：${ledger.dir}（${ms} 个里程碑、${n} 张卡）`);
-  } catch (e) {
-    dbg(`台账读取失败（不影响启动，页面里会报错）：${(e as Error).message}`);
+  // M6：指定了 --project 就必须能加载；没指定时识别不出项目也照常启动，页面「开始」里选项目或接入新项目
+  let project: ProjectConfig | null = null;
+  if (opts.projectName) project = await resolveProject(opts.paths, opts.projectName, opts.cwd);
+  else {
+    try {
+      project = await resolveProject(opts.paths, undefined, opts.cwd);
+    } catch (e) {
+      if (!(e instanceof ProjectError)) throw e;
+      dbg(`没有默认项目：${e.message}`);
+    }
+  }
+  if (project) {
+    dbg(`项目已加载：${project.name}（${project.repos.length} 个仓库，${project.source}）`);
+    dbg("读台账…");
+    try {
+      const ledger = Ledger.of(project);
+      const ms = ledger.listMilestones().length;
+      const n = ledger.load().features.length;
+      dbg(`台账可读：${ledger.dir}（${ms} 个里程碑、${n} 张卡）`);
+    } catch (e) {
+      dbg(`台账读取失败（不影响启动，页面里会报错）：${(e as Error).message}`);
+    }
   }
   dbg("检查前端打包…");
   const build = await ensureWebBuild();
   dbg(`前端${build.built ? `已重新打包（${build.ms} ms）` : "沿用已有打包"}：${build.dir}`);
-  const { app, service } = createBoardApp({ paths: opts.paths, project });
+  const { app, hub } = createBoardApp({ paths: opts.paths, project });
   const port = opts.port ?? DEFAULT_PORT;
+  const openUrl = (u: string) => {
+    if (opts.open === false) return;
+    try {
+      Bun.spawn({ cmd: ["open", u], stdout: "ignore", stderr: "ignore" });
+    } catch {
+      log(`  （没能自动打开浏览器，请手动打开 ${u}）`);
+    }
+  };
+  const withProject = (base: string) => (opts.projectName && project ? `${base}?project=${encodeURIComponent(project.name)}` : base);
   dbg(`监听 127.0.0.1:${port}…`);
   let server: ReturnType<typeof Bun.serve>;
   try {
@@ -210,25 +276,29 @@ export async function runBoard(opts: RunBoardOptions): Promise<void> {
   } catch (e) {
     const msg = String((e as Error).message ?? e);
     dbg(`监听失败：${msg}`);
-    if (/EADDRINUSE|in use/i.test(msg)) throw new ProjectError(`端口 ${port} 已被占用：换一个端口（heliu board --port ${port + 1}），或先关掉占用它的程序`);
+    if (/EADDRINUSE|in use/i.test(msg)) {
+      // M6：端口上已经是合流看板（例如双击了两次启动脚本）→ 直接打开它，不报错
+      const base = `http://127.0.0.1:${port}/`;
+      if (await isHeliuBoard(base)) {
+        log(`合流看板已经在运行：${withProject(base)}`);
+        log("  已为你打开浏览器。要换端口另起一个：heliu board --port " + (port + 1));
+        openUrl(withProject(base));
+        return;
+      }
+      throw new ProjectError(`端口 ${port} 已被别的程序占用：换一个端口（heliu board --port ${port + 1}），或先关掉占用它的程序`);
+    }
     throw e;
   }
   dbg(`已监听 127.0.0.1:${server.port}`);
   dbg("预热开始（后台扫描：不预检 + 预检）");
-  service.warm();
+  hub.warm();
   const url = `http://127.0.0.1:${server.port}/`;
   const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
-  log(`合流看板 · ${project.name}`);
+  log(project ? `合流看板 · ${project.name}` : `合流看板 · 未指定项目（已注册 ${hub.projects().projects.length} 个，页面「开始」里选择或接入）`);
   log(`  地址：${url}（只监听本机）`);
   log(`  前端：${build.built ? `已重新打包（${build.ms} ms）` : "沿用已有打包"} · app.js ${kb(build.sizes["app.js"] ?? 0)} · app.css ${kb(build.sizes["app.css"] ?? 0)}`);
-  log("  只读为主：改预约/改名/放弃只写台账；合并只预演，不执行（M4）。按 Ctrl+C 退出。");
-  if (opts.open !== false) {
-    try {
-      Bun.spawn({ cmd: ["open", url], stdout: "ignore", stderr: "ignore" });
-    } catch {
-      log(`  （没能自动打开浏览器，请手动打开 ${url}）`);
-    }
-  }
+  log("  只读为主：接入项目、登记卡片、改预约只写注册表与台账；合并只预演，执行在终端。按 Ctrl+C（或关掉这个窗口）退出。");
+  openUrl(withProject(url));
   await new Promise<void>((resolve) => {
     const stop = () => {
       server.stop(true);
@@ -237,4 +307,15 @@ export async function runBoard(opts: RunBoardOptions): Promise<void> {
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
   });
+}
+
+/** 某个地址上跑的是不是合流看板（/api/projects 返回 project.list） */
+async function isHeliuBoard(base: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${base}api/projects`, { signal: AbortSignal.timeout(2000) });
+    const j = (await r.json()) as { command?: string };
+    return j?.command === "project.list";
+  } catch {
+    return false;
+  }
 }

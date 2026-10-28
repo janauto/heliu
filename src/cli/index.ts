@@ -499,7 +499,7 @@ registerReleaseCommands(program);
 
 program
   .command("board")
-  .description("中文看板（本机网页，只监听 127.0.0.1）：总览 / 版本列 / 卫生 / 会话 / 合并预演；合并只预演不执行")
+  .description("中文看板（本机网页，只监听 127.0.0.1）：开始（环境检查 / 接入项目 / 登记分支）/ 总览 / 版本列 / 卫生 / 会话 / 合并预演；不指定项目也能启动，页面里选；合并只预演不执行")
   .option("--port <port>", "端口", "7788")
   .option("--open", "启动后用浏览器打开（默认）")
   .option("--no-open", "不自动打开浏览器")
