@@ -225,9 +225,21 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
           <input type="checkbox" checked={showMerged} onChange={(e) => setShowMerged((e.target as HTMLInputElement).checked)} />
           显示已进主线
         </label>
-        <span class="muted small">
+        <span class="galaxy-meta">
           {model.counts.branches} 颗分支星 · {model.counts.unbound} 颗没卡 · {model.counts.cards} 张功能卡
         </span>
+      </div>
+      <div class="galaxy-tools">
+        <div class="filters" role="group" aria-label="筛选星点">
+          {FILTERS.map((f) => {
+            const n = f.key === "all" ? model.nodes.length : model.nodes.filter((x) => filterHit(f.key, x)).length;
+            return (
+              <button class={`fchip f-${f.key}${filter === f.key ? " on" : ""}`} onClick={() => setFilter(f.key)} disabled={f.key !== "all" && n === 0}>
+                {f.title} <b>{n}</b>
+              </button>
+            );
+          })}
+        </div>
         {latest.length ? (
           <span class="latest-pills">
             最新：
@@ -239,19 +251,6 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
           </span>
         ) : null}
       </div>
-      <div class="filters" role="group" aria-label="筛选星点">
-        {FILTERS.map((f) => {
-          const n = f.key === "all" ? model.nodes.length : model.nodes.filter((x) => filterHit(f.key, x)).length;
-          return (
-            <button class={`fchip f-${f.key}${filter === f.key ? " on" : ""}`} onClick={() => setFilter(f.key)} disabled={f.key !== "all" && n === 0}>
-              {f.title} <b>{n}</b>
-            </button>
-          );
-        })}
-      </div>
-      <p class="galaxy-hint">
-        拖星点到右边的版本行星 = 改预约（没卡会自动建卡）· 拖到小卡星 = 绑定分支 · 拖到「合流点」= 排进合并单并入 · 点星点看详情 · 点泳道名折叠
-      </p>
 
       <div class={`galaxy${intro ? " intro" : ""}${dragging ? " dragging" : ""}`} ref={wrapRef}>
         <svg ref={svgRef} width={model.width} height={model.height} class="galaxy-svg" role="img" aria-label="分支星图">
@@ -461,6 +460,9 @@ export function GalaxyPage({ tick, status, precheck, onChanged, projects }: { ti
       </div>
 
       <Legend />
+      <p class="galaxy-hint">
+        拖星点到右边的版本行星 = 改预约（没卡会自动建卡）· 拖到小卡星 = 绑定分支 · 拖到「合流点」= 排进合并单并入（只写合并单，不执行合并）· 点星点看详情 · 点泳道名折叠
+      </p>
 
       {selNode ? <Detail node={selNode} model={model} busy={busy} onClose={() => setSel(null)} onDrop={(t) => void drop(selNode, t)} /> : null}
       {decision ? <DecisionPanel d={decision} root={projects.heliuRoot} onClose={() => setDecision(null)} /> : null}

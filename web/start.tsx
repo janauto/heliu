@@ -100,21 +100,7 @@ function DoctorPanel() {
                 : `一切正常（${data.counts.ok} 项）。`}
             <span class="muted small"> 用时 {secs(data.ms)}</span>
           </p>
-          {groups.map(([title, list]) =>
-            list.length ? (
-              <div class="checks">
-                <h3>{title}</h3>
-                <ul>
-                  {list.map((c) => (
-                    <li class={`lv-${c.level}`}>
-                      <span class="ic">{ICON[c.level]}</span>
-                      <span>{c.message}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null,
-          )}
+          {groups.map(([title, list]) => (list.length ? <CheckGroup title={title} list={list} /> : null))}
           <div class="toolbar">
             <button class="btn" onClick={() => d.reload()} disabled={d.loading}>
               {d.loading ? "检查中…" : "重新检查"}
@@ -130,6 +116,38 @@ function DoctorPanel() {
           </p>
         </>
       ) : null}
+    </div>
+  );
+}
+
+/** 一组检查：提醒与失败直接列出；正常的收成一行「N 项正常」，点开再看（信息不挤在一起） */
+function CheckGroup({ title, list }: { title: string; list: DoctorCheck[] }) {
+  const [open, setOpen] = useState(false);
+  const bad = list.filter((c) => c.level !== "ok");
+  const good = list.filter((c) => c.level === "ok");
+  const shown = open ? list : bad;
+  return (
+    <div class="checks">
+      <h3>{title}</h3>
+      <ul>
+        {shown.map((c) => (
+          <li class={`lv-${c.level}`}>
+            <span class="ic">{ICON[c.level]}</span>
+            <span>{c.message}</span>
+          </li>
+        ))}
+        {good.length ? (
+          <li class="lv-ok fold">
+            <span class="ic">{ICON.ok}</span>
+            <span>
+              {open ? "" : `${good.length} 项正常 `}
+              <button class="link" onClick={() => setOpen((o) => !o)}>
+                {open ? "收起正常项" : "展开看看"}
+              </button>
+            </span>
+          </li>
+        ) : null}
+      </ul>
     </div>
   );
 }

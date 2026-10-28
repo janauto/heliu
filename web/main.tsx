@@ -107,7 +107,22 @@ function App({ projects, reloadProjects }: { projects: ProjectsData; reloadProje
     <div>
       <header class="top">
         <div class="top-row">
-          <div class="brand">合流看板</div>
+          <div class="brand">
+            <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+              <defs>
+                <linearGradient id="mark-g" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#19b4e6" />
+                  <stop offset="55%" stop-color="#6a5af6" />
+                  <stop offset="100%" stop-color="#e35dc0" />
+                </linearGradient>
+              </defs>
+              <rect width="32" height="32" rx="10" fill="url(#mark-g)" />
+              <path d="M7 9 C 13 9, 14 16, 19 16 L 25 16" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" />
+              <path d="M7 23 C 13 23, 14 16, 19 16" stroke="#fff" stroke-opacity="0.75" stroke-width="2.4" fill="none" stroke-linecap="round" />
+              <circle cx="25" cy="16" r="2.6" fill="#fff" />
+            </svg>
+            合流<small>版本台账 · heliu</small>
+          </div>
           <ProjectSwitcher projects={projects} cur={cur} go={go} />
           <span class="datatime" title="对账结果在服务端缓存 20 秒；页面每 30 秒自动刷新">
             {!cur ? "还没有选项目" : meta ? `数据时间 ${hms(meta.scannedAt)} · 用时 ${secs(meta.scanMs)}` : status.error ? "数据加载失败" : "正在扫描…"}
@@ -121,7 +136,7 @@ function App({ projects, reloadProjects }: { projects: ProjectsData; reloadProje
             }}
             disabled={status.loading}
           >
-            刷新
+            ↻ 刷新
           </button>
         </div>
         <nav class="tabs">

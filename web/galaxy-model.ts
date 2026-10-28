@@ -146,13 +146,13 @@ export interface GalaxyModel {
 }
 
 const DAY = 86_400_000;
-const LEFT = 150;
-const RIGHT = 250;
-const ROW = 20;
+const LEFT = 170;
+const RIGHT = 280;
+const ROW = 27;
 /** 同一天提交的分支先在横向小范围内错开，放不下再往上叠一层（蜂群布局） */
-const SWARM = [0, -14, 14, -28, 28, -42, 42, -56, 56];
-const LANE_GAP = 28;
-const TOP = 56;
+const SWARM = [0, -16, 16, -32, 32, -48, 48, -64, 64];
+const LANE_GAP = 44;
+const TOP = 64;
 const LATEST_N = 3;
 
 /** 最后提交距今天数 → 横坐标（平方根刻度：最近几天铺得开） */
@@ -261,7 +261,7 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
           const used = rows[row] ?? (rows[row] = []);
           for (const dx of SWARM) {
             const cx = Math.max(xL + 24, Math.min(xR, it.x + dx));
-            if (used.every((ux) => Math.abs(ux - cx) > it.r * 2 + 12)) {
+            if (used.every((ux) => Math.abs(ux - cx) > it.r * 2 + 18)) {
               used.push(cx);
               px = cx;
               break search;
@@ -273,7 +273,7 @@ export function buildGalaxy(report: ReconcileReport, features: FeaturesData | nu
       }
     }
     const nRows = placed.length ? Math.max(...placed.map((p) => p.row)) + 1 : 0;
-    const head = 40;
+    const head = 64;
     const bodyH = collapsed ? 0 : nRows * ROW;
     const integY = r.integration ? y + head + bodyH + 18 : null;
     const mainY = (integY ?? y + head + bodyH) + 26;
