@@ -159,7 +159,20 @@ export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: Boa
 
   app.post("/api/features", async (c) => {
     const s = svc(c);
-    return send(c, "feature.add", s.addFeature(await body(c)), null, 201, s);
+    const b = await body(c);
+    // M7：带 bind: {repo, branch} = 从分支建卡（星图把没卡的分支拖到版本行星）
+    if (b.bind && typeof b.bind === "object") {
+      return send(c, "feature.add", await s.addFeatureFromBranch({ title: b.title, milestone: b.milestone, bind: b.bind as Record<string, unknown> }), null, 201, s);
+    }
+    return send(c, "feature.add", s.addFeature(b), null, 201, s);
+  });
+  app.post("/api/features/:id/bind", async (c) => {
+    const s = svc(c);
+    return send(c, "feature.bind", await s.bindFeature(c.req.param("id"), await body(c)), null, 200, s);
+  });
+  app.post("/api/release/decision", async (c) => {
+    const s = svc(c);
+    return send(c, "release.decision", await s.releaseDecision(await body(c)), null, 200, s);
   });
   app.patch("/api/features/:id", async (c) => {
     const s = svc(c);

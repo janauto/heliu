@@ -520,22 +520,42 @@ program
     await runMcpServer();
   });
 
-async function flushOut(): Promise<void> {
+/** 下游这么久一个字节都没读走，就放弃剩余输出并退出（调用方卡住时不让 heliu 永远挂着） */
+export const FLUSH_STALL_MS = Number(process.env.HELIU_FLUSH_STALL_MS) > 0 ? Number(process.env.HELIU_FLUSH_STALL_MS) : 15_000;
+
+export async function flushOut(fd = 1, stallMs = FLUSH_STALL_MS): Promise<void> {
   if (!outBuf.length) return;
   const buf = Buffer.from(outBuf.splice(0).join(""), "utf8");
   let off = 0;
+  let last = Date.now();
   while (off < buf.length) {
     try {
-      off += writeSync(1, buf, off, buf.length - off);
-    } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code;
-      if (code === "EAGAIN") {
-        await Bun.sleep(2); // 管道满：等下游读走
+      const n = writeSync(fd, buf, off, buf.length - off);
+      if (n > 0) {
+        off += n;
+        last = Date.now();
         continue;
       }
-      return; // EPIPE 等：下游提前关闭（如 | head），丢弃剩余输出
+      // 写了 0 字节：当作"没进展"，下面走等待与超时，绝不空转
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "EAGAIN") return; // EPIPE 等：下游提前关闭（如 | head），丢弃剩余输出
     }
+    if (Date.now() - last > stallMs) {
+      try {
+        writeSync(2, `heliu：下游 ${Math.round(stallMs / 1000)} 秒没有读取输出，已放弃剩余 ${buf.length - off} 字节并退出\n`);
+      } catch {
+        /* stderr 也写不了就算了 */
+      }
+      return;
+    }
+    await Bun.sleep(5); // 管道满：等下游读走
   }
+}
+
+/** 测试用：往输出缓冲里放内容 */
+export function bufferOut(text: string): void {
+  out(text);
 }
 
 export async function main(argv: string[]): Promise<number> {

@@ -437,3 +437,29 @@ export interface OnboardResult {
   repo: OnboardedRepo;
   ledger: { dir: string; created: boolean };
 }
+
+/* ───────────── M7：星图拖到合流点（POST /api/release/decision） ───────────── */
+
+export interface ReleaseDecisionResult {
+  feature: string;
+  title: string;
+  /** 排进的是哪一版的合并单 */
+  milestone: string;
+  /** 这次顺手预约到的版本（原来没预约或换了版本）；没动预约为 null */
+  reservedTo: string | null;
+  /** 决定实际改动的项数（0 = 本来就是这个决定，或已进集成） */
+  changed: number;
+  /** 合并单文件 */
+  file: string;
+  items: Array<{
+    repo: string | null;
+    branch: string | null;
+    state: string;
+    decision: string;
+    detail: string | null;
+    behind: number | null;
+    conflicts: string[];
+    union: string[];
+    precheckState: "checked" | "failed" | "skipped" | null;
+  }>;
+}

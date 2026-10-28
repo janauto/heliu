@@ -44,11 +44,12 @@ import type {
   ReleaseAction,
   ReleaseBinding,
   ReleaseItem,
+  ReleaseDecisionResult,
   ReleasePlanResult,
   ReleasePreview,
   ReleaseTier,
 } from "./api-types.ts";
-import { buildReleasePlan, previewRelease, type BuildResult } from "../core/release.ts";
+import { buildReleasePlan, previewRelease, setPlanDecision, type BuildResult } from "../core/release.ts";
 import { ACTION_TEXT, TIER_OF, type ItemState } from "../core/release-plan.ts";
 import { baselinePreview } from "./baseline.ts";
 import { buildHygiene } from "./hygiene.ts";
@@ -560,6 +561,98 @@ export class BoardService {
       changed.push("status");
     }
     return { feature: f, from, milestoneCreated, changed };
+  }
+
+  /* ───────────── M7：星图拖拽（只写台账 / 合并单，不执行 git 合并） ───────────── */
+
+  /** 在最近一次对账里找分支，拿到 worktree 与主会话（绑定时一起记下）；找不到报中文错误 */
+  private async branchBinding(repoRaw: unknown, branchRaw: unknown): Promise<{ binding: FeatureBinding; label: string }> {
+    const repo = typeof repoRaw === "string" ? repoRaw.trim() : "";
+    const branch = typeof branchRaw === "string" ? branchRaw.trim() : "";
+    if (!repo || !branch) throw new LedgerError("需要给出仓库（repo）和分支（branch）");
+    const { scan } = await this.scan(false);
+    const rep = scan.result.report.repos.find((r) => r.id === repo);
+    if (!rep) throw new LedgerError(`项目里没有仓库 ${repo}`);
+    const b = rep.branches.find((x) => x.branch === branch);
+    if (!b) throw new LedgerError(`仓库 ${rep.label} 里没有分支 ${branch}`);
+    if (b.role !== "feature") throw new LedgerError(`${branch} 是${b.role === "main" ? "主线" : "集成分支"}，不能当功能分支绑定`);
+    const s = b.sessions[0] ?? null;
+    return {
+      binding: { repo, branch, worktree: b.worktree && !b.worktree.isMain ? b.worktree.path : null, session: s?.sessionId ?? null, pr: s?.prs[0]?.number ?? null },
+      label: b.label,
+    };
+  }
+
+  /** 从分支建卡：标题缺省取分支标签（会话标题 > 首条独有提交 …），绑定该分支，预约到指定版本 */
+  async addFeatureFromBranch(input: { title?: unknown; milestone?: unknown; bind: Record<string, unknown> }): Promise<{ feature: LedgerFeature; milestoneCreated: string | null }> {
+    const { binding, label } = await this.branchBinding(input.bind.repo, input.bind.branch);
+    const ledger = this.ledger();
+    const ex = ledger.findByBinding(binding.repo, binding.branch);
+    if (ex) throw new LedgerError(`这条分支已经有卡：${ex.id}「${ex.title}」`);
+    const title = typeof input.title === "string" && input.title.trim() ? input.title.trim() : label || binding.branch;
+    let milestone: string | null = "next";
+    if (input.milestone === null || input.milestone === UNRESERVED) milestone = null;
+    else if (typeof input.milestone === "string" && input.milestone.trim()) milestone = input.milestone.trim();
+    const r = ledger.addFeature({ title, milestone, bindings: [binding], status: "开发中", source: "board", now: this.now() });
+    return { feature: r.feature, milestoneCreated: r.milestoneCreated?.id ?? null };
+  }
+
+  /** 把分支绑定到一张卡（拖分支星点到功能卡星点） */
+  async bindFeature(id: string, body: Record<string, unknown>): Promise<{ feature: LedgerFeature; added: boolean }> {
+    const { binding } = await this.branchBinding(body.repo, body.branch);
+    const ledger = this.ledger();
+    const ex = ledger.findByBinding(binding.repo, binding.branch);
+    const target = ledger.getFeature(id);
+    if (ex && ex.id !== target.id) throw new LedgerError(`这条分支已经绑在 ${ex.id}「${ex.title}」上；先在那张卡里解绑，或直接拖那张卡`);
+    return ledger.bind(target.id, binding, this.now());
+  }
+
+  /**
+   * 拖到合流点：把一张卡排进它所在版本的合并单并设决定（缺省「并入」）。
+   * 卡还没预约 → 先预约到 milestone（缺省下一版）；然后刷新合并单（M4 previewRelease，保留已改的决定）；再设决定。
+   * 只写台账与合并单；真正的合并仍在终端执行（返回可复制的命令）。
+   */
+  async releaseDecision(body: Record<string, unknown>): Promise<ReleaseDecisionResult> {
+    const project = this.project;
+    const ledger = this.ledger(project);
+    const fid = typeof body.feature === "string" ? body.feature.trim() : "";
+    if (!fid) throw new LedgerError("需要给出功能卡号（feature）");
+    const decision = typeof body.decision === "string" && body.decision.trim() ? body.decision.trim() : "并入";
+    let f = ledger.getFeature(fid);
+    let reservedTo: string | null = null;
+    const want = typeof body.milestone === "string" && body.milestone.trim() ? body.milestone.trim() : null;
+    let ms = want ?? ledger.effectiveMilestone(f);
+    if (!ms || (want && f.milestone !== want)) {
+      const r = ledger.reserve(f.id, want ?? "next", this.now());
+      f = r.feature;
+      ms = ledger.effectiveMilestone(f);
+      reservedTo = ms;
+    }
+    if (!ms) throw new LedgerError(`没能确定 ${f.id} 属于哪一版`);
+    const { scan } = await this.scan(true);
+    await previewRelease(project, this.paths, ms, { now: this.now(), timeoutMs: this.timeoutMs, reconciled: scan.result });
+    const set = setPlanDecision(project, ms, f.id, decision, { now: this.now() });
+    const items = set.plan.items.filter((i) => i.feature === f.id);
+    if (!items.length) throw new LedgerError(`${f.id} 没进 ${ms} 的合并单（可能还没绑定分支，或台账状态已是已合入）`);
+    return {
+      feature: f.id,
+      title: f.title,
+      milestone: ms,
+      reservedTo,
+      changed: set.changed.length,
+      file: set.plan.file,
+      items: items.map((i) => ({
+        repo: i.repo,
+        branch: i.branch,
+        state: i.state,
+        decision: i.decision,
+        detail: i.detail,
+        behind: i.behind,
+        conflicts: i.precheck?.conflicts ?? [],
+        union: i.precheck?.union ?? [],
+        precheckState: i.precheck_state ?? null,
+      })),
+    };
   }
 
   async sync(dryRun: boolean): Promise<SyncResult> {

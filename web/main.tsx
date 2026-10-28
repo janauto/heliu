@@ -12,12 +12,14 @@ import { api, currentProject, hms, secs, setCurrentProject, store, switchProject
 import { OverviewPage } from "./overview.tsx";
 import { HygienePage, SessionsPage } from "./pages.tsx";
 import { ReleasePage } from "./release.tsx";
+import { GalaxyPage } from "./galaxy.tsx";
 import { StartPage } from "./start.tsx";
 
-export type Tab = "start" | "overview" | "board" | "hygiene" | "sessions" | "release";
+export type Tab = "start" | "overview" | "galaxy" | "board" | "hygiene" | "sessions" | "release";
 const TABS: Array<{ key: Tab; title: string }> = [
   { key: "start", title: "开始" },
   { key: "overview", title: "总览" },
+  { key: "galaxy", title: "星图" },
   { key: "board", title: "版本列" },
   { key: "hygiene", title: "卫生" },
   { key: "sessions", title: "会话" },
@@ -133,11 +135,12 @@ function App({ projects, reloadProjects }: { projects: ProjectsData; reloadProje
         </nav>
         {cur ? <NextLine ov={ov ?? null} pc={pc} onCheck={() => void check(pc.state === "on")} /> : null}
       </header>
-      {ov && tab !== "start" ? <Strip ov={ov} go={go} /> : null}
+      {ov && tab !== "start" && tab !== "galaxy" ? <Strip ov={ov} go={go} /> : null}
       <main>
         {status.error && tab !== "start" ? <p class="err">读取对账失败：{status.error}</p> : null}
         {tab === "start" ? <StartPage projects={projects} reloadProjects={reloadProjects} go={go} /> : null}
         {tab === "overview" ? <OverviewPage tick={tick} status={status.env?.data ?? null} overview={ov ?? null} go={go} /> : null}
+        {tab === "galaxy" ? <GalaxyPage tick={tick} status={status.env?.data ?? null} precheck={precheck} onChanged={refresh} projects={projects} /> : null}
         {tab === "board" ? <BoardPage tick={tick} precheck={precheck} onChanged={refresh} /> : null}
         {tab === "hygiene" ? <HygienePage tick={tick} /> : null}
         {tab === "sessions" ? <SessionsPage tick={tick} /> : null}
