@@ -131,6 +131,8 @@ export interface BoardCard {
   /** M8：所属模块（整机的组成部分） */
   module: string;
   moduleSource: "card" | "guess";
+  /** M8：分支已被集成分支 / 主线包含、台账还没改——「同步一下」会把它改成的状态（与 /api/merged 同一规则）；已完成的卡为 null */
+  mergedTo: "已合入" | "已进主线" | null;
 }
 
 export interface BoardColumn {

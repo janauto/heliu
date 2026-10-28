@@ -43,6 +43,8 @@ export interface SItem {
   repos: string[];
   /** 没卡的分支：改类型 / 模块时据此建卡 */
   bind: { repo: string; branch: string } | null;
+  /** 主状态不是「已合入待确认」（例如还在等你），但分支其实已经合进去了：也列进「已合入待确认」，与「同步一下」一致 */
+  alsoMerged: boolean;
 }
 
 export interface SModule {
@@ -111,7 +113,10 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
         lastAt: c.lastActivityAt,
         repos: [...new Set(c.bindings.map((b) => b.repoLabel))],
         bind: null,
+        alsoMerged: false,
       });
+      const it = items[items.length - 1]!;
+      if (c.mergedTo && it.state !== "done" && it.state !== "merged") it.alsoMerged = true;
     }
   // 还没建卡、也还没进主线的分支（与星图"还没建卡"同一口径）
   for (const r of report.repos) {
@@ -133,6 +138,7 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
         lastAt: b.lastCommitAt,
         repos: [r.label],
         bind: { repo: r.id, branch: b.branch },
+        alsoMerged: false,
       });
     }
   }
@@ -164,7 +170,7 @@ export function buildStructure(report: ReconcileReport, features: FeaturesData):
   }
   const decisions: StructureModel["decisions"] = {};
   for (const s of STATES) if (s.decide) {
-    const list = items.filter((i) => i.state === s.key).sort(byUrgency);
+    const list = items.filter((i) => i.state === s.key || (s.key === "merged" && i.alsoMerged)).sort(byUrgency);
     if (list.length) decisions[s.key] = list;
   }
   const types = FEATURE_TYPES.filter((t) => items.some((i) => i.type === t));

@@ -217,6 +217,11 @@ describe("看板接口", () => {
     const list = ((await g.json()) as { data: MergedData }).data;
     expect(list.dryRun).toBe(true);
     expect(list.suggestions.map((s) => s.id)).toContain(ids.main);
+    // 卡片上的 mergedTo 与「同步一下」同一规则：结构页「已合入待确认」的数字和同步面板一致
+    const fr = await app.request("/api/features?precheck=0");
+    const cards = ((await fr.json()) as { data: FeaturesData }).data.columns.flatMap((c) => c.cards);
+    const flagged = cards.filter((c) => c.mergedTo).map((c) => [c.id, c.mergedTo]);
+    expect(flagged.sort()).toEqual(list.suggestions.map((s) => [s.id, s.to]).sort());
     const bad = await app.request("/api/merged", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
     expect(bad.status).toBe(400);
     const p = await app.request("/api/merged", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [ids.main] }) });

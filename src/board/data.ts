@@ -57,7 +57,7 @@ import { baselinePreview } from "./baseline.ts";
 import { HELIU_ROOT } from "./root.ts";
 import { classify, classifyText, FEATURE_TYPES } from "../core/classify.ts";
 import { loadModules } from "../core/modules.ts";
-import { afterMerge } from "../core/after-merge.ts";
+import { afterMerge, mergedSuggestions } from "../core/after-merge.ts";
 import { buildMergePrompt } from "../core/merge-prompt.ts";
 import { buildHygiene } from "./hygiene.ts";
 
@@ -74,6 +74,8 @@ export interface Scan {
   precheck: boolean;
   /** 「尚无独有提交」判定缓存（bindingKey → 是否），随扫描一起过期 */
   zero: Map<string, boolean>;
+  /** M8：合并后同步的建议（卡号 → 可改成的状态）；台账里卡的状态 / 绑定变了就重算 */
+  merged?: { sig: string; p: Promise<Map<string, "已合入" | "已进主线">> };
 }
 
 export interface BoardOptions {
@@ -192,6 +194,19 @@ export class BoardService {
       for (const c of missing) scan.zero.set(bindingKey(c.repo, c.branch), hit.has(bindingKey(c.repo, c.branch)));
     }
     return new Set([...scan.zero].filter(([, v]) => v).map(([k]) => k));
+  }
+
+  /** M8：与「同步一下」同一条规则（mergedSuggestions），每次扫描算一次；卡的状态或绑定变了就重算 */
+  private mergedOf(project: ProjectConfig, scan: Scan, features: LedgerFeature[]): Promise<Map<string, "已合入" | "已进主线">> {
+    const sig = features.map((f) => `${f.id}:${f.status}:${f.bindings.map((b) => `${b.repo}/${b.branch}`).join(",")}`).join("|");
+    if (!scan.merged || scan.merged.sig !== sig) {
+      const p = mergedSuggestions(project, this.paths, { reconciled: scan.result, timeoutMs: this.timeoutMs }).then(
+        (r) => new Map(r.suggestions.map((s) => [s.id, s.to] as const)),
+        () => new Map<string, "已合入" | "已进主线">(),
+      );
+      scan.merged = { sig, p };
+    }
+    return scan.merged.p;
   }
 
   private nextOf(milestones: LedgerMilestone[]): { id: string; status: LedgerMilestone["status"] } | null {
@@ -359,11 +374,13 @@ export class BoardService {
     // M8：给每张卡标类型 / 模块（卡片上写了就用卡片的，没写就按标题、分支标签、会话标题、分支名推测）
     const mods = loadModules(ledger.dir);
     const featById = new Map(features.map((f) => [f.id, f]));
+    const mergedTo = await this.mergedOf(project, scan, features);
     for (const col of shown)
       for (const card of col.cards) {
         const f = featById.get(card.id) ?? null;
         const text = classifyText([card.title, ...card.bindings.flatMap((b) => [b.label, b.session?.title, b.branch])]);
         Object.assign(card, classify(f, text, mods.modules));
+        card.mergedTo = card.done ? null : (mergedTo.get(card.id) ?? null);
       }
     return {
       data: {
@@ -437,6 +454,7 @@ export class BoardService {
         typeSource: f.type ? "card" : "guess",
         module: f.module ?? "其他",
         moduleSource: f.module ? "card" : "guess",
+        mergedTo: null,
       });
     };
     if (todo) {

@@ -213,6 +213,7 @@ function ItemLine({ it, showModule }: { it: SItem; showModule?: boolean }) {
         </span>
         <span class="item-sub">
           <span class={`tag t-${s.tone}`}>{s.title}</span>
+          {it.alsoMerged ? <span class="tag t-green" title="分支已被集成分支 / 主线包含，台账还没改；「同步一下」会列出它"> 分支已合入</span> : null}
           {showModule ? <span class="muted"> {it.module} ·</span> : null}
           <span class="muted"> {it.milestone ? `预约 ${it.milestone}` : it.cardId ? "未预约" : it.repos.join("、")}</span>
           {it.lastAt ? <span class="muted"> · {ago(it.lastAt)}</span> : null}
