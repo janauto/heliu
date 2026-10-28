@@ -13,6 +13,7 @@
 不点「登记」「生成合并单」「同步」，也不拖卡片，所以不会写台账。
 """
 import argparse
+from urllib.parse import quote
 import pathlib
 import tempfile
 
@@ -23,6 +24,8 @@ ASSETS = pathlib.Path(__file__).resolve().parent
 
 # 文件名, 页面, 视口宽, 视口高, 配色
 SHOTS = [
+    ("start-page-light.png", "start", 1280, 820, "light"),
+    ("galaxy-dark.png", "galaxy", 1440, 900, "dark"),
     ("board-overview-light.png", "overview", 1280, 800, "light"),
     ("board-overview-dark.png", "overview", 1280, 800, "dark"),
     ("board-columns-dark.png", "board", 1280, 800, "dark"),
@@ -51,6 +54,7 @@ def compress(src: pathlib.Path, dst: pathlib.Path, max_edge: int) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-url", default="http://127.0.0.1:7788")
+    ap.add_argument("--project", default="磁吸背夹", help="截哪个项目（看板支持多项目，地址带 ?project=）")
     ap.add_argument("--wait", type=int, default=5000, help="页面加载后再等多少毫秒（看板打开时会自动试合一次）")
     a = ap.parse_args()
 
@@ -59,7 +63,7 @@ def main() -> None:
         for name, tab, w, h, scheme in SHOTS:
             ctx = browser.new_context(viewport={"width": w, "height": h}, device_scale_factor=2, color_scheme=scheme)
             page = ctx.new_page()
-            page.goto(f"{a.base_url}/#/{tab}", wait_until="networkidle")
+            page.goto(f"{a.base_url}/?project={quote(a.project)}#/{tab}", wait_until="networkidle")
             page.wait_for_timeout(a.wait)
             raw = pathlib.Path(tmp) / name
             page.screenshot(path=str(raw))

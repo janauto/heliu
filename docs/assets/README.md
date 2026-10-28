@@ -4,6 +4,8 @@
 
 | 文件 | 内容 | 怎么来的 |
 |---|---|---|
+| `start-page-light.png` | 看板「开始」页，浅色（README「不碰终端就能上手」） | `shots.py` |
+| `galaxy-dark.png` | 看板「星图」，深色 1440 宽（README 与教程） | `shots.py` |
 | `board-overview-light.png` / `board-overview-dark.png` | 看板「总览」，浅色 / 深色（README 首图，随系统配色切换） | `shots.py` |
 | `board-columns-dark.png` | 看板「版本列」，深色 | `shots.py` |
 | `board-release-light.png` | 看板「合并预演」，浅色 | `shots.py` |
@@ -19,7 +21,7 @@ bin/heliu board --project 磁吸背夹 --port 7788 --no-open
 
 # 终端 B：截图（约 40 秒）
 pip3 install playwright pillow     # 已装过可跳过
-python3 docs/assets/shots.py --base-url http://127.0.0.1:7788
+python3 docs/assets/shots.py --base-url http://127.0.0.1:7788 --project 磁吸背夹
 ```
 
 - 浏览器优先用本机 Google Chrome；没有 Chrome 时先跑 `python3 -m playwright install chromium`。
