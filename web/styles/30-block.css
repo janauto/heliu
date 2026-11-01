@@ -8,7 +8,9 @@
   transition: transform var(--t) var(--spring), box-shadow var(--t) var(--ease), border-color var(--t-fast), opacity var(--t);
   user-select: none; -webkit-user-select: none; scroll-margin: 80px;
 }
-.block.draggable { cursor: grab; touch-action: none; }
+.block.draggable { cursor: grab; }
+.block.draggable .block-handle { touch-action: none; }
+@media (hover: none) { .block.draggable .block-handle { opacity: 1; padding: 4px; margin: -4px -8px -4px 0; } }
 .block:hover { transform: translateY(-1px); box-shadow: 0 3px 0 var(--edge), var(--shadow-md); border-color: var(--line-strong); }
 .block:focus-visible { box-shadow: 0 2px 0 var(--edge), var(--ring); outline: none; }
 .block.selected { border-color: var(--accent); box-shadow: 0 2px 0 var(--edge), 0 0 0 3px var(--accent-soft); }

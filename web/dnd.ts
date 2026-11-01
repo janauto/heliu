@@ -87,6 +87,8 @@ export function beginDrag(e: PointerEvent, payloadOrFn: DragPayload | (() => Dra
   if (dragging || e.button !== 0 || !e.isPrimary) return;
   const t = e.target as HTMLElement | null;
   if (t?.closest("button, a, input, select, textarea, [data-nodrag]")) return;
+  // 触屏：只从拖柄（[data-drag-handle]）起拖，方块主体留给页面滚动（Codex 第 3 轮建议）；鼠标 / 触控板仍可整块拖
+  if (e.pointerType === "touch" && !t?.closest("[data-drag-handle]")) return;
   const source = opts.source ?? (e.currentTarget as HTMLElement | null);
   if (!source) return;
   const sx = e.clientX;

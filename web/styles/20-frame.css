@@ -120,7 +120,8 @@
   .sidebar { flex-direction: row; border-right: none; border-top: 1px solid var(--line); padding: 6px 6px; gap: 0; overflow: hidden; }
   .nav-group { flex-direction: row; gap: 0; margin: 0 !important; flex: 1 1 auto; display: contents; }
   .nav-title, .sidebar .grow, .nav-foot, .nav-item[data-key="galaxy"] { display: none; }
-  .nav-item { height: 44px; min-width: 0; flex: 1 1 0; padding: 0; border-radius: var(--r-sm); }
+  .nav-item { height: 46px; min-width: 0; flex: 1 1 0; padding: 2px 0 0; border-radius: var(--r-sm); flex-direction: column; gap: 2px; justify-content: center; }
+  .nav-item .label { display: block; flex: none; font-size: 10px; line-height: 1.2; font-weight: 600; letter-spacing: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .nav-item .badge { position: absolute; top: 4px; right: 50%; transform: translateX(16px); min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
   .nav-item.on::before { display: none; }
   .statusbar { display: none; }

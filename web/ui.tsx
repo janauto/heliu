@@ -249,7 +249,7 @@ export function Block({ m, density = "card", selected, onClick, drag, class: cls
             ) : null}
             {tools ? <span class="block-tools">{tools}</span> : null}
             {drag ? (
-              <span class="block-handle" title="按住拖动">
+              <span class="block-handle" title="按住拖动" data-drag-handle>
                 <Icon name="grip" size={16} />
               </span>
             ) : null}
