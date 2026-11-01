@@ -96,6 +96,8 @@ interface Focus {
   id: string;
   select: boolean;
   strict: boolean;
+  /** 找不到时已经重拉过一次 features */
+  reloaded?: boolean;
   at: number;
 }
 
@@ -219,10 +221,14 @@ export function KanbanView() {
     const col = cols.find((c) => c.cards.some((x) => x.id === focus.id));
     const card = col?.cards.find((x) => x.id === focus.id);
     if (!col || !card) {
-      if (focus.strict) {
-        app.toast(`看板里没有 ${focus.id}（可能已放弃，或不在这个项目里）`, { kind: "info" });
+      // 刚登记的卡可能还没进这次的 features 数据：先重拉一次、等后续刷新，15 秒后还没有才说没有
+      if (Date.now() - focus.at > 15000) {
+        if (focus.strict) app.toast(`看板里没有 ${focus.id}（可能已放弃，或不在这个项目里）`, { kind: "info" });
         setFocus(null);
-      } else if (Date.now() - focus.at > 15000) setFocus(null);
+      } else if (!focus.reloaded) {
+        setFocus({ ...focus, reloaded: true });
+        app.reloadFeatures();
+      }
       return;
     }
     setFocus(null);
