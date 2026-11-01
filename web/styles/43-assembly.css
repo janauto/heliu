@@ -18,7 +18,7 @@
 .as-meta .sep { color: var(--faint); }
 
 /* 两栏 */
-.as-body { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: var(--s5); align-items: start; }
+.as-body { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: var(--s5); align-items: start; }
 .as-col-head { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: var(--s2); }
 .as-col-head h2 { font-size: 16px; }
 .as-col-head .count { font-family: var(--font-display); color: var(--muted); font-weight: 650; }
@@ -33,14 +33,29 @@
 .as-bin + .as-bin { margin-top: var(--s4); }
 .as-bin .group-body { gap: var(--s2); padding-top: var(--s2); }
 .as-bin .hint { font-size: 12px; color: var(--faint); margin: 0 2px 2px; }
-.as-bins .block.compact .block-top { flex: 1; min-width: 0; }
-/* 堆头已经说了人话（能拼上 / 撞了 …），堆里的方块不再重复，把位置留给标题 */
-.as-bins .block.compact .block-human { display: none; }
-.as-dec { flex: none; font-size: 11.5px; font-weight: 650; color: var(--muted); padding: 1px 7px; border-radius: 6px; background: var(--surface-3); white-space: nowrap; }
-.as-dec.changed { color: var(--accent); background: var(--accent-soft); }
-.block.as-on-track { opacity: 0.5; box-shadow: none; }
-.block.as-on-track:hover { opacity: 0.8; }
-.block.as-on-track .as-dec { color: var(--green); background: var(--green-bg); }
+.as-bins .block.compact .block-human { max-width: 38%; }
+/* 口径说明：合并单档位 ≠ 看板分组 */
+.as-basis { font-size: 12.5px; line-height: 1.6; color: var(--fg-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--s2) var(--s3); margin: calc(-1 * var(--s2)) 0 var(--s4); }
+
+/* 左栏一行 = 方块 + 下面一条「档位 · 决定」；鼠标移上 / Tab 进来 / 点开时，决定胶囊换成开关（同一行，不跳高度） */
+.as-row { display: flex; flex-direction: column; gap: 6px; }
+.as-row.placed > .block { opacity: 0.55; box-shadow: none; }
+.as-row.placed > .block:hover, .as-row.placed.sel > .block { opacity: 0.85; }
+.as-row-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 28px; padding-left: 14px; }
+.as-row-sub .pill { height: 22px; font-size: 11.5px; padding: 0 8px; }
+.as-row-seg { display: none; }
+.as-row:hover .as-row-seg, .as-row:focus-within .as-row-seg, .as-row.open .as-row-seg, .as-row.sel .as-row-seg { display: inline-flex; }
+.as-row:hover .as-dec-pill, .as-row:focus-within .as-dec-pill, .as-row.open .as-dec-pill, .as-row.sel .as-dec-pill { display: none; }
+body.dragging .as-row .as-row-seg { display: none; }
+body.dragging .as-row .as-dec-pill { display: inline-flex; }
+.as-row-why { padding-left: 14px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* 没绑分支的卡：说明 + 前几张 */
+.as-unbound { margin-top: var(--s5); padding: var(--s3); border-radius: var(--r-md); border: 1.5px dashed var(--line-strong); background: color-mix(in srgb, var(--surface) 60%, transparent); display: flex; flex-direction: column; gap: var(--s2); }
+.as-unbound > p { font-size: 12.5px; line-height: 1.65; color: var(--fg-2); }
+.as-unbound > p b { color: var(--fg); }
+.as-unbound-list { display: flex; flex-direction: column; gap: var(--s2); }
+.as-unbound-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
 
 /* 右栏：合流轨道 */
 .as-main { min-width: 0; }
@@ -71,6 +86,7 @@
 .as-slot > .block { min-width: 0; }
 .as-ctl { display: flex; flex-direction: column; gap: var(--s2); padding-top: 6px; min-width: 0; }
 .as-ctl .seg { align-self: flex-start; flex-wrap: wrap; }
+.as-ctl .as-tier { align-self: flex-start; }
 .as-ctl .k { font-size: 11.5px; color: var(--faint); font-weight: 650; letter-spacing: 0.04em; }
 .as-advice { font-size: 12.5px; color: var(--fg-2); line-height: 1.55; }
 .as-advice b { color: var(--muted); font-weight: 650; }

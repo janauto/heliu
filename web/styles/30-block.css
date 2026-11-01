@@ -1,6 +1,7 @@
 /* ───────────── 方块（Block）：一条功能在所有页面里的唯一画法（M10） ───────────── */
+/* 缺省灰色用零优先级的 :where()，这样 .tone-red / .tone-green… 能盖过它（同为单类选择器时写在后面的 .block 会赢，Codex 第 1 轮指出） */
+:where(.block) { --tone: var(--gray); --tone-bg: var(--gray-bg); --tone-line: var(--gray-line); }
 .block {
-  --tone: var(--gray); --tone-bg: var(--gray-bg); --tone-line: var(--gray-line);
   position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 14px 18px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); color: var(--fg);
   box-shadow: 0 2px 0 var(--edge), var(--shadow-xs);

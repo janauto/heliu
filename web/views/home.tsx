@@ -356,7 +356,7 @@ function IdeaBox({ nextName }: { nextName: string | null }) {
       const f = r.data.feature;
       setTitle("");
       const where = f.milestone ? milestoneLabel(f.milestone, app.milestones, app.next) : "未预约";
-      app.toast(`已登记 ${f.id}，预约 ${where}${r.data.milestoneCreated ? `（新建了版本 ${r.data.milestoneCreated}）` : ""}`);
+      app.toast(`已登记 ${f.id}，预约 ${where}（已写入台账${r.data.milestoneCreated ? `，新建了版本 ${r.data.milestoneCreated}` : ""}）`);
       app.reloadFeatures();
       app.refresh();
     } catch (err) {

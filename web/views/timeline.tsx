@@ -305,9 +305,17 @@ export function TimelineView() {
         <div class="fchips" role="group" aria-label="按状态筛选">
           {FILTERS.map((f) => {
             const n = f.key === "all" ? queried.length : (tones[f.key] ?? 0);
+            // 没做冲突检查（试合）时，「撞了」不知道几块：写「未检查」而不是 0（Codex 第 1 轮建议）
+            const unchecked = f.label === "撞了" && !app.precheck;
             return (
-              <button class={`fchip${filter === f.key ? " on" : ""}${f.tone ? ` tone-${f.tone}` : ""}`} disabled={f.key !== "all" && !n && filter !== f.key} onClick={() => setFilter(f.key)} aria-pressed={filter === f.key}>
-                {f.label} <b>{n}</b>
+              <button
+                class={`fchip${filter === f.key ? " on" : ""}${f.tone ? ` tone-${f.tone}` : ""}`}
+                disabled={unchecked || (f.key !== "all" && !n && filter !== f.key)}
+                title={unchecked ? "还没做冲突检查（试合）：点标题栏的「冲突检查」" : undefined}
+                onClick={() => setFilter(f.key)}
+                aria-pressed={filter === f.key}
+              >
+                {f.label} {unchecked ? <span class="tiny muted">未检查</span> : <b>{n}</b>}
               </button>
             );
           })}

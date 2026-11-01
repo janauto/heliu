@@ -11,7 +11,7 @@ import { useApp, type AppState } from "../app.tsx";
 import { useDropTarget, type DragPayload } from "../dnd.ts";
 import { api, copyWhenReady, hms, useApi } from "../lib.ts";
 import { MergedPanel, MergePromptPanel, type PromptState } from "../merge-flow.tsx";
-import { Block, Empty, GroupHead, Icon, matchQuery, modelOfCard, PageHead, Seg, Stat, type BlockChip, type BlockModel, type SegOption, type Tone } from "../ui.tsx";
+import { Block, Empty, GroupHead, Icon, matchQuery, modelOfCard, PageHead, Pill, Seg, Stat, type BlockChip, type BlockModel, type SegOption, type Tone } from "../ui.tsx";
 
 /* ───────────── 档位（顺序 = 左栏分堆顺序） ───────────── */
 
@@ -42,6 +42,17 @@ const DECISION_OPTS: Array<SegOption<string>> = [
 ];
 /** 「等它」只在当前决定就是它时出现（多半是终端 heliu release set 改的），免得开关一个都没选中 */
 const WAIT_OPT: SegOption<string> = { value: "等它", label: "等它", tone: "purple", title: "本次不合也不顺延：本版先不收尾，等它好了重新预演" };
+const DEC_TONE: Record<string, Tone> = { 并入: "green", 待定: "yellow", 不并: "gray", 顺延: "accent", 等它: "purple" };
+
+/** 这一项的决定开关：已在集成分支 → 只读（执行时跳过）；拼不上 → 「并入」禁用并写明原因；其余四个（或五个）都能切 */
+function optsFor(x: ReleaseItem, dec: string): Array<SegOption<string>> {
+  const base = dec === "等它" ? [...DECISION_OPTS, WAIT_OPT] : DECISION_OPTS;
+  if (x.tier === "in_integration") return base.map((o) => ({ ...o, disabled: o.value !== dec, title: "已在集成分支，执行时跳过" }));
+  if (x.tier === "unmergeable") {
+    return base.map((o) => (o.value === "并入" && dec !== "并入" ? { ...o, disabled: true, title: `拼不上：${x.reason}。先补分支或配置集成分支，才能并入` } : o));
+  }
+  return base;
+}
 
 const itemKey = (x: ReleaseItem): string => `${x.order}|${x.id}|${x.bindings[0]?.repo ?? ""}|${x.bindings[0]?.branch ?? ""}`;
 const firstSentence = (s: string): string => {
@@ -73,45 +84,44 @@ function chipsOf(x: ReleaseItem): BlockChip[] {
 }
 
 /**
- * 合并单项 → 方块。有对应功能卡时用 modelOfCard 拿类型 / 模块 / 预约 / 最后活动，
- * 但人话、事实、芯片、颜色换成这一项的档位与 reason——这一页说的是「合并单里这一块」，口径以预演为准。
+ * 合并单项 → 方块。有对应功能卡时整块用 modelOfCard：颜色、人话、事实、芯片与看板 / 时间线完全一致（同一张卡跨页不变色），
+ * 只把仓库 / 分支换成这一项的绑定（多仓的卡一项一块）。找不到卡（看板数据还没到或卡已删）才按合并单档位构造。
+ * 合并单档位（能拼上 / 撞了 / 还没做完 …）是另一个维度：用「档位：…」小胶囊单独标，不覆盖方块的颜色与人话。
  */
 function modelOfItem(x: ReleaseItem, card: BoardCard | undefined, app: AppState, sel: string): BlockModel {
-  const t = TIER[x.tier];
   const b = x.bindings[0] ?? null;
-  const base: BlockModel = card
-    ? modelOfCard(card, { next: app.next })
-    : {
-        key: x.id,
-        id: x.id,
-        title: x.title,
-        type: "其他",
-        typeGuess: true,
-        module: "其他",
-        light: t.light,
-        human: t.human,
-        fact: null,
-        repoLabel: null,
-        branch: null,
-        milestone: sel,
-        lastActivityAt: null,
-        chips: [],
-        variant: "normal",
-        needsAction: null,
-      };
+  if (card) {
+    const m = modelOfCard(card, { next: app.next });
+    return { ...m, key: itemKey(x), repoLabel: b ? b.repoLabel : m.repoLabel, branch: b ? b.branch : m.branch };
+  }
+  const t = TIER[x.tier];
   return {
-    ...base,
     key: itemKey(x),
     id: x.id,
     title: x.title,
+    type: "其他",
+    typeGuess: true,
+    module: "其他",
     light: t.light,
     human: t.human,
     fact: x.reason || null,
-    repoLabel: b ? b.repoLabel : base.repoLabel,
-    branch: b ? b.branch : base.branch,
+    repoLabel: b ? b.repoLabel : null,
+    branch: b ? b.branch : null,
+    milestone: sel,
+    lastActivityAt: null,
     chips: chipsOf(x),
-    variant: base.variant === "merged-pending" ? "merged-pending" : "normal",
+    variant: "normal",
+    needsAction: null,
   };
+}
+
+/** 合并单档位标签：和方块的颜色 / 人话分开，title 是合并单原文（M4 状态名 + 依据） */
+function TierPill({ x }: { x: ReleaseItem }) {
+  return (
+    <Pill tone="gray" outline class="as-tier" title={`合并单档位：${x.tierText} · ${x.reason}`}>
+      档位：{TIER[x.tier].human}
+    </Pill>
+  );
 }
 
 /* ───────────── 页面 ───────────── */
@@ -153,6 +163,8 @@ export function AssemblyView() {
   const [syncOpen, setSyncOpen] = useState(false);
   const [openFiles, setOpenFiles] = useState<Set<string>>(new Set());
   const [closed, setClosed] = useState<Set<ReleaseTier>>(new Set(["in_integration"]));
+  /** 左栏点开的那一行（触屏没有 hover：点一下显示决定开关） */
+  const [rowOpen, setRowOpen] = useState<string | null>(null);
   useEffect(() => {
     setPlan({ busy: false, result: null, error: null });
     setMp(null);
@@ -218,7 +230,7 @@ export function AssemblyView() {
             if (p.kind !== "card") return null;
             const x = (p.data as ReleaseItem | undefined) ?? items.find((i) => i.id === p.id);
             if (!x || !items.some((i) => i.id === x.id)) return { ok: false, hint: `不在 ${sel} 的合并单里` };
-            if (x.tier === "unmergeable") return { ok: false, hint: "拼不上：分支不存在或仓库未配置集成分支" };
+            if (x.tier === "unmergeable") return { ok: false, hint: `拼不上：${x.reason || "分支不存在或仓库未配置集成分支"}` };
             if (onTrack(x, eff(x))) return { ok: false, hint: "已经在轨道上" };
             return { ok: true, hint: "放到这里：排进合并单（并入）" };
           },
@@ -367,6 +379,13 @@ export function AssemblyView() {
   const deferredIds = [...new Set(items.filter((x) => eff(x) === "顺延").map((x) => x.id))];
   const deferredItems = items.filter((x) => eff(x) === "顺延");
   const isSel = (id: string) => app.selected?.kind === "card" && app.selected.card.id === id;
+  /* 看板同一列（key = 版本 id）：用来对照「撞了」的两个口径、找没绑分支的卡 */
+  const col = app.features?.columns.find((c) => c.key === sel) ?? null;
+  const boardConflict = app.features?.precheck && col ? col.cards.filter((c) => c.group === "conflict").length : null;
+  const planConflict = d?.counts.conflict ?? 0;
+  const basisDiff = boardConflict !== null && boardConflict !== planConflict;
+  const basisText = `分堆按合并单档位，和看板按卡片分组口径不同：会话等你回答 / 正在运行、或卡片还是「想法 / 开发中」的，即使试合有冲突也归到「还没做完」；分支不存在、仓库没配集成分支的归到「拼不上」；合并单还按「卡 × 分支」一项一算。`;
+  const unbound = col ? col.cards.filter((c) => !c.done && !c.bindings.length) : [];
   const pick = (id: string) => {
     const c = cardOf.get(id);
     if (c) app.select(isSel(id) ? null : { kind: "card", card: c });
@@ -423,7 +442,12 @@ export function AssemblyView() {
                 <h2>这一版的方块</h2>
                 <span class="count">{shown.length}</span>
               </div>
-              <p class="as-col-hint">按住方块拖到右边的轨道 = 排进合并单（决定改成「并入」，只写合并单文件）。</p>
+              <p class="as-col-hint">按住方块拖到右边的轨道 = 并入；鼠标移到一行上（或 Tab 到它、点一下）就能直接改决定。都只写合并单文件。</p>
+              {basisDiff ? (
+                <p class="as-basis">
+                  {basisText}所以这里的「撞了 {planConflict}」{planConflict < (boardConflict ?? 0) ? "比" : "和"}看板的「撞了 {boardConflict}」{planConflict < (boardConflict ?? 0) ? "少" : "不一样"}。
+                </p>
+              ) : null}
               {!items.length ? (
                 <Empty inline icon="info" title={`${d.milestone.id} 还没有待合入的功能。`} hint="预约到这一版、还没合入的功能卡会出现在这里。" />
               ) : !shown.length ? (
@@ -442,37 +466,44 @@ export function AssemblyView() {
                           {list.map((x) => {
                             const dec = eff(x);
                             const placed = onTrack(x, dec);
-                            const m = modelOfItem(x, cardOf.get(x.id), app, sel);
+                            const skip = x.tier === "in_integration";
+                            const k = itemKey(x);
                             const changed = dec !== x.defaultDecision;
                             return (
-                              <Block
-                                key={itemKey(x)}
-                                m={m}
-                                density="compact"
-                                class={placed ? "as-on-track" : undefined}
-                                selected={isSel(x.id)}
-                                onClick={() => pick(x.id)}
-                                title={`${x.title}\n${x.tierText}：${x.reason}\n建议：${x.actionText}`}
-                                drag={placed ? undefined : { payload: { kind: "card", id: x.id, label: x.title, data: x } }}
-                                tools={
-                                  placed || x.tier === "unmergeable" ? undefined : (
-                                    <button
-                                      class="btn xs"
-                                      title="不用拖：直接排进合并单（并入）"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        void decide(x, "并入");
+                              <div class={`as-row${placed ? " placed" : ""}${rowOpen === k ? " open" : ""}${isSel(x.id) ? " sel" : ""}`} key={k}>
+                                <Block
+                                  m={modelOfItem(x, cardOf.get(x.id), app, sel)}
+                                  density="compact"
+                                  selected={isSel(x.id)}
+                                  onClick={() => {
+                                    setRowOpen(rowOpen === k ? null : k);
+                                    pick(x.id);
+                                  }}
+                                  title={`${x.title}\n档位：${x.tierText} · ${x.reason}\n建议：${x.actionText}`}
+                                  drag={placed ? undefined : { payload: { kind: "card", id: x.id, label: x.title, data: x } }}
+                                />
+                                <div class="as-row-sub">
+                                  <TierPill x={x} />
+                                  <Pill tone={DEC_TONE[dec] ?? "gray"} class="as-dec-pill" title={changed ? `默认是「${x.defaultDecision}」，合并单里已改成「${dec}」` : "默认决定"}>
+                                    决定：{dec}
+                                    {skip ? "（执行时跳过）" : placed ? " · 在轨道上" : ""}
+                                    {changed ? " · 已改" : ""}
+                                  </Pill>
+                                  <span class="as-row-seg" role="group" aria-label={`${x.id} 的决定`}>
+                                    <Seg
+                                      small
+                                      tone
+                                      value={dec}
+                                      options={optsFor(x, dec)}
+                                      onChange={(v) => {
+                                        if (!skip) void decide(x, v);
                                       }}
-                                    >
-                                      排进轨道
-                                    </button>
-                                  )
-                                }
-                              >
-                                <span class={`as-dec${changed && !placed ? " changed" : ""}`} title={changed ? `默认是「${x.defaultDecision}」，合并单里已改成「${dec}」` : "默认决定"}>
-                                  {placed ? (x.tier === "in_integration" ? "已在轨道 · 跳过" : "已在轨道") : dec}
-                                </span>
-                              </Block>
+                                    />
+                                  </span>
+                                  {busy[x.id] ? <span class="as-busy">写入中…</span> : null}
+                                </div>
+                                {x.tier === "unmergeable" ? <p class="as-row-why">拼不上：{x.reason}</p> : null}
+                              </div>
                             );
                           })}
                         </div>
@@ -481,6 +512,24 @@ export function AssemblyView() {
                   );
                 })
               )}
+              {unbound.length ? (
+                <div class="as-unbound">
+                  <p>
+                    <b>还有 {unbound.length} 张卡没绑分支</b>：合并单里它们只能是「拼不上（没有绑定分支）」，不能并入，默认顺延。要让它们进这一版，先给它绑分支（在时间线或星图里把一条「还没登记」的分支拖到它上面）；要把它们挪走，在看板里改预约。
+                  </p>
+                  <div class="as-unbound-list">
+                    {unbound.slice(0, 5).map((c) => (
+                      <Block key={c.id} m={modelOfCard(c, { next: app.next })} density="mini" selected={isSel(c.id)} onClick={() => app.select(isSel(c.id) ? null : { kind: "card", card: c })} title={`${c.id} ${c.title}：点开看详情`} />
+                    ))}
+                  </div>
+                  <div class="as-unbound-foot">
+                    {unbound.length > 5 ? <span class="tiny muted">另外 {unbound.length - 5} 张在看板里看</span> : <span />}
+                    <button class="btn xs" onClick={() => app.go("kanban")}>
+                      去看板改预约
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </aside>
 
             {/* ── 右栏：合流轨道 ── */}
@@ -501,7 +550,6 @@ export function AssemblyView() {
                   const k = itemKey(x);
                   const files = x.bindings.filter((b) => b.conflicts.length > 0);
                   const nFiles = files.reduce((a, b) => a + b.conflicts.length, 0);
-                  const opts = dec === "等它" ? [...DECISION_OPTS, WAIT_OPT] : DECISION_OPTS;
                   return (
                     <div class={`as-slot${skip ? " skip" : ""}`} key={k}>
                       <span class={`as-node tone-${t.tone}`} title={`合并单第 ${x.order} 项`}>
@@ -509,12 +557,13 @@ export function AssemblyView() {
                       </span>
                       <Block m={modelOfItem(x, cardOf.get(x.id), app, sel)} density="card" selected={isSel(x.id)} onClick={() => pick(x.id)} />
                       <div class="as-ctl">
+                        <TierPill x={x} />
                         <span class="k">决定</span>
                         <Seg
                           small
                           tone
                           value={dec}
-                          options={skip ? opts.map((o) => ({ ...o, disabled: o.value !== dec, title: "已在集成分支，执行时跳过" })) : opts}
+                          options={optsFor(x, dec)}
                           onChange={(v) => {
                             if (!skip) void decide(x, v);
                           }}
@@ -626,7 +675,13 @@ export function AssemblyView() {
               <div class="as-dock-row">
                 <div class="as-dock-stats">
                   <Stat sm n={trackAll.length} label="块在轨道上" tone="accent" title="决定为「并入」的项，加上已在集成分支（执行时跳过）的项" />
-                  <Stat sm n={d.counts.conflict} label="撞了" tone={d.counts.conflict ? "red" : undefined} title="这一版里试合有冲突的项数（不论决定）" />
+                  <Stat
+                    sm
+                    n={d.counts.conflict}
+                    label="撞了"
+                    tone={d.counts.conflict ? "red" : undefined}
+                    title={`合并单档位口径：这一版里归到「撞了」的项数（不论决定，按卡 × 分支计）。${basisText}${boardConflict !== null ? `看板按卡片分组是「撞了 ${boardConflict}」。` : ""}`}
+                  />
                   <Stat sm n={d.counts.precheck_failed} label="没试出来" tone={d.counts.precheck_failed ? "yellow" : undefined} title="这一版里请求了试合但没得到结果的项数：不算无冲突" />
                   <Stat sm n={deferredIds.length} label="预计顺延" title="决定为「顺延」的卡数" />
                 </div>

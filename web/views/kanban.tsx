@@ -282,10 +282,18 @@ export function KanbanView() {
               const g = GROUPS.find((x) => x.key === k)!;
               const n = countOf(k);
               const on = filter === k;
+              // 没做冲突检查（试合）时，「撞了」不知道几块：写「未检查」而不是 0
+              const unchecked = k === "conflict" && !app.precheck;
               return (
-                <button class={`fchip tone-${g.tone}${on ? " on" : ""}`} aria-pressed={on} disabled={!n && !on} title={g.hint} onClick={() => setFilter(on ? "all" : k)}>
+                <button
+                  class={`fchip tone-${g.tone}${on ? " on" : ""}`}
+                  aria-pressed={on}
+                  disabled={unchecked || (!n && !on)}
+                  title={unchecked ? "还没做冲突检查（试合）：点标题栏的「冲突检查」" : g.hint}
+                  onClick={() => setFilter(on ? "all" : k)}
+                >
                   <Dot tone={g.tone} />
-                  {g.human} <b>{n}</b>
+                  {g.human} {unchecked ? <span class="tiny muted">未检查</span> : <b>{n}</b>}
                 </button>
               );
             })}
