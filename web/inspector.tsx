@@ -239,7 +239,7 @@ function CardDetail({ card }: { card: BoardCard }) {
           <h3>
             分支 <span class="right">{card.bindings.length ? `${card.bindings.length} 条` : "还没绑"}</span>
           </h3>
-          {card.bindings.length ? card.bindings.map((b) => <BindingCard b={b} />) : <p class="muted small">这张卡还没有绑定分支。在时间线或星图里把一条「还没登记」的分支拖到它上面，或在该分支的会话里说「这条分支对应 {card.id}」。</p>}
+          {card.bindings.length ? card.bindings.map((b) => <BindingCard b={b} />) : <p class="muted small">这张卡还没有绑定分支，进不了合并单。三种办法：在「更多 → 星图」里把那条分支的星点拖到这张卡的小卡星上；在该分支的 Claude 会话里说「这条分支对应 {card.id}」；或终端 heliu feature bind {card.id} &lt;仓库&gt; &lt;分支&gt;。</p>}
         </section>
 
         <section class="insp-section">
