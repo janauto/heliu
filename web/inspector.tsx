@@ -239,7 +239,8 @@ function CardDetail({ card }: { card: BoardCard }) {
           <h3>
             分支 <span class="right">{card.bindings.length ? `${card.bindings.length} 条` : "还没绑"}</span>
           </h3>
-          {card.bindings.length ? card.bindings.map((b) => <BindingCard b={b} />) : <p class="muted small">这张卡还没有绑定分支，进不了合并单。三种办法：在「更多 → 星图」里把那条分支的星点拖到这张卡的小卡星上；在该分支的 Claude 会话里说「这条分支对应 {card.id}」；或终端 heliu feature bind {card.id} &lt;仓库&gt; &lt;分支&gt;。</p>}
+          {card.bindings.length ? card.bindings.map((b) => <BindingCard b={b} />) : <p class="muted small">这张卡还没有绑定分支，进不了合并单。在下面选一条分支绑上；也可以在「更多 → 星图」里把分支星点拖到这张卡的小卡星上，或在该分支的 Claude 会话里说「这条分支对应 {card.id}」。</p>}
+          {!card.done ? <BindPicker card={card} /> : null}
         </section>
 
         <section class="insp-section">
@@ -272,6 +273,85 @@ function CardDetail({ card }: { card: BoardCard }) {
       <div class="insp-foot">{card.file}</div>
       {baseline ? <BaselineModal card={card} b={baseline} onClose={() => setBaseline(null)} /> : null}
     </>
+  );
+}
+
+/** 关联开发分支（Codex 第 2 轮遗留 1）：列出本项目里还没绑到任何卡的功能分支，选一条绑到这张卡（只写台账） */
+function BindPicker({ card }: { card: BoardCard }) {
+  const app = useApp();
+  const [open, setOpen] = useState(!card.bindings.length);
+  const [repo, setRepo] = useState<string>("");
+  const [branch, setBranch] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const bound = new Set<string>();
+  for (const col of app.features?.columns ?? []) for (const c of col.cards) for (const b of c.bindings) bound.add(`${b.repo}|${b.branch}`);
+  const repos = (app.status?.repos ?? [])
+    .filter((r) => r.reachable)
+    .map((r) => ({
+      id: r.id,
+      label: r.label,
+      branches: r.branches
+        .filter((f) => f.role === "feature" && !bound.has(`${r.id}|${f.branch}`))
+        .sort((a, b) => (b.lastCommitAt ?? "").localeCompare(a.lastCommitAt ?? "")),
+    }))
+    .filter((r) => r.branches.length);
+  const total = repos.reduce((a, r) => a + r.branches.length, 0);
+  const curRepo = repos.find((r) => r.id === repo) ?? repos[0] ?? null;
+  const bind = async () => {
+    if (!curRepo || !branch) return;
+    setBusy(true);
+    try {
+      await api(`/api/features/${encodeURIComponent(card.id)}/bind`, { body: { repo: curRepo.id, branch } });
+      app.toast(`已把 ${curRepo.label} 的 ${branch} 绑到 ${card.id}（已写入台账）`);
+      setBranch("");
+      app.reloadFeatures();
+      app.refresh();
+    } catch (e) {
+      app.toast(`没绑成：${(e as Error).message}`, { kind: "err" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!open) {
+    return (
+      <button class="link small insp-bind-toggle" onClick={() => setOpen(true)} disabled={!app.status}>
+        <Icon name="plus" size={13} /> 再关联一条开发分支{total ? `（还有 ${total} 条没登记的分支）` : ""}
+      </button>
+    );
+  }
+  return (
+    <div class="insp-bind">
+      <div class="insp-bind-head">
+        <b>关联开发分支</b>
+        <span class="muted tiny">{!app.status ? "分支数据还在加载…" : total ? `还没绑卡的功能分支 ${total} 条（主线 / 集成分支不在内）` : "所有功能分支都已经绑了卡"}</span>
+      </div>
+      {total ? (
+        <div class="insp-bind-row">
+          {repos.length > 1 ? (
+            <select class="small" value={curRepo?.id ?? ""} onChange={(e) => { setRepo((e.target as HTMLSelectElement).value); setBranch(""); }} aria-label="仓库">
+              {repos.map((r) => (
+                <option value={r.id}>
+                  {r.label}（{r.branches.length}）
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <select class="small" value={branch} onChange={(e) => setBranch((e.target as HTMLSelectElement).value)} aria-label="分支">
+            <option value="">选一条分支…</option>
+            {curRepo?.branches.map((f) => (
+              <option value={f.branch} title={f.branch}>
+                {f.label && f.label !== f.branch ? `${f.label} · ${f.branch}` : f.branch}
+                {f.lastCommitAt ? `（${ago(f.lastCommitAt)}）` : ""}
+              </option>
+            ))}
+          </select>
+          <button class="btn small primary" onClick={() => void bind()} disabled={busy || !branch} title="只写台账：把这条分支记到这张卡的 bindings 里">
+            {busy ? "绑定中…" : "绑定"}
+          </button>
+        </div>
+      ) : null}
+      <p class="tiny muted">绑定 = 只写台账，不动仓库。绑了分支，这张卡才会出现在合并单里、时间线上才有条。</p>
+    </div>
   );
 }
 

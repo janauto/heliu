@@ -42,6 +42,13 @@
 .insp-sugg .btn { align-self: flex-start; }
 .insp-foot { padding: var(--s3) var(--s5); border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); word-break: break-all; }
 
+/* 关联开发分支 */
+.insp-bind { margin-top: var(--s3); padding: var(--s3) var(--s4); border-radius: var(--r-md); border: 1px dashed var(--line-strong); background: var(--surface-2); display: flex; flex-direction: column; gap: 8px; }
+.insp-bind-head { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.insp-bind-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.insp-bind-row select { flex: 1 1 140px; min-width: 0; max-width: 100%; }
+.insp-bind-toggle { display: inline-flex; align-items: center; gap: 4px; margin-top: var(--s3); font-size: 12.5px; }
+
 /* 基线预演弹层里的检查表 */
 .base-check { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 8px 0; border-top: 1px dashed var(--line); font-size: 13px; align-items: baseline; }
 .base-check:first-child { border-top: none; }
