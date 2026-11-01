@@ -1,0 +1,127 @@
+/* ───────────── 今天（HomeView，M10）：下一版大方块 · 新点子 · 现在最该做的 · 最近动的 · 健康 ───────────── */
+.hm-err { margin-bottom: var(--s4); }
+.hm-proj { color: var(--fg-2); font-weight: 650; }
+
+/* ① 下一版：一块大积木（顶上三颗品牌色钉），同时是拖放落点 */
+.hm-next {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s6);
+  margin-top: var(--s2); padding: var(--s6); border-radius: var(--r-xl);
+  background: radial-gradient(120% 160% at 100% 0%, var(--accent-soft), transparent 60%), var(--surface);
+  box-shadow: 0 3px 0 var(--edge), var(--shadow-md);
+  transition: outline-color var(--t-fast), background-color var(--t-fast), box-shadow var(--t);
+}
+.hm-studs { position: absolute; top: -7px; left: var(--s6); display: flex; gap: var(--s2); pointer-events: none; }
+.hm-studs i { display: block; width: 18px; height: 12px; border-radius: 6px 6px 3px 3px; background: var(--brand); box-shadow: 0 1px 0 var(--edge); }
+.hm-next.none .hm-studs i { background: var(--line-strong); }
+.hm-next.drop-can { box-shadow: 0 3px 0 var(--edge), var(--shadow-lg); }
+
+.hm-next-main { min-width: 0; display: flex; flex-direction: column; gap: var(--s5); }
+.hm-next-head { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.hm-next-id { font-family: var(--font-display); font-size: 30px; font-weight: 750; line-height: 1.1; letter-spacing: -0.02em; }
+.hm-next-id.hm-none { font-size: 22px; color: var(--muted); }
+.hm-next-title { font-size: 15px; font-weight: 600; color: var(--fg-2); }
+.hm-next-date { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.hm-none-hint { font-size: 14px; color: var(--muted); max-width: 560px; }
+
+.hm-next-body { display: flex; align-items: center; gap: var(--s6); }
+.hm-owed { flex: none; min-width: 132px; gap: var(--s1); }
+.hm-owed .hm-owed-k { font-size: 14px; font-weight: 650; color: var(--fg-2); }
+.hm-owed .v { font-size: 64px; }
+.hm-owed .v small { font-family: var(--font-sans); font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+.hm-progress { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--s3); }
+.hm-legend { gap: var(--s2) var(--s4); font-size: 13.5px; }
+.hm-legend button {
+  display: inline-flex; align-items: center; gap: 6px; margin: -4px -8px; padding: 4px 8px; border: none; border-radius: var(--r-xs);
+  background: none; color: var(--fg-2); white-space: nowrap; transition: background var(--t-fast), color var(--t-fast);
+}
+.hm-legend button:hover { background: var(--surface-3); color: var(--fg); }
+.hm-legend button b { font-family: var(--font-display); font-weight: 700; color: var(--fg); }
+.hm-unk { font-size: 12.5px; font-weight: 600; color: var(--faint); }
+.hm-facts { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); font-size: 12.5px; color: var(--muted); }
+.hm-drop-tip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--faint); transition: color var(--t-fast); }
+.hm-next.drop-can .hm-drop-tip { color: var(--accent); font-weight: 600; }
+
+.hm-next-side { display: flex; flex-direction: column; gap: var(--s2); min-width: 176px; }
+.hm-cta { height: 46px; padding: 0 var(--s5); font-size: 15px; border-radius: var(--r-md); }
+.hm-cta2 { height: 38px; border-radius: var(--r-md); }
+
+/* ② 我有个新点子…：一块虚线输入积木，聚焦变实线 */
+.hm-idea {
+  display: flex; align-items: center; gap: var(--s3); margin-top: var(--s5); padding: var(--s2) var(--s2) var(--s2) var(--s4);
+  background: var(--surface); border: 1.5px dashed var(--line-strong); border-radius: var(--r-lg);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.hm-idea:hover { border-color: var(--accent-line); }
+.hm-idea:focus-within { border-style: solid; border-color: var(--accent); box-shadow: var(--ring); }
+.hm-idea .hm-idea-icon { flex: none; color: var(--accent); }
+.hm-idea input[type="text"] { flex: 1; min-width: 0; height: 46px; padding: 0 var(--s1); border: none; background: transparent; font-size: 16px; }
+.hm-idea input[type="text"]:focus { border: none; box-shadow: none; }
+.hm-idea .btn { flex: none; height: 44px; padding: 0 var(--s5); font-size: 14px; border-radius: var(--r-md); }
+.hm-idea-note { margin: var(--s2) var(--s4) 0; font-size: 12.5px; color: var(--muted); }
+
+/* ③ 现在最该做的：一句一个方块行 */
+.hm-actions { display: flex; flex-direction: column; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
+.hm-action {
+  display: flex; align-items: center; gap: var(--s4); padding: var(--s4) var(--s5);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: 0 2px 0 var(--edge), var(--shadow-xs);
+}
+.hm-num {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%;
+  background: var(--brand); color: #fff; box-shadow: var(--brand-shadow);
+  font-family: var(--font-display); font-size: 16px; font-weight: 750; font-variant-numeric: tabular-nums;
+}
+.hm-action-text { flex: 1; min-width: 0; font-size: 15px; line-height: 1.6; color: var(--fg); word-break: break-word; }
+.hm-arrow { margin: 0 var(--s2); color: var(--accent); font-weight: 700; }
+.hm-sugg { color: var(--fg-2); }
+.hm-action .btn { flex: none; }
+.hm-note { margin-top: var(--s3); font-size: 12.5px; color: var(--muted); }
+
+/* ④ 最近动的：一排 card 方块 */
+.hm-recent { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s4); padding-top: var(--s1); align-items: start; }
+
+/* ⑤ 健康小行 */
+.hm-health { display: flex; flex-wrap: wrap; gap: var(--s3); }
+.hm-hitem {
+  display: inline-flex; align-items: center; gap: var(--s2); min-height: 40px; padding: var(--s2) var(--s4);
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--fg-2);
+  font-size: 13.5px; line-height: 1.45; text-align: left; box-shadow: var(--shadow-xs);
+}
+.hm-hitem b { font-family: var(--font-display); font-weight: 700; color: var(--tone, var(--fg)); }
+.hm-hitem.tone-gray b { color: var(--fg); }
+.hm-hitem.tone-red, .hm-hitem.tone-purple, .hm-hitem.tone-yellow { background: var(--tone-bg); border-color: var(--tone-line); color: var(--fg); }
+.hm-hitem .hm-sub { color: var(--muted); }
+.hm-hitem .hm-chev { flex: none; color: var(--faint); margin-right: calc(-1 * var(--s1)); }
+button.hm-hitem { cursor: pointer; transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast), border-color var(--t-fast); }
+button.hm-hitem:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); border-color: var(--tone-line, var(--accent-line)); }
+
+/* 骨架占位 */
+.hm-sk-title { display: inline-block; width: 120px; height: 30px; }
+.hm-sk-num { display: block; flex: none; width: 120px; height: 72px; border-radius: var(--r-md); }
+.hm-sk-bar { display: block; height: 12px; border-radius: 999px; }
+.hm-sk-line { display: block; width: 62%; height: 14px; }
+.hm-sk-row { display: block; height: 70px; border-radius: var(--r-lg); }
+.hm-sk-block { display: block; height: 160px; border-radius: var(--r-md); }
+.hm-sk-pill { display: inline-block; width: 220px; height: 40px; border-radius: var(--r-md); }
+
+/* 响应式：≤1100 下一版上下排；≤700 全部单列 */
+@media (max-width: 1100px) {
+  .hm-next { grid-template-columns: minmax(0, 1fr); gap: var(--s5); padding: var(--s5); }
+  .hm-studs { left: var(--s5); }
+  .hm-next-side { flex-direction: row; flex-wrap: wrap; min-width: 0; }
+  .hm-next-side .btn { flex: 1 1 160px; }
+}
+@media (max-width: 700px) {
+  .hm-next { padding: var(--s4); border-radius: var(--r-lg); }
+  .hm-studs { left: var(--s4); }
+  .hm-next-id { font-size: 24px; }
+  .hm-next-body { flex-direction: column; align-items: stretch; gap: var(--s4); }
+  .hm-owed .v { font-size: 52px; }
+  .hm-idea { flex-wrap: wrap; padding: var(--s2) var(--s2) var(--s2) var(--s3); }
+  .hm-idea .btn { width: 100%; }
+  .hm-action { flex-wrap: wrap; gap: var(--s3); padding: var(--s4); }
+  .hm-action-text { flex-basis: calc(100% - 36px - var(--s3)); }
+  .hm-action .btn { margin-left: calc(36px + var(--s3)); }
+  .hm-recent { grid-template-columns: minmax(0, 1fr); }
+  .hm-health { flex-direction: column; }
+  .hm-hitem { width: 100%; }
+}

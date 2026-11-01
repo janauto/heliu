@@ -105,7 +105,7 @@ const program = new Command();
 program
   .name("heliu")
   .description("合流：分支 × worktree × 桌面会话 对账单 + 功能卡/版本台账")
-  .version("0.4.0", "-V, --version", "显示版本")
+  .version("0.5.0", "-V, --version", "显示版本")
   .helpOption("-h, --help", "显示帮助")
   .addHelpCommand(false)
   .option("-p, --project <name>", "项目名（默认按当前目录自动识别）")

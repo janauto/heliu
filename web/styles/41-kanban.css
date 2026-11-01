@@ -1,0 +1,103 @@
+/* ───────────── 看板（M10）：一列一个版本，方块拖到别的列 = 预约（只写台账） ─────────────
+ * 桌面：页面占满工作台高度，列横向排开（320px，列间 24px，scroll-snap），每列内部自己纵向滚动。
+ * 手机（≤700px）：列改竖向堆叠、宽 100%，整页滚动。
+ */
+.kb-page { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: var(--s4); }
+.kb-page > .page-head { flex: none; margin-bottom: var(--s4); }
+.kb-page > .empty { flex: none; }
+.kb-filters { align-items: center; }
+.kb-filters .fchip .dot { width: 7px; height: 7px; }
+.kb-filters .fchip .icon { margin-right: -2px; opacity: 0.7; }
+
+.kb-idea-wrap { position: relative; }
+.kb-idea-pop { right: 0; top: calc(100% + var(--s2)); width: 360px; max-width: calc(100vw - 2 * var(--s4)); padding: var(--s3); }
+
+.kb-note { flex: none; display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin: 0 0 var(--s3); font-size: 13px; color: var(--muted); }
+.kb-note b { font-family: var(--font-display); font-weight: 700; color: var(--fg); }
+.kb-note .icon { color: var(--faint); }
+.kb-err { flex: none; margin-bottom: var(--s3); }
+.kb-foot { flex: none; margin-top: var(--s2); font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 列容器 */
+.kb-cols {
+  flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; gap: var(--s5);
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+  margin: 0 calc(-1 * var(--s1)); padding: var(--s2) var(--s1) var(--s3);
+  scroll-snap-type: x proximity; scroll-padding-left: var(--s1);
+}
+
+/* 一列 = 一块托盘 */
+.kb-col {
+  position: relative; flex: 1 1 320px; min-width: 320px; max-width: 420px; min-height: 0; display: flex; flex-direction: column;
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  scroll-snap-align: start;
+  transition: opacity var(--t), background-color var(--t-fast);
+}
+.kb-col.is-next { border-color: var(--accent-line); }
+.kb-col.is-next::before { content: ""; position: absolute; left: var(--s4); right: var(--s4); top: -1px; height: 3px; border-radius: 0 0 3px 3px; background: var(--brand); }
+.kb-col.kind-unreserved { border-style: dashed; border-color: var(--line-strong); }
+.kb-col.kind-released { background: color-mix(in srgb, var(--surface) 38%, transparent); }
+
+/* 列头 */
+.kb-col-head { flex: none; display: flex; flex-direction: column; gap: var(--s2); padding: var(--s4) var(--s4) var(--s3); border-bottom: 1px solid var(--line); }
+.kb-col-title { display: flex; align-items: center; gap: var(--s2); min-height: 32px; }
+.kb-col-title h2 { min-width: 0; font-family: var(--font-display); font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kb-col-tools { display: flex; align-items: center; gap: 2px; flex: none; margin-left: auto; margin-right: calc(-1 * var(--s1)); }
+.kb-col-tools .icon-btn { width: 30px; height: 30px; }
+.kb-menu-wrap { position: relative; }
+.kb-menu { right: 0; top: calc(100% + 6px); min-width: 252px; }
+.kb-col-sub { margin-top: calc(-1 * var(--s1)); font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kb-owed { display: flex; align-items: baseline; gap: var(--s2); }
+.kb-owed .num { font-size: 30px; line-height: 1; color: var(--fg); }
+.kb-owed .k { font-size: 13px; color: var(--muted); }
+.kb-col-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 12.5px; color: var(--muted); }
+.kb-col-facts b { font-family: var(--font-display); font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
+.kb-col-facts .sep { color: var(--faint); }
+.kb-col-facts .warn b { color: inherit; }
+
+/* 列身：自己滚动；上留 16px 给方块的积木钉，左右留 12px 给选中光圈 */
+.kb-col-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: var(--s4) var(--s3) var(--s3); }
+.kb-empty { padding: var(--s4) var(--s2) 0; text-align: center; font-size: 13px; color: var(--muted); }
+
+/* 列底落点：撑满剩余高度，空列时常显虚线框；拖起时才提示文字 */
+.kb-drop-pad {
+  flex: 1 0 80px; min-height: 80px; margin-top: var(--s3); padding: var(--s3);
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  border: 1.5px dashed transparent; border-radius: var(--r-md); color: var(--faint); font-size: 12.5px; line-height: 1.5;
+  transition: border-color var(--t-fast), background-color var(--t-fast), color var(--t-fast);
+}
+.kb-drop-pad span { opacity: 0; transition: opacity var(--t-fast); }
+.kb-drop-pad.empty { border-color: var(--line-strong); }
+.kb-drop-pad.empty span { opacity: 1; }
+.kb-col.drop-can .kb-drop-pad { border-color: var(--accent-line); color: var(--accent); }
+.kb-col.drop-can .kb-drop-pad span { opacity: 1; }
+.kb-col.drop-hot .kb-drop-pad { border-color: var(--accent); background-color: var(--accent-soft); }
+.kb-col.locked.drop-no .kb-drop-pad { border-color: var(--line-strong); }
+.kb-col.locked.drop-no .kb-drop-pad span { opacity: 1; }
+.kb-col.drop-hot.drop-bad .kb-drop-pad { border-color: var(--red); color: var(--red); background-color: var(--red-bg); }
+
+/* 内联登记 */
+.kb-new { display: flex; flex-direction: column; gap: var(--s2); }
+.kb-new input[type="text"] { width: 100%; }
+.kb-new-foot { display: flex; align-items: center; gap: var(--s2); }
+.kb-new-foot .hint { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); }
+.kb-col-body > .kb-new { flex: none; margin-bottom: var(--s4); padding: var(--s3); background: var(--surface); border: 1px solid var(--accent-line); border-radius: var(--r-md); box-shadow: var(--shadow-sm); }
+
+/* 骨架 */
+.kb-skel .kb-col-head { gap: var(--s3); }
+.kb-skel .kb-col-body { gap: var(--s3); }
+.kb-skel-title { width: 45%; height: 20px; }
+.kb-skel-num { width: 30%; height: 28px; }
+.kb-skel-bar { width: 100%; height: 5px; border-radius: 999px; }
+.kb-skel-card { height: 116px; border-radius: var(--r-md); }
+
+/* 手机：列竖向堆叠、宽 100%，整页滚动 */
+@media (max-width: 700px) {
+  .kb-page { height: auto; }
+  .kb-cols { flex-direction: column; gap: var(--s4); overflow: visible; margin: 0; padding: var(--s1) 0 0; scroll-snap-type: none; }
+  .kb-col { width: 100%; }
+  .kb-col-body { overflow: visible; }
+  .kb-drop-pad { flex: none; }
+  .kb-foot { white-space: normal; }
+}

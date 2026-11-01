@@ -1,7 +1,7 @@
 {
   "name": "heliu",
   "displayName": "合流",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "合流（heliu）：把 git 分支 × worktree × 桌面会话对上账，随口说的新点子自动变成功能卡并预约到下一版，一句话查「这一版还欠什么」。只读被管理仓库，永不 push、不删分支。",
   "author": {
     "name": "linxiansheng"

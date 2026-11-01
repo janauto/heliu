@@ -89,7 +89,7 @@ async function run(cliHint: string, fn: () => Promise<OpResult | string>): Promi
 
 export function buildServer(): McpServer {
   const server = new McpServer(
-    { name: "heliu", version: "0.4.0" },
+    { name: "heliu", version: "0.5.0" },
     {
       instructions:
         "合流（heliu）：把 git 分支 × worktree × 桌面会话 对上账，并管理「功能卡 → 预约到哪一版」。用户说「我有个新点子/做个 X」→ heliu_feature_add；「这个预约到 1.2」→ heliu_feature_reserve；「1.2 还欠什么」→ heliu_milestone_todo；「合并完了」→ heliu_after_merge（先列出、用户确认再写）。真正合并只由用户在终端运行 heliu 合并 <版本>。调用时尽量传 cwd（会话所在 worktree）。永不 push、不删分支。",

@@ -191,7 +191,7 @@ function ProjectCard({ p, current, go }: { p: ProjectSummary; current: boolean; 
       </p>
       <div class="toolbar">
         {current ? (
-          <button class="btn primary" onClick={() => go("overview")}>
+          <button class="btn primary" onClick={() => go("home")}>
             打开总览
           </button>
         ) : (
@@ -506,7 +506,7 @@ function SyncPanel({ project, onDone, go }: { project: string; onDone: () => voi
         <p class="ok">已登记 {done.created.length} 张草稿卡，预约到 {done.milestone ?? "下一版"}。</p>
         <p class="explain">卡片标题取自会话标题；想改名、换版本，到「版本列」里展开卡片操作。</p>
         {project === currentProject() ? (
-          <button class="btn" onClick={() => go("board")}>
+          <button class="btn" onClick={() => go("kanban")}>
             去版本列看看
           </button>
         ) : null}
@@ -602,7 +602,7 @@ function DailyPanel({ project, summary, go, onAdded }: { project: string; summar
         <h3>2. 这一版还欠什么</h3>
         <p class="small">{summary && summary.open !== null ? `「${project}」现在还欠 ${summary.open} 项${summary.next ? `，下一版是 ${summary.next}` : ""}。` : "看每个版本还差哪些功能。"}</p>
         <p class="explain">版本列里每版一列，卡片按「等你回答 / 有冲突 / 可合并 / 落后需同步」分组。拖卡片到另一列 = 改预约。</p>
-        <button class="btn" onClick={() => go("board")}>
+        <button class="btn" onClick={() => go("kanban")}>
           打开版本列
         </button>
       </div>
@@ -610,7 +610,7 @@ function DailyPanel({ project, summary, go, onAdded }: { project: string; summar
         <h3>3. 合并一版</h3>
         <p class="small">先在「合并预演」里看会合哪些、哪些顺延；确认后到终端执行（第 5 步有命令）。</p>
         <p class="explain">没做完的功能会自动顺延到下一版并标出来，不会悄悄丢掉。</p>
-        <button class="btn" onClick={() => go("release")}>
+        <button class="btn" onClick={() => go("assembly")}>
           打开合并预演
         </button>
       </div>
