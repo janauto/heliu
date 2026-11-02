@@ -368,14 +368,45 @@ export async function runBoard(opts: RunBoardOptions): Promise<void> {
   log(`  前端：${build.built ? `已重新打包（${build.ms} ms）` : "沿用已有打包"} · app.js ${kb(build.sizes["app.js"] ?? 0)} · app.css ${kb(build.sizes["app.css"] ?? 0)}`);
   log("  只读为主：接入项目、登记卡片、改预约只写注册表与台账；合并只预演，执行在终端。按 Ctrl+C（或关掉这个窗口）退出。");
   openUrl(withProject(url));
+  const parent = Number(process.env.HELIU_BOARD_PARENT_PID);
   await new Promise<void>((resolve) => {
+    let stopped = false;
+    let unwatch = () => {};
     const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      unwatch();
       server.stop(true);
       resolve();
     };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
+    if (Number.isInteger(parent) && parent > 1) {
+      dbg(`跟随父进程 ${parent}：它退出后看板也退出`);
+      unwatch = watchParent(parent, () => {
+        log("  启动这个看板的合流 App 已经退出，看板跟着退出。");
+        stop();
+      });
+    }
   });
+}
+
+/**
+ * 合流 App 启动的看板带着环境变量 HELIU_BOARD_PARENT_PID：App 被强退 / 崩溃、没来得及发 TERM 时，
+ * 看板发现父进程不在了就跟着退出，不留一个没人管的看板占着端口。返回停止监视的函数。
+ */
+export function watchParent(pid: number, onGone: () => void, everyMs = 2000): () => void {
+  const t = setInterval(() => {
+    try {
+      process.kill(pid, 0);
+    } catch (e) {
+      // EPERM：进程还在，只是不归我们管；只有 ESRCH 才算没了
+      if ((e as { code?: string }).code !== "ESRCH") return;
+      clearInterval(t);
+      onGone();
+    }
+  }, everyMs);
+  return () => clearInterval(t);
 }
 
 /** 端口上已在运行的合流看板：它自己报的版本与代码目录（加上版本上报之前的看板 version 为 null） */
