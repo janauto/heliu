@@ -3,14 +3,17 @@
  * - 项目中枢：/api/projects、?project= 路由、没有默认项目时的中文报错
  * - 接入向导：detect 只读不写；add 只写 HELIU_HOME（注册表 + 台账），被管理仓库零写入；重复接入保留显示名
  * - doctor 接口：默认跳过无头 claude 探测
- * - runBoard：端口上已经是合流看板时直接复用，不报错、不挂起
+ * - runBoard：端口上已经是合流看板时直接复用，不报错、不挂起；--no-open 不说「已为你打开浏览器」；
+ *   正在运行的看板版本 / 代码目录和这条命令不同时如实写出来（/api/projects 报 version）
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DetectData, DoctorData, OnboardResult, ProjectsData, SyncView } from "../src/board/api-types.ts";
-import { createBoardApp, runBoard } from "../src/board/server.ts";
+import { createBoardApp, runBoard, runningBoardLines } from "../src/board/server.ts";
+import { HELIU_ROOT } from "../src/board/root.ts";
+import { VERSION } from "../src/version.ts";
 import { heliuPaths, type HeliuPaths } from "../src/core/paths.ts";
 import { addRepoToProject, listProjectNames, loadProject, projectFile, stringifyProject } from "../src/core/project.ts";
 import { buildFixture, type Fixture } from "./helpers/fixture.ts";
@@ -187,14 +190,59 @@ describe("环境检查接口", () => {
 });
 
 describe("runBoard 复用已在运行的看板", () => {
-  test("端口上已是合流看板 → 打印「已经在运行」并返回，不报端口占用", async () => {
-    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: app.fetch });
+  /** 在随机端口起一个看板（或假看板），对它跑一次 runBoard --no-open，返回打印的全部行 */
+  const reuseLogs = async (fetch: (req: Request) => Response | Promise<Response>) => {
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch });
     try {
       const logs: string[] = [];
       await runBoard({ paths, cwd: fx.root, port: server.port, open: false, log: (l) => logs.push(l) });
-      expect(logs.join("\n")).toContain("已经在运行");
+      return { text: logs.join("\n"), port: server.port };
     } finally {
       server.stop(true);
     }
+  };
+  const fakeBoard = (data: Record<string, unknown>) => () => Response.json({ schemaVersion: 1, command: "project.list", data });
+
+  test("/api/projects 报出看板版本（与 package.json 一致）", async () => {
+    const r = await app.request("/api/projects");
+    const j = (await r.json()) as { data: ProjectsData };
+    const pkg = JSON.parse(readFileSync(join(HELIU_ROOT, "package.json"), "utf8")) as { version: string };
+    expect(j.data.version).toBe(VERSION);
+    expect(VERSION).toBe(pkg.version);
+  });
+
+  test("同版本同目录 → 打印「已经在运行」并返回；--no-open 不说已打开浏览器、不提示旧版", async () => {
+    const { text } = await reuseLogs(app.fetch);
+    expect(text).toContain("已经在运行");
+    expect(text).not.toContain("已为你打开浏览器");
+    expect(text).not.toContain("正在运行的看板");
+    expect(text).not.toContain("它的代码目录");
   }, 60_000);
+
+  test("没报版本号的旧看板 → 写明是旧代码、给出停掉再启动的办法，并写出它的代码目录", async () => {
+    const { text, port } = await reuseLogs(fakeBoard({ heliuRoot: "/别处/合流", projects: [] }));
+    expect(text).toContain("已经在运行");
+    expect(text).toContain(`正在运行的看板没有报版本号（是加上版本上报之前的旧代码），这条命令的代码是 ${VERSION}`);
+    expect(text).toContain("它的代码目录：/别处/合流");
+    expect(text).toContain(`kill $(lsof -tiTCP:${port} -sTCP:LISTEN)`);
+    expect(text).not.toContain("已为你打开浏览器");
+  }, 20_000);
+
+  test("版本不同 → 写出两边的版本号", async () => {
+    const { text } = await reuseLogs(fakeBoard({ version: "0.0.1", heliuRoot: HELIU_ROOT, projects: [] }));
+    expect(text).toContain(`正在运行的看板是 0.0.1，这条命令的代码是 ${VERSION}。`);
+    expect(text).toContain("先停掉正在运行的看板");
+    expect(text).not.toContain("它的代码目录");
+  }, 20_000);
+
+  test("runningBoardLines：同版本只写地址与换端口；同版本不同目录只写目录事实、不给停掉建议", () => {
+    const cur = { version: "1.2.3", root: "/a" };
+    expect(runningBoardLines({ url: "http://127.0.0.1:7788/", port: 7788, running: { version: "1.2.3", root: "/a" }, current: cur })).toEqual([
+      "合流看板已经在运行：http://127.0.0.1:7788/",
+      "  要换端口另起一个：heliu board --port 7789",
+    ]);
+    const other = runningBoardLines({ url: "u", port: 7788, running: { version: "1.2.3", root: "/b" }, current: cur }).join("\n");
+    expect(other).toContain("它的代码目录：/b（这条命令的：/a）");
+    expect(other).not.toContain("停掉");
+  });
 });
