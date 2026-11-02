@@ -9,7 +9,7 @@
 依赖：pip install playwright pillow；浏览器优先用本机 Google Chrome（channel=chrome），
 没有就用 Playwright 自带的 chromium（需先 playwright install chromium）。
 
-只读说明：脚本只通过 URL 的 #/start、#/galaxy、#/structure、#/overview、#/board、#/release 切换页面，触发的都是 GET 请求；
+只读说明：脚本只通过 URL 的 #/start、#/home、#/kanban、#/timeline、#/assembly、#/structure、#/galaxy 切换页面，触发的都是 GET 请求；
 不点「登记」「生成合并单」「同步」，也不拖卡片，所以不会写台账。
 """
 import argparse
@@ -25,13 +25,14 @@ ASSETS = pathlib.Path(__file__).resolve().parent
 # 文件名, 页面, 视口宽, 视口高, 配色
 SHOTS = [
     ("start-page-light.png", "start", 1280, 820, "light"),
-    ("galaxy-dark.png", "galaxy", 1440, 900, "dark"),
+    ("home-light.png", "home", 1440, 900, "light"),
+    ("home-dark.png", "home", 1440, 900, "dark"),
+    ("kanban-dark.png", "kanban", 1440, 900, "dark"),
+    ("timeline-light.png", "timeline", 1440, 900, "light"),
+    ("assembly-light.png", "assembly", 1440, 900, "light"),
     ("structure-light.png", "structure", 1440, 900, "light"),
-    ("board-overview-light.png", "overview", 1280, 800, "light"),
-    ("board-overview-dark.png", "overview", 1280, 800, "dark"),
-    ("board-columns-dark.png", "board", 1280, 800, "dark"),
-    ("board-release-light.png", "release", 1280, 800, "light"),
-    ("board-mobile-375.png", "overview", 375, 640, "light"),
+    ("galaxy-dark.png", "galaxy", 1440, 900, "dark"),
+    ("board-mobile-375.png", "home", 375, 740, "light"),
 ]
 
 

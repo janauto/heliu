@@ -987,7 +987,7 @@ export function boardWording(s: string): string {
   return s
     .replace("（见 ①，全部：heliu sessions）", "（见「会话」页）")
     .replace("heliu hygiene 查看，", "见「卫生」页，")
-    .replace("M2 起可预约版本", "可在「版本列」预约到某一版");
+    .replace("M2 起可预约版本", "可在「看板」预约到某一版");
 }
 
 /* ───────────── M4 合并单 → 看板表格 ───────────── */

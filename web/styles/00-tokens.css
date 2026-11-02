@@ -1,0 +1,151 @@
+/*
+ * 合流 · 视觉系统「积木工作台」（M10）
+ * - 一张桌面（点阵网格的工作台）+ 摆在上面的积木（方块）。方块的两颗「钉」= 状态色，是整套界面唯一的装饰。
+ * - 字体全部用 macOS 自带：中文苹方，数字与标题用 SF Pro Rounded（ui-rounded）——圆润、像玩具，又是系统原生。
+ * - 浅 / 深色随系统，也可手动固定；全部离线，无外链字体。
+ */
+:root {
+  --font-sans: "PingFang SC", -apple-system, BlinkMacSystemFont, "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --font-display: ui-rounded, "SF Pro Rounded", "Avenir Next", "PingFang SC", -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* 8px 刻度 */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --r-xs: 8px; --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-xl: 24px;
+
+  /* 骨架尺寸 */
+  --titlebar-h: 52px;
+  --statusbar-h: 28px;
+  --sidebar-w: 232px;
+  --rail-w: 64px;
+  --inspector-w: 400px;
+  --content-max: 1480px;
+  --gutter: 32px;
+
+  /* 动效 */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --spring: cubic-bezier(0.2, 0.9, 0.3, 1.25);
+  --t-fast: 120ms;
+  --t: 180ms;
+  --t-slow: 280ms;
+
+  /* ── 浅色：冷白纸面 ── */
+  --bg: #f3f4f9;
+  --grid-dot: rgba(22, 26, 64, 0.11);
+  --surface: #ffffff;
+  --surface-2: #f6f7fb;
+  --surface-3: #eceef6;
+  --fg: #15182b;
+  --fg-2: #3b4062;
+  --muted: #6a7090;
+  --faint: #9ba1bd;
+  --line: #e3e5ef;
+  --line-strong: #cbd0e2;
+  --edge: rgba(22, 26, 64, 0.16);
+
+  --accent: #3157ff;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(49, 87, 255, 0.10);
+  --accent-line: rgba(49, 87, 255, 0.35);
+  --brand: linear-gradient(120deg, #19b4e6 0%, #3f62ff 55%, #8b5cf6 100%);
+  --brand-shadow: 0 10px 24px -12px rgba(63, 98, 255, 0.6);
+
+  /* 状态色：能拼上 / 要先对齐 / 撞了 / 等你拍板 / 还在做 / 还没登记 */
+  --green: #159a62;  --green-bg: rgba(21, 154, 98, 0.11);  --green-line: rgba(21, 154, 98, 0.35);
+  --yellow: #c07d00; --yellow-bg: rgba(232, 163, 0, 0.14); --yellow-line: rgba(232, 163, 0, 0.45);
+  --red: #dc4046;    --red-bg: rgba(220, 64, 70, 0.10);    --red-line: rgba(220, 64, 70, 0.38);
+  --purple: #8549d6; --purple-bg: rgba(133, 73, 214, 0.11); --purple-line: rgba(133, 73, 214, 0.38);
+  --gray: #868ca6;   --gray-bg: rgba(22, 26, 64, 0.06);    --gray-line: rgba(22, 26, 64, 0.16);
+  --blue: #1b8bd0;   --blue-bg: rgba(27, 139, 208, 0.11);  --blue-line: rgba(27, 139, 208, 0.4);
+
+  --shadow-xs: 0 1px 0 rgba(22, 26, 64, 0.05);
+  --shadow-sm: 0 1px 2px rgba(22, 26, 64, 0.06), 0 1px 0 rgba(22, 26, 64, 0.04);
+  --shadow-md: 0 2px 4px rgba(22, 26, 64, 0.05), 0 12px 28px -14px rgba(22, 26, 64, 0.25);
+  --shadow-lg: 0 8px 16px -8px rgba(22, 26, 64, 0.18), 0 28px 64px -24px rgba(22, 26, 64, 0.38);
+  --ring: 0 0 0 3px rgba(49, 87, 255, 0.22);
+  --scrim: rgba(12, 14, 36, 0.38);
+  --toast-bg: #171a30;
+  --toast-fg: #f3f4ff;
+  color-scheme: light;
+}
+
+/* ── 深色：墨蓝桌面 ── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1020;
+    --grid-dot: rgba(255, 255, 255, 0.07);
+    --surface: #171a2e;
+    --surface-2: #1d2138;
+    --surface-3: #242a46;
+    --fg: #eef0fb;
+    --fg-2: #c5c9df;
+    --muted: #8e94b5;
+    --faint: #5f6587;
+    --line: #262b47;
+    --line-strong: #353c62;
+    --edge: rgba(0, 0, 0, 0.55);
+    --accent: #8ea0ff;
+    --accent-fg: #0b0f2a;
+    --accent-soft: rgba(142, 160, 255, 0.14);
+    --accent-line: rgba(142, 160, 255, 0.4);
+    --brand-shadow: 0 10px 28px -12px rgba(120, 140, 255, 0.55);
+    --green: #4bd48f;  --green-bg: rgba(75, 212, 143, 0.13);  --green-line: rgba(75, 212, 143, 0.4);
+    --yellow: #f0b53d; --yellow-bg: rgba(240, 181, 61, 0.14); --yellow-line: rgba(240, 181, 61, 0.45);
+    --red: #ff6f76;    --red-bg: rgba(255, 111, 118, 0.13);   --red-line: rgba(255, 111, 118, 0.42);
+    --purple: #bd9bff; --purple-bg: rgba(189, 155, 255, 0.14); --purple-line: rgba(189, 155, 255, 0.42);
+    --gray: #8f95b4;   --gray-bg: rgba(255, 255, 255, 0.06);  --gray-line: rgba(255, 255, 255, 0.16);
+    --blue: #6cc4ff;   --blue-bg: rgba(108, 196, 255, 0.13);  --blue-line: rgba(108, 196, 255, 0.42);
+    --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 32px -14px rgba(0, 0, 0, 0.7);
+    --shadow-lg: 0 10px 20px -8px rgba(0, 0, 0, 0.5), 0 30px 70px -24px rgba(0, 0, 0, 0.8);
+    --ring: 0 0 0 3px rgba(142, 160, 255, 0.3);
+    --scrim: rgba(0, 0, 0, 0.55);
+    --toast-bg: #f2f3ff;
+    --toast-fg: #14172b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1020;
+  --grid-dot: rgba(255, 255, 255, 0.07);
+  --surface: #171a2e;
+  --surface-2: #1d2138;
+  --surface-3: #242a46;
+  --fg: #eef0fb;
+  --fg-2: #c5c9df;
+  --muted: #8e94b5;
+  --faint: #5f6587;
+  --line: #262b47;
+  --line-strong: #353c62;
+  --edge: rgba(0, 0, 0, 0.55);
+  --accent: #8ea0ff;
+  --accent-fg: #0b0f2a;
+  --accent-soft: rgba(142, 160, 255, 0.14);
+  --accent-line: rgba(142, 160, 255, 0.4);
+  --brand-shadow: 0 10px 28px -12px rgba(120, 140, 255, 0.55);
+  --green: #4bd48f;  --green-bg: rgba(75, 212, 143, 0.13);  --green-line: rgba(75, 212, 143, 0.4);
+  --yellow: #f0b53d; --yellow-bg: rgba(240, 181, 61, 0.14); --yellow-line: rgba(240, 181, 61, 0.45);
+  --red: #ff6f76;    --red-bg: rgba(255, 111, 118, 0.13);   --red-line: rgba(255, 111, 118, 0.42);
+  --purple: #bd9bff; --purple-bg: rgba(189, 155, 255, 0.14); --purple-line: rgba(189, 155, 255, 0.42);
+  --gray: #8f95b4;   --gray-bg: rgba(255, 255, 255, 0.06);  --gray-line: rgba(255, 255, 255, 0.16);
+  --blue: #6cc4ff;   --blue-bg: rgba(108, 196, 255, 0.13);  --blue-line: rgba(108, 196, 255, 0.42);
+  --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 32px -14px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 10px 20px -8px rgba(0, 0, 0, 0.5), 0 30px 70px -24px rgba(0, 0, 0, 0.8);
+  --ring: 0 0 0 3px rgba(142, 160, 255, 0.3);
+  --scrim: rgba(0, 0, 0, 0.55);
+  --toast-bg: #f2f3ff;
+  --toast-fg: #14172b;
+  color-scheme: dark;
+}
+
+/* 语义色别名：.tone-xxx 元素内可直接用 --tone / --tone-bg / --tone-line */
+.tone-green  { --tone: var(--green);  --tone-bg: var(--green-bg);  --tone-line: var(--green-line); }
+.tone-yellow { --tone: var(--yellow); --tone-bg: var(--yellow-bg); --tone-line: var(--yellow-line); }
+.tone-red    { --tone: var(--red);    --tone-bg: var(--red-bg);    --tone-line: var(--red-line); }
+.tone-purple { --tone: var(--purple); --tone-bg: var(--purple-bg); --tone-line: var(--purple-line); }
+.tone-gray   { --tone: var(--gray);   --tone-bg: var(--gray-bg);   --tone-line: var(--gray-line); }
+.tone-blue   { --tone: var(--blue);   --tone-bg: var(--blue-bg);   --tone-line: var(--blue-line); }
+.tone-accent { --tone: var(--accent); --tone-bg: var(--accent-soft); --tone-line: var(--accent-line); }

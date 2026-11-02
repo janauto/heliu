@@ -27,8 +27,8 @@ const systemBun = ["/opt/homebrew/bin/bun", "/usr/local/bin/bun"].some((p) => ex
 
 describe("bin/heliu 与 bin/heliu-hook 包装", () => {
   test("直接执行（sh）与 bun run（JS）都能跑", () => {
-    expect(run([BIN, "--version"], process.env).out.trim()).toBe("0.4.0");
-    expect(run([process.execPath, "run", BIN, "--version"], process.env).out.trim()).toBe("0.4.0");
+    expect(run([BIN, "--version"], process.env).out.trim()).toBe("0.5.0");
+    expect(run([process.execPath, "run", BIN, "--version"], process.env).out.trim()).toBe("0.5.0");
     for (const cmd of [[HOOK], [process.execPath, "run", HOOK]]) {
       const r = run(cmd, process.env, "");
       expect(r.code).toBe(0);
@@ -39,7 +39,7 @@ describe("bin/heliu 与 bin/heliu-hook 包装", () => {
   test("经软链调用时按真实位置找包根", () => {
     const link = join(tmp, "heliu-link");
     symlinkSync(BIN, link);
-    expect(run([link, "--version"], process.env).out.trim()).toBe("0.4.0");
+    expect(run([link, "--version"], process.env).out.trim()).toBe("0.5.0");
   });
 
   test.skipIf(systemBun)("PATH 与 ~/.bun 里都没有 bun：heliu 打印一行中文错误退出 1，hook 静默 exit 0", () => {
@@ -56,7 +56,7 @@ describe("bin/heliu 与 bin/heliu-hook 包装", () => {
   test("BUN_BIN 兜底：其余位置都找不到时用它", () => {
     const r = run([BIN, "--version"], { ...noBunEnv(), BUN_BIN: process.execPath });
     expect(r.code).toBe(0);
-    expect(r.out.trim()).toBe("0.4.0");
+    expect(r.out.trim()).toBe("0.5.0");
   });
 
   test("sh 包装开销 <30ms（与直接 bun 跑 src/hooks/main.ts 比较中位数）", () => {

@@ -1,0 +1,95 @@
+/* ───────────── 方块（Block）：一条功能在所有页面里的唯一画法（M10） ───────────── */
+/* 缺省灰色用零优先级的 :where()，这样 .tone-red / .tone-green… 能盖过它（同为单类选择器时写在后面的 .block 会赢，Codex 第 1 轮指出） */
+:where(.block) { --tone: var(--gray); --tone-bg: var(--gray-bg); --tone-line: var(--gray-line); }
+.block {
+  position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 14px 18px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); color: var(--fg);
+  box-shadow: 0 2px 0 var(--edge), var(--shadow-xs);
+  transition: transform var(--t) var(--spring), box-shadow var(--t) var(--ease), border-color var(--t-fast), opacity var(--t);
+  user-select: none; -webkit-user-select: none; scroll-margin: 80px;
+}
+.block.draggable { cursor: grab; }
+.block.draggable .block-handle { touch-action: none; }
+@media (hover: none) { .block.draggable .block-handle { opacity: 1; padding: 4px; margin: -4px -8px -4px 0; } }
+.block:hover { transform: translateY(-1px); box-shadow: 0 3px 0 var(--edge), var(--shadow-md); border-color: var(--line-strong); }
+.block:focus-visible { box-shadow: 0 2px 0 var(--edge), var(--ring); outline: none; }
+.block.selected { border-color: var(--accent); box-shadow: 0 2px 0 var(--edge), 0 0 0 3px var(--accent-soft); }
+.block.is-dragging { opacity: 0.35; transform: none !important; }
+.block.done { opacity: 0.72; }
+.block.merged { border-style: dashed; border-color: var(--green-line); background: color-mix(in srgb, var(--surface) 90%, var(--green) 10%); }
+
+/* 两颗积木钉 = 状态色 */
+.block .studs { position: absolute; top: -5px; left: 18px; display: flex; gap: 6px; pointer-events: none; }
+.block .studs i { display: block; width: 12px; height: 9px; border-radius: 4px 4px 2px 2px; background: var(--tone); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 1px 0 color-mix(in srgb, var(--tone) 55%, #000 45%); }
+.block.tone-gray .studs i { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 1px 0 color-mix(in srgb, var(--tone) 60%, #000 40%); }
+
+/* 左侧状态条（辅助色，不靠它单独传达信息：文字也有） */
+.block::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--tone); }
+
+.block-top { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); min-height: 18px; }
+.block-type { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--fg-2); }
+.block-type .glyph { font-family: var(--font-mono); font-style: normal; color: var(--accent); font-size: 12px; width: 12px; text-align: center; }
+.block-type.guess { color: var(--muted); font-weight: 500; }
+.block-id { font-family: var(--font-display); font-weight: 650; color: var(--muted); letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+.block-id.new { color: var(--blue); }
+.block-top .spacer { flex: 1; }
+.block-handle { display: inline-flex; color: var(--faint); margin-right: -6px; opacity: 0; transition: opacity var(--t-fast); }
+.block:hover .block-handle, .block.selected .block-handle { opacity: 1; }
+.block-title { font-size: 14.5px; font-weight: 650; line-height: 1.45; color: var(--fg); word-break: break-word; margin: 0; }
+.block-human { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 13px; line-height: 1.5; padding: 6px 10px; border-radius: var(--r-xs); background: var(--tone-bg); color: var(--fg-2); }
+.block-human > b { color: var(--tone); font-weight: 700; white-space: nowrap; }
+.block-human .fact { color: var(--muted); font-size: 12.5px; min-width: 0; word-break: break-word; }
+.block-meta { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.block-meta .sep { color: var(--faint); }
+.block-meta .ms { color: var(--fg-2); font-weight: 600; }
+.block-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.block-tools { display: flex; gap: 2px; margin-right: -6px; opacity: 0; transition: opacity var(--t-fast); }
+.block:hover .block-tools, .block.selected .block-tools { opacity: 1; }
+
+/* 紧凑态：一行 */
+.block.compact { flex-direction: row; align-items: center; gap: 10px; padding: 8px 12px 8px 16px; border-radius: var(--r-sm); }
+.block.compact .studs { left: 14px; gap: 4px; }
+.block.compact .studs i { width: 9px; height: 7px; }
+.block.compact::before { top: 9px; bottom: 9px; }
+.block.compact .block-top { gap: 6px; flex: 1; min-width: 0; }
+.block.compact .block-type .name { display: none; }
+.block.compact .block-title { flex: 1; min-width: 0; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.block.compact .block-human { padding: 2px 8px; font-size: 12px; gap: 4px; flex: none; max-width: 42%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
+.block.compact .block-human .fact { display: none; }
+.block.compact .block-id { font-size: 11.5px; }
+
+/* 迷你态：只有钉 + 标题（时间线条上 / 装配轨道里） */
+.block.mini { flex-direction: row; align-items: center; gap: 8px; padding: 6px 10px 6px 14px; border-radius: 9px; }
+.block.mini .studs { left: 10px; top: -4px; gap: 3px; }
+.block.mini .studs i { width: 7px; height: 6px; border-radius: 3px 3px 1px 1px; }
+.block.mini::before { top: 7px; bottom: 7px; width: 2px; }
+.block.mini .block-title { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+
+/* 拖拽：幽灵与提示 */
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 100; pointer-events: none; opacity: 0.96; transform-origin: 24px 24px; box-shadow: 0 4px 0 var(--edge), var(--shadow-lg) !important; border-color: var(--accent) !important; transition: none !important; will-change: transform; }
+.drag-hint { position: fixed; z-index: 101; pointer-events: none; padding: 6px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 650; white-space: nowrap; background: var(--toast-bg); color: var(--toast-fg); box-shadow: var(--shadow-lg); transform: translate(14px, 18px); max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.drag-hint.ok { background: var(--green); color: #fff; }
+.drag-hint.no { background: var(--red); color: #fff; }
+body.dragging, body.dragging * { cursor: grabbing !important; }
+body.dragging .block:hover { transform: none; }
+
+/* 落位回弹 */
+@keyframes block-land { 0% { transform: scale(1.03); } 60% { transform: scale(0.985); } 100% { transform: none; } }
+.block.landed { animation: block-land 320ms var(--ease); }
+
+/* 方块组（列表里的分组标题） */
+.block-group { display: flex; flex-direction: column; gap: var(--s3); }
+.block-group + .block-group { margin-top: var(--s4); }
+.group-head { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 2px; border: none; background: none; color: var(--fg-2); font-size: 12.5px; font-weight: 650; text-align: left; width: 100%; }
+.group-head .dot { width: 8px; height: 8px; }
+.group-head .n { font-family: var(--font-display); color: var(--muted); font-weight: 700; }
+.group-head .chev { margin-left: auto; color: var(--faint); transition: transform var(--t-fast); }
+.group-head.closed .chev { transform: rotate(-90deg); }
+.group-head:hover { color: var(--fg); }
+.group-body { display: flex; flex-direction: column; gap: var(--s3); }
+.block-list-enter .block { animation: rise var(--t-slow) var(--ease) both; }
+.block-list-enter .block:nth-child(2) { animation-delay: 40ms; }
+.block-list-enter .block:nth-child(3) { animation-delay: 80ms; }
+.block-list-enter .block:nth-child(4) { animation-delay: 120ms; }
+.block-list-enter .block:nth-child(5) { animation-delay: 160ms; }
+.block-list-enter .block:nth-child(n + 6) { animation-delay: 200ms; }

@@ -4,13 +4,14 @@
 
 | 文件 | 内容 | 怎么来的 |
 |---|---|---|
-| `start-page-light.png` | 看板「开始」页，浅色（README「不碰终端就能上手」） | `shots.py` |
-| `galaxy-dark.png` | 看板「星图」，深色 1440 宽（README 与教程） | `shots.py` |
-| `board-overview-light.png` / `board-overview-dark.png` | 看板「总览」，浅色 / 深色（README 首图，随系统配色切换） | `shots.py` |
-| `board-columns-dark.png` | 看板「版本列」，深色 | `shots.py` |
-| `board-release-light.png` | 看板「合并预演」，浅色 | `shots.py` |
-| `board-mobile-375.png` | 看板「总览」，手机宽度 375 | `shots.py` |
-| `board-drag-reserve.jpg` | 拖卡片改预约后的提示条 | 复制自 `docs/04-验收记录/截图/M3-拖拽改预约.jpg`（M3 验收时手测截图，顶栏文案是当时的旧版） |
+| `start-page-light.png` | 「开始 / 接入」页，浅色（README「看板一览」） | `shots.py` |
+| `home-light.png` / `home-dark.png` | 「今天」页，浅色 / 深色 1440 宽（README 首图，随系统配色切换） | `shots.py` |
+| `kanban-dark.png` | 「看板」页，深色 | `shots.py` |
+| `timeline-light.png` | 「时间线」页，浅色 | `shots.py` |
+| `assembly-light.png` | 「合流装配」页，浅色 | `shots.py` |
+| `structure-light.png` | 「结构」页，浅色 | `shots.py` |
+| `galaxy-dark.png` | 「星图」（更多里），深色 | `shots.py` |
+| `board-mobile-375.png` | 「今天」页，手机宽度 375 | `shots.py` |
 | `cli-status.txt` | `bin/heliu status --project 磁吸背夹` 的真实输出（截到「现在最该做的」） | `cli-status.sh` |
 
 ## 1. 看板截图（`shots.py`）
@@ -26,8 +27,7 @@ python3 docs/assets/shots.py --base-url http://127.0.0.1:7788 --project 磁吸�
 
 - 浏览器优先用本机 Google Chrome；没有 Chrome 时先跑 `python3 -m playwright install chromium`。
 - 截图按 2 倍像素截取，再缩到最长边 1600（手机图 1100）并量化成 256 色 PNG，单张约 50–120 KB。
-- 脚本只通过 URL 切换页面（`#/overview`、`#/board`、`#/release`），不点「登记」「生成合并单」「同步」，也不拖卡片，因此不会写台账。
-- 拖拽改预约会写台账，脚本不重拍 `board-drag-reserve.jpg`；要更新这张图，请在测试项目上手动拖一次再截。
+- 脚本只通过 URL 切换页面（`#/home`、`#/kanban`、`#/timeline`、`#/assembly`…），不点「登记」「生成合并单」「同步」，也不拖方块，因此不会写台账。
 
 ## 2. 终端输出（`cli-status.sh`）
 
