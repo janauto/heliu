@@ -20,6 +20,7 @@ import type {
   TodoReport,
 } from "../types.ts";
 import { Cache, type StopRecord } from "../core/cache.ts";
+import { continueSessionLink } from "../core/deeplink.ts";
 import { DEFAULT_TIMEOUT_MS } from "../core/git.ts";
 import { Ledger, LedgerError, NEXT_ALIASES, parseFeatureStatus, VNEXT } from "../core/ledger.ts";
 import type { HeliuPaths } from "../core/paths.ts";
@@ -108,7 +109,7 @@ const GROUP_ORDER: TodoGroupKey[] = ["blocked", "conflict", "mergeable", "behind
 
 const maxIso = (a: string | null, b: string | null): string | null => (!a ? b : !b ? a : a > b ? a : b);
 
-/** 会话 JSON 里的 claude:// 链接（只读文件、正则取第一个；没有就 null，绝不自造） */
+/** 会话 JSON 里的 claude:// 链接（只读文件、正则取第一个）；没有时退回 continueSessionLink（只给本机认得的会话） */
 const LINK_RE = /claude:\/\/[^\s"'\\<>]+/;
 
 export class BoardService {
@@ -253,11 +254,12 @@ export class BoardService {
       const mtimeMs = statSync(file).mtimeMs;
       const c = this.linkCache.get(file);
       if (c && c.mtimeMs === mtimeMs) return c.link;
-      const link = LINK_RE.exec(readFileSync(file, "utf8"))?.[0] ?? null;
+      // 会话 JSON 里写了 claude:// 链接就用它；没写（实测目前都没写）就用桌面应用认的「打开会话」深链（F-0003）
+      const link = LINK_RE.exec(readFileSync(file, "utf8"))?.[0] ?? continueSessionLink(sessionId);
       this.linkCache.set(file, { mtimeMs, link });
       return link;
     } catch {
-      return null;
+      return continueSessionLink(sessionId);
     }
   }
 

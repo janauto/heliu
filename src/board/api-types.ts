@@ -50,7 +50,7 @@ export interface CardSession {
   status: SessionStatus | null;
   needsAction: string | null;
   lastActivityAt: string | null;
-  /** 会话 JSON 里出现的 claude:// 链接；没有就是 null（不自造链接） */
+  /** 打开这个会话的 claude:// 链接：会话 JSON 里写了就用它，否则用桌面应用的 code/continue 深链；会话文件找不到时为 null */
   link: string | null;
 }
 
