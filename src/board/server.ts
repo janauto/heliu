@@ -14,6 +14,7 @@ import { SCHEMA_VERSION } from "../types.ts";
 import type { HeliuPaths } from "../core/paths.ts";
 import { Ledger } from "../core/ledger.ts";
 import { runDoctor } from "../core/doctor.ts";
+import { readCodexTasks, type CodexTaskOptions } from "../core/codex-tasks.ts";
 import { ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
 import type { BoardEnvelope, BoardMeta, DoctorData } from "./api-types.ts";
 import { DIST_DIR, ensureWebBuild } from "./build.ts";
@@ -33,6 +34,8 @@ export interface BoardAppOptions {
   ttlMs?: number;
   now?: () => Date;
   distDir?: string;
+  /** 可覆盖本机数据源以进行隔离测试；不通过 HTTP 接受任意文件路径。 */
+  codex?: CodexTaskOptions;
 }
 
 function hostAllowed(host: string | undefined): boolean {
@@ -110,6 +113,11 @@ export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: Boa
   });
 
   /* ───────────── 只读（项目级） ───────────── */
+
+  app.get("/api/codex-tasks", async (c) => {
+    const s = svc(c);
+    return send(c, "codex.tasks", await readCodexTasks(s.project, opts.codex), null, 200, s);
+  });
 
   app.get("/api/status", async (c) => {
     const s = svc(c);

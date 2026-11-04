@@ -538,3 +538,22 @@ export interface LabelResult {
   file: string;
 }
 
+/** Codex 本地任务只读视图；运行状态不表示功能已合并或发布。 */
+export interface CodexTask {
+  id: string;
+  title: string;
+  cwd: string;
+  repoId: string;
+  repoLabel: string;
+  status: "running" | "idle" | "interrupted" | "stale" | "unknown";
+  lastActivityAt: string | null;
+  turnStartedAt: string | null;
+}
+
+/** GET /api/codex-tasks：只返回属于当前项目的任务摘要。 */
+export interface CodexTasksData {
+  tasks: CodexTask[];
+  available: boolean;
+  warning: string | null;
+}
+
