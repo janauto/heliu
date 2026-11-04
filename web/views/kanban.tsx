@@ -8,11 +8,11 @@
  * - 看板只写台账与合并单（复制合并 Prompt 会刷新合并单），不执行任何 git 合并。
  */
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { BoardCard, BoardColumn, MergePromptData } from "../../src/board/api-types.ts";
+import type { BoardCard, BoardColumn, CodexTask, CodexTasksData, MergePromptData } from "../../src/board/api-types.ts";
 import type { TodoGroupKey } from "../../src/types.ts";
 import { useApp } from "../app.tsx";
 import { isDragging, useDropTarget, type DragPayload, type DropVerdict } from "../dnd.ts";
-import { api, copyWhenReady, store } from "../lib.ts";
+import { ago, api, copyWhenReady, mdhm, store, useApi } from "../lib.ts";
 import { MergedPanel, MergePromptPanel, type PromptState } from "../merge-flow.tsx";
 import { Bar, Block, Dot, Empty, GroupHead, GROUPS, Icon, matchQuery, MILESTONE_TONE, modelOfCard, PageHead, Pill, Popover, type BarPart, type Tone } from "../ui.tsx";
 
@@ -282,7 +282,7 @@ export function KanbanView() {
         <>
           <div class="fchips kb-filters" role="group" aria-label="按状态筛选">
             <button class={`fchip${filter === "all" ? " on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
-              全部 <b>{qCards.length}</b>
+              功能卡 <b>{qCards.length}</b>
             </button>
             {FILTER_KEYS.map((k) => {
               const g = GROUPS.find((x) => x.key === k)!;
@@ -333,6 +333,7 @@ export function KanbanView() {
   return (
     <div class="page wide kb-page" ref={rootRef}>
       {head}
+      <CodexTasks project={app.project} tick={app.tick} />
       {app.featuresError ? <p class="err kb-err">读取功能卡失败：{app.featuresError}</p> : null}
       {data?.broken.length ? (
         <p class="err small kb-err">
@@ -404,6 +405,84 @@ export function KanbanView() {
         />
       ) : null}
     </div>
+  );
+}
+
+/* ───────────── Codex 任务：自动读取，与功能卡台账分开 ───────────── */
+
+const CODEX_STATUS: Record<CodexTask["status"], { label: string; tone: Tone }> = {
+  running: { label: "正在进行", tone: "blue" },
+  idle: { label: "本轮已结束", tone: "gray" },
+  interrupted: { label: "已中断", tone: "yellow" },
+  stale: { label: "状态待确认", tone: "yellow" },
+  unknown: { label: "未知", tone: "gray" },
+};
+
+function CodexTasks({ project, tick }: { project: string; tick: number }) {
+  const [poll, setPoll] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setPoll((n) => n + 1), 10_000);
+    return () => clearInterval(timer);
+  }, []);
+  const result = useApi<CodexTasksData>(`/api/codex-tasks?project=${encodeURIComponent(project)}`, [tick, poll]);
+  const data = result.env?.data;
+  // 请求失败时不继续把上次的「正在进行」当作当前事实展示。
+  const tasks = !result.error && data?.available ? data.tasks : [];
+  const running = tasks.filter((t) => t.status === "running").length;
+
+  return (
+    <section class="kb-codex" aria-labelledby="kb-codex-title" aria-busy={result.loading}>
+      <div class="kb-codex-head">
+        <div>
+          <h2 id="kb-codex-title">Codex 任务 {data?.available && !result.error ? <span class="kb-codex-count">{tasks.length}</span> : null}</h2>
+          <p>本项目最近 50 个任务 · 每 10 秒自动更新 · 本轮结束不代表功能已完成</p>
+          <p>状态来自本地会话记录；长时间没有新记录时标记为待确认。</p>
+        </div>
+        <div class="kb-codex-tools">
+          {running ? <span class="kb-codex-running">{running} 项正在进行</span> : null}
+          <button class="btn small" onClick={result.reload} disabled={result.loading} aria-label="刷新 Codex 任务">
+            <Icon name="refresh" size={14} class={result.loading ? "spin" : ""} />
+            {result.loading ? "更新中" : "刷新任务"}
+          </button>
+        </div>
+      </div>
+      {result.error ? (
+        <p class="kb-codex-message err" role="status">读取 Codex 任务失败：{result.error}。当前状态未确认，将自动重试。</p>
+      ) : !data ? (
+        <p class="kb-codex-message" role="status">正在读取本项目的 Codex 任务…</p>
+      ) : (
+        <>
+          {data.warning ? <p class="kb-codex-message warn" role="status">{data.warning}</p> : null}
+          {!data.available ? (
+            <p class="kb-codex-message">暂时无法读取 Codex 本地任务数据，恢复后会自动显示。</p>
+          ) : tasks.length ? (
+            <ul class="kb-codex-list" aria-label="本项目 Codex 任务">
+              {tasks.map((task) => {
+                const state = CODEX_STATUS[task.status] ?? CODEX_STATUS.unknown;
+                const folder = task.cwd.split(/[\\/]/).filter(Boolean).pop() || task.cwd;
+                return (
+                  <li class="kb-codex-task" key={task.id} data-status={task.status}>
+                    <div class="kb-codex-task-top">
+                      <span class={`kb-codex-status tone-${state.tone}`}><Dot tone={state.tone} />{state.label}</span>
+                      <time class="kb-codex-time" dateTime={task.lastActivityAt ?? undefined} title={task.lastActivityAt ? `最后活动：${mdhm(task.lastActivityAt)}` : "没有最后活动时间"}>
+                        {task.lastActivityAt ? ago(task.lastActivityAt) : "活动时间未知"}
+                      </time>
+                    </div>
+                    <h3>{task.title || "未命名任务"}</h3>
+                    <div class="kb-codex-location">
+                      <span class="kb-codex-repo">{task.repoLabel || task.repoId}</span>
+                      <span class="kb-codex-folder" title={task.cwd}><Icon name="folder" size={13} />{folder || "工作目录未知"}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p class="kb-codex-message">还没有匹配本项目工作目录的 Codex 任务。任务出现后会自动显示；下方版本列仍管理已登记的功能卡。</p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
