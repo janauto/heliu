@@ -108,6 +108,9 @@ final class WebHandler: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMe
       NSPasteboard.general.setString(t, forType: .string)
     case "chrome":
       if let r = body["r"] as? Double, let g = body["g"] as? Double, let b = body["b"] as? Double { app.applyChrome(r: r, g: g, b: b) }
+    case "restartBoard":
+      // 看板页面「更新后重启」：只认看板自己的页面
+      if fromBoard { app.restartBoardAfterUpdate() }
     case "action":
       // 只有 App 自己的启动 / 出错页能触发「重试 / 选目录 / 开日志」
       if fromOwnPage, let id = body["id"] as? String { app.pageAction(id) }

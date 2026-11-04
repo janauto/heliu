@@ -1,7 +1,7 @@
 // 注入每个页面的脚本：页面和原生窗口之间的几根线。
 // - 剪贴板：WKWebView 里 navigator.clipboard 要「用户手势」且时有时无，统一改成交给原生写系统剪贴板
 // - 标题栏颜色：读看板标题栏的底色，让原生标题栏跟着浅 / 深色走，看起来是一整条
-// - window.__HELIU_APP__：页面据此知道自己在 App 里（目前只用于排查）
+// - window.__HELIU_APP__：页面据此知道自己在 App 里；restartBoard() 请 App 重启看板（更新代码后让新代码生效）
 import Foundation
 
 enum Bridge {
@@ -9,7 +9,8 @@ enum Bridge {
     """
     (() => {
       const post = (m) => { try { window.webkit.messageHandlers.heliu.postMessage(m); } catch (e) {} };
-      window.__HELIU_APP__ = { version: \(jsString(appVersion)) };
+      // restartBoard：更新合流代码后，页面请 App 重启它自己起的看板（F-0004）
+      window.__HELIU_APP__ = { version: \(jsString(appVersion)), restartBoard: () => post({ type: "restartBoard" }) };
 
       const writeText = (t) => { post({ type: "copy", text: String(t) }); return Promise.resolve(); };
       const write = async (items) => {

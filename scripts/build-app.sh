@@ -31,7 +31,7 @@ if [ ! -x "$ROOT/bin/heliu" ] || [ ! -f "$ROOT/src/cli/main.ts" ]; then
   exit 1
 fi
 for t in swiftc iconutil sips codesign plutil; do
-  command -v "$t" >/dev/null 2>&1 || { echo "缺少 $t：先安装 Xcode 命令行工具（xcode-select --install）" >&2; exit 1; }
+  command -v "$t" >/dev/null 2>&1 || { echo "缺少 ${t}：先安装 Xcode 命令行工具（xcode-select --install）" >&2; exit 1; }
 done
 
 VERSION=$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$HERE/package.json" | head -1)
@@ -56,7 +56,7 @@ for s in 16 32 128 256 512; do
 done
 iconutil -c icns "$SET" -o "$APP/Contents/Resources/AppIcon.icns"
 
-echo "· 编译原生外壳（$ARCH）…"
+echo "· 编译原生外壳（${ARCH}）…"
 swiftc -swift-version 5 -O -target "$ARCH-apple-macos13" -framework AppKit -framework WebKit \
   -o "$APP/Contents/MacOS/Heliu" "$SRC"/Sources/*.swift
 
@@ -69,7 +69,7 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 if ! SIGN=$(codesign --force --sign - "$APP" 2>&1); then echo "$SIGN" >&2; exit 1; fi
 rm -rf "$WORK"
 
-echo "合流.app $VERSION（构建 $BUILD）已打包：$APP"
+echo "合流.app ${VERSION}（构建 ${BUILD}）已打包：$APP"
 echo "  启动看板用的代码目录：$ROOT"
 echo "  看板端口：$(plutil -extract HeliuPort raw "$PLIST") 起（被别的程序占着就往后找；已经是合流看板就直接用）"
 
@@ -90,7 +90,7 @@ if [ "$INSTALL" = 1 ]; then
   mkdir -p "$HOME/Applications"
   ditto "$APP" "$DEST"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST" >/dev/null 2>&1 || true
-  echo "已安装：$DEST（在启动台 / 聚焦搜索里搜「合流」即可打开）"
+  echo "已安装：${DEST}（在启动台 / 聚焦搜索里搜「合流」即可打开）"
 else
   echo "  安装到 ~/Applications：scripts/build-app.sh --install"
 fi

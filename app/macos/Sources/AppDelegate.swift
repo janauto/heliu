@@ -239,6 +239,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     start()
   }
 
+  /// 页面更新了合流代码后请求重启看板：App 自己起的直接重启；借用的（终端里的 heliu board）停不了，说清楚怎么办
+  func restartBoardAfterUpdate() {
+    if ownsBoard {
+      restartBoard()
+      return
+    }
+    alert("这个看板不是 App 启动的",
+          "它是在终端里用 heliu board 启动的，App 停不了它。请在那个终端按 Ctrl+C 停掉，再回到 App 按 ⌥⌘R 重启看板服务，新代码就生效了。")
+  }
+
   @objc func openInBrowser() {
     guard ready else { return }
     NSWorkspace.shared.open(web.url ?? boardURL)

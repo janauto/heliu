@@ -17,6 +17,7 @@ import { HygienePage, SessionsPage } from "./pages.tsx";
 import { StartPage } from "./start.tsx";
 import { StructurePage } from "./structure.tsx";
 import { Icon, Popover } from "./ui.tsx";
+import { UpdatePill } from "./update.tsx";
 import { AssemblyView } from "./views/assembly.tsx";
 import { HomeView } from "./views/home.tsx";
 import { KanbanView } from "./views/kanban.tsx";
@@ -241,6 +242,7 @@ function App({ projects, reloadProjects }: { projects: ProjectsData; reloadProje
           </div>
           <div class="title-right">
             {cur ? <PcPill pc={pc} ov={ov} onCheck={() => void check(pc.state === "on")} /> : null}
+            <UpdatePill />
             <ThemeMenu theme={theme} setTheme={setTheme} />
             <button
               class={`icon-btn${busy ? " spinning" : ""}`}

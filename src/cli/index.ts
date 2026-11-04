@@ -656,6 +656,42 @@ program
   });
 
 program
+  .command("update")
+  .description("检查更新（F-0004）：问 GitHub 主线有没有新版本；--yes 才从 GitHub 下载并快进合流自己的代码目录（依赖变了会 bun install），不碰被管理的仓库")
+  .option("--yes", "不询问，直接更新")
+  .option("--check", "只检查，不更新")
+  .option("--root <dir>", "合流代码目录（默认就是运行这条命令的这份代码）")
+  .action(async (o: { yes?: boolean; check?: boolean; root?: string }, cmd: Command) => {
+    const g = globals(cmd);
+    const { checkUpdate, runUpdate, renderCheck, renderResult, UpdateError } = await import("../core/selfupdate.ts");
+    const { HELIU_ROOT } = await import("../board/root.ts");
+    const root = resolve(o.root ?? HELIU_ROOT);
+    const audit = join(heliuPaths().heliuHome, "self-update.log");
+    const c = await checkUpdate(root);
+    const interactive = !o.yes && !o.check && !g.json && !!process.stdin.isTTY;
+    let go = !o.check && !!o.yes && c.canRun;
+    if (!g.json) out(renderCheck(c));
+    if (interactive && c.canRun) {
+      await flushOut();
+      go = /^y/i.test((prompt("现在更新？[y/N]") ?? "").trim());
+      if (!go) out("没有更新。");
+    }
+    if (o.yes && !o.check && !c.canRun && (c.state === "behind" || c.state === "diverged" || c.state === "unknown")) process.exitCode = 1;
+    if (!go) {
+      if (g.json) printJson(envelope("update.check", null, { check: c, result: null }));
+      return;
+    }
+    try {
+      const r = await runUpdate(root, { auditFile: audit });
+      if (g.json) printJson(envelope("update.run", null, { check: c, result: r }));
+      else out(renderResult(r));
+    } catch (e) {
+      if (e instanceof UpdateError) throw new ProjectError(e.message);
+      throw e;
+    }
+  });
+
+program
   .command("mcp")
   .description("以 MCP server（stdio）运行，供 Claude Code / Codex 调用")
   .action(async () => {
