@@ -15,7 +15,8 @@ import type { HeliuPaths } from "../core/paths.ts";
 import { Ledger } from "../core/ledger.ts";
 import { runDoctor } from "../core/doctor.ts";
 import { ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
-import type { BoardEnvelope, BoardMeta, DoctorData } from "./api-types.ts";
+import type { BoardEnvelope, BoardMeta, DoctorData, UpdateData, UpdateRunData } from "./api-types.ts";
+import { checkUpdate, headOf, runUpdate, UpdateError, type UpdateCheck, type UpdateResult } from "../core/selfupdate.ts";
 import { DIST_DIR, ensureWebBuild } from "./build.ts";
 import type { BoardService } from "./data.ts";
 import { BoardHub } from "./hub.ts";
@@ -33,6 +34,10 @@ export interface BoardAppOptions {
   ttlMs?: number;
   now?: () => Date;
   distDir?: string;
+  /** F-0004 检查更新作用的代码目录（默认合流自己的代码目录；测试指向临时克隆） */
+  updateRoot?: string;
+  /** 检查更新结果缓存多久（默认 30 分钟；页面「再检查」带 fresh=1 绕过） */
+  updateTtlMs?: number;
 }
 
 function hostAllowed(host: string | undefined): boolean {
@@ -107,6 +112,52 @@ export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: Boa
     const r = await addForBoard(opts.paths, await body(c));
     hub.forget(r.project.name);
     return send(c, "project.add", r, null, 201);
+  });
+
+  /* ───────────── F-0004：检查更新 / 一键更新（只作用于合流自己的代码目录，不碰被管理仓库） ───────────── */
+
+  // HELIU_UPDATE_ROOT：演练用，让看板对一份临时克隆检查 / 更新，不碰真的代码目录
+  const updateRoot = opts.updateRoot ?? (process.env.HELIU_UPDATE_ROOT || HELIU_ROOT);
+  const updateTtl = opts.updateTtlMs ?? 30 * 60_000;
+  const updateAudit = join(opts.paths.heliuHome, "self-update.log");
+  // 看板启动时的提交 = 正在运行的代码；之后磁盘上的代码变了（一键更新或终端 git pull）就提示重启
+  const running = headOf(updateRoot);
+  let lastCheck: { at: number; data: UpdateCheck } | null = null;
+  let checking: Promise<UpdateCheck> | null = null;
+  let updating = false;
+  let lastResult: UpdateResult | null = null;
+  const getCheck = async (fresh: boolean): Promise<UpdateCheck> => {
+    if (!fresh && lastCheck && Date.now() - lastCheck.at < updateTtl) return lastCheck.data;
+    checking ??= checkUpdate(updateRoot)
+      .then((data) => {
+        lastCheck = { at: Date.now(), data };
+        return data;
+      })
+      .finally(() => {
+        checking = null;
+      });
+    return checking;
+  };
+  app.get("/api/update", async (c) => {
+    const [check, run, onDisk] = await Promise.all([getCheck(truthy(c.req.query("fresh"))), running, headOf(updateRoot)]);
+    const needsRestart = !!run && !!onDisk && run !== onDisk;
+    return send<UpdateData>(c, "update.check", { check, running: run, onDisk, needsRestart, updating, last: lastResult });
+  });
+  app.post("/api/update/run", async (c) => {
+    await body(c);
+    if (updating) throw new ProjectError("正在更新，等这一次做完");
+    updating = true;
+    try {
+      const result = await runUpdate(updateRoot, { auditFile: updateAudit });
+      lastResult = result;
+      lastCheck = null;
+      return send<UpdateRunData>(c, "update.run", { result });
+    } catch (e) {
+      if (e instanceof UpdateError) throw new ProjectError(e.message);
+      throw e;
+    } finally {
+      updating = false;
+    }
   });
 
   /* ───────────── 只读（项目级） ───────────── */

@@ -3,6 +3,7 @@
  * 复用 src/types.ts 的 M1/M2 结构；这里只追加看板派生出来的视图。
  */
 import type { AnalyzeResult, PairReport } from "../core/pairing-types.ts";
+import type { UpdateCheck, UpdateResult } from "../core/selfupdate-types.ts";
 import type {
   AcceptanceLevel,
   AheadBehind,
@@ -538,3 +539,25 @@ export interface LabelResult {
   file: string;
 }
 
+
+/* ───────────── F-0004：检查更新 / 一键更新（只作用于合流自己的代码目录） ───────────── */
+
+/** GET /api/update */
+export interface UpdateData {
+  check: UpdateCheck;
+  /** 看板启动时代码目录的提交（正在运行的代码） */
+  running: string | null;
+  /** 代码目录现在的提交（磁盘上的代码） */
+  onDisk: string | null;
+  /** 磁盘上的代码比正在运行的新：重启看板后生效 */
+  needsRestart: boolean;
+  /** 正在更新 */
+  updating: boolean;
+  /** 这个看板进程里最近一次更新的结果 */
+  last: UpdateResult | null;
+}
+
+/** POST /api/update/run */
+export interface UpdateRunData {
+  result: UpdateResult;
+}

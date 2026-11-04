@@ -14,6 +14,19 @@ scripts/build-app.sh --install
 - 不放进仓库目录有两个原因：iCloud 会给里面的文件加扩展属性，codesign 会拒绝签名；`.app` 也不该跟着 iCloud 同步。
 - 改了 `app/macos/` 里的代码才需要重新打包。只改看板代码（`src/`、`web/`）时，`git pull` 之后重开 App 就是新版。
 
+## 更新
+
+看板标题栏右侧会提示「有新版本」，表示 GitHub 主线比代码目录新。看板启动时检查一次，之后每 30 分钟再查一次，检查只用 `git ls-remote`，不下载。
+
+1. 点开「有新版本」，能看到落后几个提交。代码目录不在 main 上、有没提交的改动、或本机 main 有 GitHub 上没有的提交时，「更新」按钮是灰的，下面写着原因。
+2. 点「更新」并确认后，才从 GitHub 下载 main 并快进代码目录。依赖清单（`package.json` / `bun.lock`）变了会顺带运行 `bun install`。不碰被管理的仓库，不 push。
+3. 提示变成「重启后生效」后，点「重启看板」，App 会重启自己起的看板。如果看板是终端里的 `heliu board`，要先在那个终端按 Ctrl+C 停掉，再按 ⌥⌘R。
+4. 更新里如果有 `app/macos/` 的改动，会提示退出 App 后运行 `scripts/build-app.sh --install` 重新打包。App 不替你打包。
+
+终端里同样可用：`heliu update` 只检查（交互终端会问要不要更新），`heliu update --yes` 直接更新。每次更新都在 `~/Library/Application Support/heliu/self-update.log` 里记一行。
+
+这个版本的外壳才有「重启看板」按钮。外壳还是旧版时，页面会改成提示用菜单「显示 → 重启看板服务」（⌥⌘R）。
+
 ## 它做了什么
 
 1. **找代码目录。** 先看「合流 → 选择代码目录…」里选过的目录，再看打包时写进 Info.plist 的 `HeliuCodeRoot`。打包默认写主仓库，在 worktree 里打包也写主仓库，因为 worktree 会被清理。

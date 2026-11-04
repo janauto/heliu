@@ -38,6 +38,18 @@
 .datatime { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .theme-wrap { position: relative; }
 .theme-wrap .popover { right: 0; top: calc(100% + 6px); min-width: 160px; }
+/* F-0004 检查更新：标题栏药丸 + 弹层 */
+.upd-pill { cursor: pointer; font: inherit; font-size: 12.5px; }
+.upd-pill:hover { border-color: var(--accent-line); }
+.upd-wrap .popover.upd-pop { width: 340px; max-width: calc(100vw - 32px); max-height: calc(100vh - 90px); overflow-y: auto; }
+.upd-body { padding: 4px 10px 8px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.upd-body p { margin: 0; }
+.upd-body .muted.tiny { word-break: break-all; }
+.upd-blockers { margin: 0; padding-left: 18px; color: var(--yellow); display: flex; flex-direction: column; gap: 4px; }
+.upd-commits { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; }
+.upd-commits code { font-size: 11.5px; color: var(--muted); }
+.upd-actions, .upd-restart { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.upd-restart { flex-direction: column; align-items: flex-start; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .icon-btn.spinning .icon { animation: spin 0.9s linear infinite; }
@@ -134,5 +146,7 @@
   .search input { padding-right: 30px; }
   .title-right { gap: 2px; flex: none; }
   .pc-pill { display: none; } /* 手机宽度：冲突检查仍自动做，结果看方块；要重检用刷新 */
+  .pc-pill.upd-pill { display: inline-flex; padding: 0 9px; } /* 更新提示在手机宽度也留着 */
+  .upd-pill .txt { display: none; }
   .page-head h1 { font-size: 20px; }
 }
