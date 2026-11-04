@@ -48,7 +48,9 @@ describe("看板会话链接（BoardService.sessionLink）", () => {
   writeFileSync(plain, JSON.stringify({ sessionId: "local_plain", title: "没写链接的会话" }));
   const withLink = join(dir, "local_linked.json");
   writeFileSync(withLink, JSON.stringify({ sessionId: "local_linked", url: "claude://code/continue?session=local_linked&from=json" }));
-  const scan = { sessionFiles: new Map([["local_plain", plain], ["local_linked", withLink]]) };
+  const stray = join(dir, "local_stray.json");
+  writeFileSync(stray, JSON.stringify({ sessionId: "local_stray", postTurnSummary: "测了 claude://code/new?q=test 深链" }));
+  const scan = { sessionFiles: new Map([["local_plain", plain], ["local_linked", withLink], ["local_stray", stray]]) };
   const call = (id: string | null) => BoardService.prototype.sessionLink.call({ linkCache: new Map() } as never, scan as never, id);
 
   test("会话 JSON 没写 claude:// 链接 → 用 code/continue 深链", () => {
@@ -56,6 +58,9 @@ describe("看板会话链接（BoardService.sessionLink）", () => {
   });
   test("会话 JSON 写了链接 → 照用", () => {
     expect(call("local_linked")).toBe("claude://code/continue?session=local_linked&from=json");
+  });
+  test("会话摘要里混进别的深链 → 不拿来用，仍打开本会话", () => {
+    expect(call("local_stray")).toBe("claude://code/continue?session=local_stray&source=heliu");
   });
   test("找不到会话文件 → null（不给不认识的会话造链接）", () => {
     expect(call("local_missing")).toBeNull();

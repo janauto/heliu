@@ -110,7 +110,7 @@ const GROUP_ORDER: TodoGroupKey[] = ["blocked", "conflict", "mergeable", "behind
 const maxIso = (a: string | null, b: string | null): string | null => (!a ? b : !b ? a : a > b ? a : b);
 
 /** 会话 JSON 里的 claude:// 链接（只读文件、正则取第一个）；没有时退回 continueSessionLink（只给本机认得的会话） */
-const LINK_RE = /claude:\/\/[^\s"'\\<>]+/;
+const LINK_RE_ALL = /claude:\/\/[^\s"'\\<>]+/g;
 
 export class BoardService {
   readonly paths: HeliuPaths;
@@ -255,7 +255,10 @@ export class BoardService {
       const c = this.linkCache.get(file);
       if (c && c.mtimeMs === mtimeMs) return c.link;
       // 会话 JSON 里写了 claude:// 链接就用它；没写（实测目前都没写）就用桌面应用认的「打开会话」深链（F-0003）
-      const link = LINK_RE.exec(readFileSync(file, "utf8"))?.[0] ?? continueSessionLink(sessionId);
+      // 只认指向本会话的链接：会话摘要 / 标题里可能混进别的 claude:// 字串（比如一条「开新会话」深链），不能拿来当「打开会话」
+      const found = readFileSync(file, "utf8").match(LINK_RE_ALL) ?? [];
+      const own = new RegExp(`[?&]session=${sessionId.replace(/[^A-Za-z0-9_-]/g, "\\$&")}(?![A-Za-z0-9_-])`);
+      const link = found.find((l) => own.test(l)) ?? continueSessionLink(sessionId);
       this.linkCache.set(file, { mtimeMs, link });
       return link;
     } catch {
