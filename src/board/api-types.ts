@@ -379,6 +379,8 @@ export interface ProjectsData {
   registry: string;
   /** 合流自己的安装目录（页面里生成可复制的终端命令用） */
   heliuRoot: string;
+  /** 这个看板进程的合流版本（package.json）；加上版本上报之前的看板不返回这个字段 */
+  version: string;
   /** 看板启动时指定或识别出的项目；识别不出时为 null（页面里自己选） */
   default: string | null;
   projects: ProjectSummary[];

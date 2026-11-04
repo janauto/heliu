@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 合流 App 的 Info.plist 模板；scripts/build-app.sh 打包时填入版本号、代码目录（HeliuCodeRoot）和专用端口（HeliuPort） -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
+  <key>CFBundleName</key><string>合流</string>
+  <key>CFBundleDisplayName</key><string>合流</string>
+  <key>CFBundleIdentifier</key><string>io.github.janauto.heliu</string>
+  <key>CFBundleExecutable</key><string>Heliu</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.0.0</string>
+  <key>CFBundleVersion</key><string>0</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSSupportsAutomaticTermination</key><false/>
+  <key>NSSupportsSuddenTermination</key><false/>
+  <key>NSHumanReadableCopyright</key><string>合流（heliu）：并行 AI 开发的对账单 + 承诺台账</string>
+  <!-- 看板只在 127.0.0.1 上走 http -->
+  <key>NSAppTransportSecurity</key>
+  <dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>HeliuCodeRoot</key><string></string>
+  <key>HeliuPort</key><integer>7790</integer>
+</dict>
+</plist>

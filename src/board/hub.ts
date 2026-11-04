@@ -12,6 +12,7 @@ import { listProjectNames, loadProject, ProjectError, type ProjectConfig } from 
 import type { ProjectsData, ProjectSummary } from "./api-types.ts";
 import { BoardService } from "./data.ts";
 import { HELIU_ROOT } from "./root.ts";
+import { VERSION } from "../version.ts";
 
 const OPEN = new Set(["想法", "开发中", "待合并"]);
 export { HELIU_ROOT };
@@ -79,7 +80,7 @@ export class BoardHub {
   /** 注册表里每个项目的摘要（只读文件，不扫 git） */
   projects(): ProjectsData {
     const projects = listProjectNames(this.paths).map((n) => summarizeProject(this.paths, n));
-    return { registry: this.paths.projectsDir, heliuRoot: HELIU_ROOT, default: this.defaultName, projects };
+    return { registry: this.paths.projectsDir, heliuRoot: HELIU_ROOT, version: VERSION, default: this.defaultName, projects };
   }
 }
 

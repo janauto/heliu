@@ -34,7 +34,12 @@
 
 ## 不碰终端就能上手
 
-装好之后，在 Finder 里**双击仓库根目录的「合流看板.command」**，浏览器会打开合流，落在「开始」页。合流长得像一个本地客户端：左侧栏选页面，中间是一块块积木，点任何一块右侧滑出详情，底部状态栏写着数据时间。
+装好之后有两种不碰终端的打开方式，都落在「开始」页：
+
+- **合流 App**：在合流目录运行一次 `scripts/build-app.sh --install`（要有 Xcode 命令行工具），之后在启动台或聚焦搜索里打开「合流」。它是一个原生 macOS 窗口，自己在后台启动看板、退出时一起关掉，不开终端、不开浏览器；用的是主仓库的代码，`git pull` 之后重开就是新版。说明见 [app/macos/README.md](app/macos/README.md)。
+- **「合流看板.command」**：在 Finder 里双击仓库根目录的这个文件，会开一个终端窗口跑看板，并打开浏览器。
+
+合流长得像一个本地客户端：左侧栏选页面，中间是一块块积木，点任何一块右侧滑出详情，底部状态栏写着数据时间。
 
 **一种方块，到处一样。** 每条功能（有卡的功能卡、还没登记的分支）在所有页面里都是同一个方块：顶上两颗「积木钉」的颜色就是状态，第一行永远是人话，事实放在小字和芯片里。
 
@@ -330,7 +335,7 @@ scripts/uninstall.sh            # 想先看会做什么：scripts/uninstall.sh -
 | 我在哪（分支 / 功能卡 / 预约 / 落后多少） | `heliu 我在哪` | `heliu_whereami` |
 | 把现有分支登记成草稿卡 | `heliu sync --dry-run` → `heliu sync` | `heliu_sync` |
 | 改类型 / 模块（不改就按推测） | `heliu 分类 F-0012 --type 修复 --module 语音与对话`（`--type bug` 也认；写 `推测` 恢复推测） | `heliu_feature_set_status`（带 `type` / `module`） |
-| 打开看板 | `heliu board [--project <名>] [--port 7788] [--no-open]`，或双击「合流看板.command」 | — |
+| 打开看板 | `heliu board [--project <名>] [--port 7788] [--no-open]`，或双击「合流看板.command」，或打开合流 App（`scripts/build-app.sh --install` 装到 `~/Applications`） | — |
 | 合并 · 预演（生成合并单，只读仓库） | `heliu 合并 v1.2 --预演`；改决定 `heliu release set v1.2 F-0012 顺延` | `heliu_release_preview`、`heliu_release_plan_set_decision` |
 | 合并 · 执行 | `heliu 合并 v1.2`（逐条确认；`--dry-run` 只说明会怎么做；`--to-main` 能快进才快进主线） | 不提供 |
 | 合并 · 演练（在克隆上完整跑一遍） | `heliu 演练 v1.2` | — |

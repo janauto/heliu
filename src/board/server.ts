@@ -20,6 +20,8 @@ import { DIST_DIR, ensureWebBuild } from "./build.ts";
 import type { BoardService } from "./data.ts";
 import { BoardHub } from "./hub.ts";
 import { addForBoard, detectForBoard } from "./onboard.ts";
+import { HELIU_ROOT } from "./root.ts";
+import { VERSION } from "../version.ts";
 
 export const DEFAULT_PORT = 7788;
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
@@ -304,20 +306,40 @@ export async function runBoard(opts: RunBoardOptions): Promise<void> {
       dbg(`台账读取失败（不影响启动，页面里会报错）：${(e as Error).message}`);
     }
   }
+  const port = opts.port ?? DEFAULT_PORT;
+  const base = `http://127.0.0.1:${port}/`;
+  /** 打开浏览器；返回是否真的发起了打开（--no-open 时不打开，返回 false） */
+  const openUrl = (u: string): boolean => {
+    if (opts.open === false) return false;
+    try {
+      Bun.spawn({ cmd: ["open", u], stdout: "ignore", stderr: "ignore" });
+      return true;
+    } catch {
+      log(`  （没能自动打开浏览器，请手动打开 ${u}）`);
+      return false;
+    }
+  };
+  const withProject = (b: string) => (opts.projectName && project ? `${b}?project=${encodeURIComponent(project.name)}` : b);
+  // M6：端口上已经是合流看板（例如双击了两次启动脚本）→ 直接打开它，不报错。
+  // 它和这条命令的版本 / 代码目录不同时如实写出来；只有真的打开了浏览器才说「已为你打开浏览器」。
+  const reuse = (running: RunningBoard) => {
+    const u = withProject(base);
+    for (const l of runningBoardLines({ url: u, port, running, current: { version: VERSION, root: HELIU_ROOT } })) log(l);
+    if (openUrl(u)) log("  已为你打开浏览器。");
+  };
+  // 先探测端口、再决定打不打包：旧看板每次请求都从磁盘读前端文件，在同一个目录里先重新打包，
+  // 会把旧看板正在用的前端换成新代码的（后端却还是旧的）。
+  dbg(`探测 127.0.0.1:${port} 上是否已有合流看板…`);
+  const already = await probeBoard(base);
+  if (already) {
+    dbg(`已有合流看板（版本 ${already.version ?? "未报"}），复用，不打包`);
+    reuse(already);
+    return;
+  }
   dbg("检查前端打包…");
   const build = await ensureWebBuild();
   dbg(`前端${build.built ? `已重新打包（${build.ms} ms）` : "沿用已有打包"}：${build.dir}`);
   const { app, hub } = createBoardApp({ paths: opts.paths, project });
-  const port = opts.port ?? DEFAULT_PORT;
-  const openUrl = (u: string) => {
-    if (opts.open === false) return;
-    try {
-      Bun.spawn({ cmd: ["open", u], stdout: "ignore", stderr: "ignore" });
-    } catch {
-      log(`  （没能自动打开浏览器，请手动打开 ${u}）`);
-    }
-  };
-  const withProject = (base: string) => (opts.projectName && project ? `${base}?project=${encodeURIComponent(project.name)}` : base);
   dbg(`监听 127.0.0.1:${port}…`);
   let server: ReturnType<typeof Bun.serve>;
   try {
@@ -326,12 +348,10 @@ export async function runBoard(opts: RunBoardOptions): Promise<void> {
     const msg = String((e as Error).message ?? e);
     dbg(`监听失败：${msg}`);
     if (/EADDRINUSE|in use/i.test(msg)) {
-      // M6：端口上已经是合流看板（例如双击了两次启动脚本）→ 直接打开它，不报错
-      const base = `http://127.0.0.1:${port}/`;
-      if (await isHeliuBoard(base)) {
-        log(`合流看板已经在运行：${withProject(base)}`);
-        log("  已为你打开浏览器。要换端口另起一个：heliu board --port " + (port + 1));
-        openUrl(withProject(base));
+      // 探测和监听之间别的看板刚好起来了（例如同时双击两次）
+      const running = await probeBoard(base);
+      if (running) {
+        reuse(running);
         return;
       }
       throw new ProjectError(`端口 ${port} 已被别的程序占用：换一个端口（heliu board --port ${port + 1}），或先关掉占用它的程序`);
@@ -348,23 +368,84 @@ export async function runBoard(opts: RunBoardOptions): Promise<void> {
   log(`  前端：${build.built ? `已重新打包（${build.ms} ms）` : "沿用已有打包"} · app.js ${kb(build.sizes["app.js"] ?? 0)} · app.css ${kb(build.sizes["app.css"] ?? 0)}`);
   log("  只读为主：接入项目、登记卡片、改预约只写注册表与台账；合并只预演，执行在终端。按 Ctrl+C（或关掉这个窗口）退出。");
   openUrl(withProject(url));
+  const parent = Number(process.env.HELIU_BOARD_PARENT_PID);
   await new Promise<void>((resolve) => {
+    let stopped = false;
+    let unwatch = () => {};
     const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      unwatch();
       server.stop(true);
       resolve();
     };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
+    if (Number.isInteger(parent) && parent > 1) {
+      dbg(`跟随父进程 ${parent}：它退出后看板也退出`);
+      unwatch = watchParent(parent, () => {
+        log("  启动这个看板的合流 App 已经退出，看板跟着退出。");
+        stop();
+      });
+    }
   });
 }
 
-/** 某个地址上跑的是不是合流看板（/api/projects 返回 project.list） */
-async function isHeliuBoard(base: string): Promise<boolean> {
+/**
+ * 合流 App 启动的看板带着环境变量 HELIU_BOARD_PARENT_PID：App 被强退 / 崩溃、没来得及发 TERM 时，
+ * 看板发现父进程不在了就跟着退出，不留一个没人管的看板占着端口。返回停止监视的函数。
+ */
+export function watchParent(pid: number, onGone: () => void, everyMs = 2000): () => void {
+  const t = setInterval(() => {
+    try {
+      process.kill(pid, 0);
+    } catch (e) {
+      // EPERM：进程还在，只是不归我们管；只有 ESRCH 才算没了
+      if ((e as { code?: string }).code !== "ESRCH") return;
+      clearInterval(t);
+      onGone();
+    }
+  }, everyMs);
+  return () => clearInterval(t);
+}
+
+/** 端口上已在运行的合流看板：它自己报的版本与代码目录（加上版本上报之前的看板 version 为 null） */
+export interface RunningBoard {
+  version: string | null;
+  root: string | null;
+}
+
+/** 某个地址上跑的是不是合流看板（/api/projects 返回 project.list）；是就带回它的版本与代码目录，不是返回 null */
+async function probeBoard(base: string): Promise<RunningBoard | null> {
   try {
     const r = await fetch(`${base}api/projects`, { signal: AbortSignal.timeout(2000) });
-    const j = (await r.json()) as { command?: string };
-    return j?.command === "project.list";
+    const j = (await r.json()) as { command?: string; data?: { version?: unknown; heliuRoot?: unknown } };
+    if (j?.command !== "project.list") return null;
+    const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+    return { version: str(j.data?.version), root: str(j.data?.heliuRoot) };
   } catch {
-    return false;
+    return null;
   }
+}
+
+/**
+ * 「看板已经在运行」时打印的几行：先写事实（版本、代码目录），再写建议（怎么换成当前代码）。
+ * 不含「已为你打开浏览器」——那一行只在真的打开了浏览器之后由 runBoard 补上。
+ */
+export function runningBoardLines(o: { url: string; port: number; running: RunningBoard; current: { version: string; root: string } }): string[] {
+  const lines = [`合流看板已经在运行：${o.url}`];
+  const stale = o.running.version !== o.current.version;
+  if (stale) {
+    lines.push(
+      o.running.version
+        ? `  正在运行的看板是 ${o.running.version}，这条命令的代码是 ${o.current.version}。`
+        : `  正在运行的看板没有报版本号（是加上版本上报之前的旧代码），这条命令的代码是 ${o.current.version}。`,
+    );
+  }
+  if (o.running.root && o.running.root !== o.current.root) lines.push(`  它的代码目录：${o.running.root}（这条命令的：${o.current.root}）`);
+  if (stale) {
+    lines.push(`  要换成这条命令的代码：先停掉正在运行的看板（在启动它的终端按 Ctrl+C；找不到那个窗口时运行 kill $(lsof -tiTCP:${o.port} -sTCP:LISTEN)），再重新运行这条命令。`);
+  }
+  lines.push(`  要换端口另起一个：heliu board --port ${o.port + 1}`);
+  return lines;
 }
