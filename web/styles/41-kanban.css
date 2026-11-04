@@ -18,6 +18,30 @@
 .kb-err { flex: none; margin-bottom: var(--s3); }
 .kb-foot { flex: none; margin-top: var(--s2); font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Codex 任务与功能卡各自计数；列表限高，给下方版本列保留空间。 */
+.kb-codex { flex: none; min-width: 0; margin-bottom: var(--s4); padding: var(--s3) var(--s4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+.kb-codex-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
+.kb-codex-head h2 { display: flex; align-items: center; gap: var(--s2); font-size: 15px; }
+.kb-codex-head p { margin-top: var(--s1); color: var(--muted); font-size: 12px; }
+.kb-codex-count { color: var(--muted); font-family: var(--font-display); font-size: 13px; font-variant-numeric: tabular-nums; }
+.kb-codex-tools { display: flex; align-items: center; gap: var(--s3); margin-left: auto; }
+.kb-codex-running { color: var(--blue); font-size: 12px; white-space: nowrap; }
+.kb-codex-message { margin: var(--s3) 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.kb-codex-message.err { color: var(--red); }
+.kb-codex-message.warn { color: var(--yellow); }
+.kb-codex-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--s2); max-height: 220px; margin: var(--s3) 0 0; padding: 0; overflow-y: auto; list-style: none; }
+.kb-codex-task { min-width: 0; padding: var(--s3); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.kb-codex-task[data-status="running"] { border-color: var(--blue-line); }
+.kb-codex-task-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
+.kb-codex-status { display: inline-flex; align-items: center; gap: 5px; color: var(--tone); font-size: 12px; white-space: nowrap; }
+.kb-codex-status .dot { width: 6px; height: 6px; }
+.kb-codex-time { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.kb-codex-task h3 { margin: var(--s2) 0; color: var(--fg); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.kb-codex-location { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--s2); color: var(--muted); font-size: 11px; }
+.kb-codex-repo { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-codex-folder { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; overflow-wrap: anywhere; }
+.kb-codex-folder .icon { flex: none; }
+
 /* 列容器 */
 .kb-cols {
   flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; gap: var(--s5);
@@ -95,6 +119,8 @@
 /* 手机：列竖向堆叠、宽 100%，整页滚动 */
 @media (max-width: 700px) {
   .kb-page { height: auto; }
+  .kb-codex { padding: var(--s3); }
+  .kb-codex-list { max-height: 360px; }
   .kb-cols { flex-direction: column; gap: var(--s4); overflow: visible; margin: 0; padding: var(--s1) 0 0; scroll-snap-type: none; }
   .kb-col { width: 100%; }
   .kb-col-body { overflow: visible; }

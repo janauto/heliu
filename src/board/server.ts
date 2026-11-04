@@ -14,6 +14,7 @@ import { SCHEMA_VERSION } from "../types.ts";
 import type { HeliuPaths } from "../core/paths.ts";
 import { Ledger } from "../core/ledger.ts";
 import { runDoctor } from "../core/doctor.ts";
+import { readCodexTasks, type CodexTaskOptions } from "../core/codex-tasks.ts";
 import { ProjectError, resolveProject, type ProjectConfig } from "../core/project.ts";
 import type { BoardEnvelope, BoardMeta, DoctorData, UpdateData, UpdateRunData } from "./api-types.ts";
 import { checkUpdate, headOf, runUpdate, UpdateError, type UpdateCheck, type UpdateResult } from "../core/selfupdate.ts";
@@ -38,6 +39,8 @@ export interface BoardAppOptions {
   updateRoot?: string;
   /** 检查更新结果缓存多久（默认 30 分钟；页面「再检查」带 fresh=1 绕过） */
   updateTtlMs?: number;
+  /** 可覆盖本机数据源以进行隔离测试；不通过 HTTP 接受任意文件路径。 */
+  codex?: CodexTaskOptions;
 }
 
 function hostAllowed(host: string | undefined): boolean {
@@ -161,6 +164,11 @@ export function createBoardApp(opts: BoardAppOptions): { app: Hono; service: Boa
   });
 
   /* ───────────── 只读（项目级） ───────────── */
+
+  app.get("/api/codex-tasks", async (c) => {
+    const s = svc(c);
+    return send(c, "codex.tasks", await readCodexTasks(s.project, opts.codex), null, 200, s);
+  });
 
   app.get("/api/status", async (c) => {
     const s = svc(c);
