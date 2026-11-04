@@ -9,7 +9,8 @@ import { FEATURE_TYPES } from "../src/core/classify.ts";
 import { FEATURE_STATUSES } from "../src/types.ts";
 import { milestoneLabel, useApp, type Selection } from "./app.tsx";
 import { ago, api, copyText, mdhm, MERGED_TEXT, SESSION_STATUS_TEXT } from "./lib.ts";
-import { claudePrompt } from "./prompt.ts";
+import { newSessionLink } from "../src/core/deeplink.ts";
+import { claudePrompt, startPrompt } from "./prompt.ts";
 import { Chip, CopyBtn, Icon, Pill, glyphOf, MILESTONE_TONE, modelOfBranch, modelOfCard, type Tone } from "./ui.tsx";
 
 export function Inspector() {
@@ -175,6 +176,8 @@ function CardDetail({ card }: { card: BoardCard }) {
           ) : null}
         </section>
 
+        {!card.done ? <HandoffSection card={card} /> : null}
+
         <section class="insp-section">
           <h3>台账</h3>
           <div class="kv2">
@@ -273,6 +276,74 @@ function CardDetail({ card }: { card: BoardCard }) {
       <div class="insp-foot">{card.file}</div>
       {baseline ? <BaselineModal card={card} b={baseline} onClose={() => setBaseline(null)} /> : null}
     </>
+  );
+}
+
+/**
+ * F-0003 交给 Claude：不再只做「复制粘贴的传声筒」。
+ * 已有会话 → 一键打开会话跟进；还没会话 → 在 Claude 桌面应用里开新会话、选好目录、填好开工指令（用户按回车才发出）。
+ * 合流只生成 claude:// 链接，不执行任何东西；「复制开工指令」保留作兜底（桌面应用没装 / 深链失效时）。
+ */
+function HandoffSection({ card }: { card: BoardCard }) {
+  const app = useApp();
+  const repos = (app.projects.projects.find((p) => p.name === app.project)?.repos ?? []).filter((r) => r.exists);
+  const ms = card.column.startsWith("__") ? null : milestoneLabel(card.column, app.milestones, app.next);
+  const prompt = startPrompt(card, { project: app.project, milestone: ms });
+  const withSession = card.bindings.filter((b) => b.session?.link);
+  // 开新会话的目录：绑了分支但没会话 → 该分支的 worktree；一条分支都没绑 → 项目里的各个仓库（桌面应用默认会再开 worktree）
+  const starts: Array<{ key: string; label: string; folder: string }> = card.bindings.length
+    ? card.bindings.filter((b) => !b.session?.link && b.worktree).map((b) => ({ key: `${b.repo}|${b.branch}`, label: `在 ${b.branch} 的目录开新会话`, folder: b.worktree! }))
+    : repos.map((r) => ({ key: r.id, label: repos.length > 1 ? `在 ${r.label} 开工` : "发给 Claude 开工", folder: r.path }));
+  const opened = (text: string) => app.toast(text);
+  return (
+    <section class="insp-section">
+      <h3>交给 Claude</h3>
+      <div class="insp-actions">
+        {withSession.map((b) => (
+          <a class="btn primary" href={b.session!.link!} onClick={() => opened(`已打开会话「${b.session!.title ?? b.session!.id}」`)} title={b.session!.title ?? b.session!.id}>
+            <Icon name="sessions" size={16} /> 打开会话跟进{withSession.length > 1 ? ` · ${b.repoLabel}` : ""}
+            {b.session!.status === "blocked" ? "（等你回答）" : ""}
+          </a>
+        ))}
+        {starts.map((x) => (
+          <a class={`btn${withSession.length ? "" : " primary"}`} href={newSessionLink(prompt, x.folder)} onClick={() => opened(`已在 Claude 里开新会话并填好 ${card.id} 的开工指令；按回车发出后，会话会把自己绑到这张卡`)} title={x.folder}>
+            <Icon name="external" size={16} /> {x.label}
+          </a>
+        ))}
+        <CopyBtn text={prompt} label="复制开工指令" small={false} class="ghost" />
+        <p class="hint">
+          {withSession.length || starts.length
+            ? "会打开 Claude 桌面应用：已有会话就直接跳过去；开新会话时目录和指令都已填好，你按回车才会发出。合流自己不执行任何东西。"
+            : "这张卡绑的分支没有可用的目录，也找不到项目仓库；先复制开工指令，到 Claude 会话里粘贴。"}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/** 绑定卡里的「交给 Claude」：有会话 → 复制指令并打开会话；没会话但有目录 → 在该目录开新会话并填好指令 */
+function SendBtn({ b, text, what }: { b: CardBinding; text: string; what: string }) {
+  const app = useApp();
+  if (b.session?.link) {
+    const link = b.session.link;
+    return (
+      <button
+        class="btn small primary"
+        onClick={async () => {
+          const ok = await copyText(text);
+          location.href = link;
+          app.toast(ok ? `「${what}」指令已复制，正在打开会话；粘贴后按回车` : `已打开会话；指令没能自动复制，请用旁边的复制按钮`);
+        }}
+      >
+        复制「{what}」指令并打开会话
+      </button>
+    );
+  }
+  if (!b.worktree) return null;
+  return (
+    <a class="btn small primary" href={newSessionLink(text, b.worktree)} onClick={() => app.toast(`已在 Claude 里开新会话并填好「${what}」指令；按回车才会发出`)}>
+      在该目录开新会话做「{what}」
+    </a>
   );
 }
 
@@ -412,6 +483,8 @@ function BindingCard({ b }: { b: CardBinding }) {
       {b.lastCommitAt ? <div class="path">最后提交 {mdhm(b.lastCommitAt)}（{ago(b.lastCommitAt)}）</div> : null}
       {b.worktree ? <div class="path">{b.worktree}</div> : null}
       <div class="actions">
+        {behind > 0 ? <SendBtn b={b} text={claudePrompt("sync", b)} what="同步基线" /> : null}
+        {(b.conflictFiles ?? 0) > 0 ? <SendBtn b={b} text={claudePrompt("conflict", b)} what="解冲突" /> : null}
         {behind > 0 ? <CopyBtn text={claudePrompt("sync", b)} label="复制「同步基线」指令" /> : null}
         {(b.conflictFiles ?? 0) > 0 ? <CopyBtn text={claudePrompt("conflict", b)} label="复制「解冲突」指令" /> : null}
         <CopyBtn text={b.branch} label="复制分支名" />
@@ -431,7 +504,7 @@ function BindingCard({ b }: { b: CardBinding }) {
           </div>
         </div>
       ) : null}
-      {(behind > 0 || (b.conflictFiles ?? 0) > 0) && app.project ? <p class="tiny muted" style="margin-top:6px">指令复制后粘贴到该分支的 Claude 会话里；合流自己不会执行。</p> : null}
+      {(behind > 0 || (b.conflictFiles ?? 0) > 0) && app.project ? <p class="tiny muted" style="margin-top:6px">「交给 Claude」：有会话就把指令放进剪贴板再打开该会话，粘贴后按回车；没会话就在该目录开新会话并填好指令。合流自己不会执行。</p> : null}
     </div>
   );
 }

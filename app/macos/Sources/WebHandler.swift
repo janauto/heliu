@@ -16,13 +16,20 @@ final class WebHandler: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMe
     if url.scheme == "about" || app.isBoardURL(url) { return decisionHandler(.allow) }
     // 看板以外的地址（教程、GitHub 等）交给默认浏览器；拖进窗口的文件之类一律不打开
     if ["http", "https", "mailto"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }
+    // 「交给 Claude」：claude://code/… 交给 Claude 桌面应用（开新会话并预填指令 / 打开已有会话）；其他 claude:// 路由不放行
+    if Self.isClaudeCodeLink(url) { NSWorkspace.shared.open(url) }
     decisionHandler(.cancel)
+  }
+
+  static func isClaudeCodeLink(_ url: URL) -> Bool {
+    url.scheme == "claude" && url.host == "code"
   }
 
   /// target="_blank"：看板自己的页就在本窗口打开，其余交给默认浏览器
   func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
     if let url = action.request.url {
-      if app?.isBoardURL(url) == true { webView.load(action.request) } else { NSWorkspace.shared.open(url) }
+      if app?.isBoardURL(url) == true { webView.load(action.request) }
+      else if ["http", "https", "mailto"].contains(url.scheme ?? "") || Self.isClaudeCodeLink(url) { NSWorkspace.shared.open(url) }
     }
     return nil
   }
